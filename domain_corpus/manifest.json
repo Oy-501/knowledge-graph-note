@@ -1,0 +1,8 @@
+{
+  "description": "领域语料清单：页面初始化时按此清单读取 md 文件，在浏览器内抽取实体/别名/关系三元组构建本体（仅在内存）",
+  "files": [
+    { "path": "domain_corpus/software.md", "domain": "software", "label": "软件开发" },
+    { "path": "domain_corpus/embedded.md", "domain": "embedded", "label": "嵌入式" },
+    { "path": "domain_corpus/writing.md", "domain": "writing", "label": "写作写书" }
+  ]
+}
