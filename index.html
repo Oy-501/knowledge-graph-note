@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>知识图谱 · AI 文档解析可视化</title>
+<link rel="stylesheet" href="styles.css">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js"></script>
+</head>
+<body>
+<div id="app">
+  <header id="toolbar">
+    <div class="toolbar-left">
+      <label class="btn btn-primary" title="上传文档（支持所有文本文件）">📄 上传文档<input type="file" id="file-input" multiple hidden></label>
+      <label class="btn" title="批量导入文件夹">📁 导入文件夹<input type="file" id="folder-input" webkitdirectory directory multiple hidden></label>
+      <button id="btn-scan-dir" class="btn btn-primary electron-only" title="扫描本地文件夹">🔎 扫描文件夹</button>
+      <button id="btn-watch" class="btn electron-only" title="监控文件夹">👁 监控</button>
+    </div>
+    <div class="toolbar-center"><span class="app-title">🧠 知识图谱</span><span id="map-count" class="map-count">0 个知识点 · 0 份文档</span></div>
+    <div class="toolbar-right">
+      <span id="rebuild-status" class="rebuild-status"></span>
+      <button id="btn-hide-ontology" class="btn">🧩 隐藏知识库</button>
+      <button id="btn-ontology" class="btn">📚 本体管理</button>
+      <button id="btn-doc-filter" class="btn">📋 文档筛选</button>
+      <button id="btn-rebuild-local" class="btn">🔧 局部重建</button>
+      <button id="btn-rebuild-all" class="btn">🌍 全局重建</button>
+      <button id="btn-settings" class="btn">⚙️ 设置</button>
+      <button id="btn-clear" class="btn btn-danger">🗑 清空</button>
+    </div>
+  </header>
+  <div id="canvas-container">
+    <div id="empty-state" class="empty-state"><div class="empty-icon">🗺️</div><h2>知识图谱画布</h2><p>上传文档，AI 自动抽取知识点并构建关联</p><p class="empty-hint">支持所有文本文件，或整个文件夹批量导入</p><label class="btn btn-primary btn-lg">📄 选择文档<input type="file" id="file-input-empty" multiple hidden></label></div>
+    <div id="doc-filter-panel" class="doc-filter-panel hidden"><div class="doc-filter-header"><span>📋 文档筛选</span><button id="doc-filter-toggle-all" class="btn btn-sm">全选</button></div><div id="doc-filter-list" class="doc-filter-list"></div></div>
+    <button id="btn-exit-focus" class="btn btn-exit-focus hidden">← 返回全图</button>
+  </div>
+  <div id="tooltip" class="tooltip hidden"></div>
+  <div id="context-menu" class="context-menu hidden">
+    <button id="ctx-doc-detail" class="context-menu-item">📄 查看详情</button>
+    <button id="ctx-doc-rebuild" class="context-menu-item">🔧 局部重建</button>
+    <button id="ctx-doc-delete" class="context-menu-item context-menu-danger">🗑 删除文档</button>
+  </div>
+  <div id="settings-modal" class="modal hidden">
+    <div class="modal-content modal-lg"><h2>⚙️ AI 服务设置</h2>
+      <div class="settings-section"><h3>🤖 LLM 大模型配置</h3><div class="form-row"><label>API 地址</label><input type="text" id="setting-llm-url" placeholder="https://api.openai.com/v1/chat/completions"></div><div class="form-row"><label>API Key</label><input type="password" id="setting-llm-key" placeholder="sk-..."></div><div class="form-row"><label>模型名称</label><input type="text" id="setting-llm-model" placeholder="gpt-4o-mini"></div></div>
+      <div class="settings-section"><h3>📐 Embedding 向量配置</h3><div class="form-row"><label>API 地址</label><input type="text" id="setting-emb-url" placeholder="https://api.openai.com/v1/embeddings"></div><div class="form-row"><label>API Key</label><input type="password" id="setting-emb-key" placeholder="sk-..."></div><div class="form-row"><label>模型名称</label><input type="text" id="setting-emb-model" placeholder="text-embedding-3-small"></div></div>
+      <div class="settings-section"><h3>🔗 关联设置</h3><div class="form-row"><label>相似度阈值: <strong id="threshold-value">0.65</strong></label><input type="range" id="setting-threshold" min="0.3" max="0.95" step="0.05" value="0.65"></div><div class="form-row"><label>领域本体推理权重: <strong id="ontology-weight-value">0.20</strong></label><input type="range" id="setting-ontology-weight" min="0" max="0.5" step="0.05" value="0.2"></div></div>
+      <div class="modal-footer"><button id="settings-cancel" class="btn">取消</button><button id="settings-save" class="btn btn-primary">保存设置</button></div>
+    </div>
+  </div>
+  <div id="processing-overlay" class="overlay hidden"><div class="processing-card"><div class="spinner"></div><p id="processing-text">正在处理...</p><p id="processing-detail" class="processing-detail"></p></div></div>
+  <div id="rebuild-modal" class="modal hidden"><div class="modal-content"><h2>🔧 局部重建关联</h2><div id="rebuild-doc-list" class="rebuild-doc-list"></div><div class="modal-footer"><button id="rebuild-cancel" class="btn">取消</button><button id="rebuild-confirm" class="btn btn-primary">开始重建</button></div></div></div>
+  <div id="doc-detail-modal" class="modal hidden"><div class="modal-content modal-lg"><h2 id="doc-detail-title">📄 文档详情</h2><div id="doc-detail-body" class="doc-detail-body"></div><div class="modal-footer"><button id="doc-detail-close" class="btn">关闭</button></div></div></div>
+  <div id="ontology-modal" class="modal hidden"><div class="modal-content modal-lg"><h2>📚 领域公共本体知识库</h2><p class="settings-hint">从 domain_corpus/*.md 语料自动抽取实体/别名/关系三元组（仅在内存）。</p><div id="ontology-tabs" class="ontology-tabs"></div><div id="ontology-entity-list" class="ontology-entity-list"></div><div id="ontology-entity-form" class="ontology-entity-form hidden"><h3 id="entity-editor-title">新增实体</h3><div class="form-row"><label>实体名称</label><input type="text" id="entity-name" placeholder="如：JavaScript"></div><div class="form-row"><label>别名（逗号分隔）</label><input type="text" id="entity-alias" placeholder="JS, ECMAScript"></div><div class="form-row"><label>关系（逗号分隔）</label><input type="text" id="entity-relations" placeholder="TypeScript, Node.js"></div><div class="form-row form-row-actions"><button id="entity-cancel" class="btn">取消</button><button id="entity-save" class="btn btn-primary">保存</button></div></div><div class="modal-footer"><button id="ontology-add" class="btn btn-primary">➕ 添加实体</button><button id="ontology-reset" class="btn">↺ 重置</button><button id="ontology-close" class="btn">关闭</button></div></div></div>
+  <div id="toast" class="toast hidden"></div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
