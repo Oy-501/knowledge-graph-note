@@ -1,0 +1,31 @@
+{
+  "name": "kg-vue3",
+  "version": "1.0.0",
+  "description": "多文件知识关联图谱 - Vue3 + D3 + Transformers.js 毕设交付版",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 5173"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "^2.3.1",
+    "@vueuse/core": "^14.4.0",
+    "@xenova/transformers": "^2.17.2",
+    "axios": "^1.20.0",
+    "d3": "^7.8.5",
+    "d3-drag": "^3.0.0",
+    "d3-force": "^3.0.0",
+    "d3-selection": "^3.0.0",
+    "d3-zoom": "^3.0.0",
+    "element-plus": "^2.7.3",
+    "pinia": "^2.1.7",
+    "pinia-plugin-persistedstate": "^1.0.0",
+    "vue": "^3.4.27"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.4",
+    "vite": "^5.2.11"
+  }
+}
