@@ -10,14 +10,41 @@
       @drop="$emit('drop', $event, node.id)"
       :title="node.description || node.name"
     >
-      <span v-if="node.children && node.children.length > 0" class="tree-toggle" @click.stop="$emit('toggle-collapse', node.id)">{{ treeCollapsed[node.id] ? '▶' : '▼' }}</span>
+      <!-- 展开/折叠按钮 -->
+      <span
+        v-if="node.children && node.children.length > 0"
+        class="tree-toggle"
+        @click.stop="$emit('toggle-collapse', node.id)"
+      >
+        {{ treeCollapsed[node.id] ? '▶' : '▼' }}
+      </span>
       <span v-else class="tree-toggle tree-toggle-empty"></span>
-      <span class="tree-visibility" @click.stop="$emit('toggle-visibility', node.id)" :title="node.visible === false ? '点击显示' : '点击隐藏'">{{ node.visible === false ? '🚫' : '👁' }}</span>
+
+      <!-- 可见性切换 -->
+      <span
+        class="tree-visibility"
+        @click.stop="$emit('toggle-visibility', node.id)"
+        :title="node.visible === false ? '点击显示' : '点击隐藏'"
+      >
+        {{ node.visible === false ? '🚫' : '👁' }}
+      </span>
+
+      <!-- 颜色标识 -->
       <span class="tree-color-dot" :style="{ background: node.color }"></span>
+
+      <!-- 分组名称 -->
       <span class="tree-name">{{ node.name }}</span>
+
+      <!-- 节点计数 -->
       <span class="tree-count">{{ node.count }}</span>
-      <span v-if="node.children && node.children.length > 0" class="tree-children-count">+{{ node.children.length }}</span>
+
+      <!-- 子分组指示器 -->
+      <span v-if="node.children && node.children.length > 0" class="tree-children-count">
+        +{{ node.children.length }}
+      </span>
     </div>
+
+    <!-- 递归子分组 -->
     <template v-if="node.children && node.children.length > 0 && !treeCollapsed[node.id]">
       <GroupTreeNode
         v-for="child in node.children"
@@ -45,5 +72,12 @@ defineProps({
   currentGroupId: { type: String, default: 'all' }
 })
 
-defineEmits(['switch-group', 'toggle-collapse', 'toggle-visibility', 'drag-over', 'drag-leave', 'drop'])
+defineEmits([
+  'switch-group',
+  'toggle-collapse',
+  'toggle-visibility',
+  'drag-over',
+  'drag-leave',
+  'drop'
+])
 </script>

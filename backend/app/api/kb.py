@@ -20,11 +20,16 @@ from app.services import kb_link
 router = APIRouter()
 
 
+# ---------------------------------------------------------------- 统计与条目
+
 @router.get("/stats")
 def kb_stats(user_id: int = 1, db: Session = Depends(get_db)):
+    """知识库总览：条目/别名/关系/领域/层级/上传记录/覆盖情况"""
     index = load_index(db)
     stats = index.stats()
     source_counter: Counter = Counter()
+    # 与 index.entities 同口径：被索引归并掉的同义条目（别名冲突）不计入，
+    # 否则会出现「知识点 404 / 来源合计 406」这种对不上的数字
     canonical = set(index.entries.keys())
     seen_entities = set()
     for e in db.query(KnowledgeBase).all():
@@ -33,12 +38,17 @@ def kb_stats(user_id: int = 1, db: Session = Depends(get_db)):
             source_counter[e.source or "unknown"] += 1
     for r in db.query(KbRelation).all():
         source_counter["relation:" + (r.origin or "derived")] += 1
+
     profiles = db.query(FileKnowledgeProfile).all()
     file_total = db.query(File).filter_by(user_id=user_id).count()
     covered = len([p for p in profiles if (p.concept_count or 0) > 0])
+
     return {
-        **stats, "entries": stats["entities"], "sources": dict(source_counter),
-        "imports": db.query(KbImport).count(), "files": file_total,
+        **stats,
+        "entries": stats["entities"],
+        "sources": dict(source_counter),
+        "imports": db.query(KbImport).count(),
+        "files": file_total,
         "files_covered": covered,
         "coverage_rate": round(covered / file_total, 4) if file_total else 0.0,
         "file_links": db.query(FileKnowledgeLink).count(),
@@ -50,7 +60,11 @@ def kb_stats(user_id: int = 1, db: Session = Depends(get_db)):
 
 
 @router.get("/entries")
-def list_entries(keyword: str = "", domain: str = "", level: int = 0, limit: int = 50, offset: int = 0, db: Session = Depends(get_db)):
+def list_entries(
+    keyword: str = "", domain: str = "", level: int = 0,
+    limit: int = 50, offset: int = 0, db: Session = Depends(get_db),
+):
+    """知识库条目列表（支持关键词/领域/层级筛选）"""
     query = db.query(KnowledgeBase)
     if keyword:
         like = f"%{keyword}%"
@@ -59,11 +73,14 @@ def list_entries(keyword: str = "", domain: str = "", level: int = 0, limit: int
         query = query.filter(KnowledgeBase.domain == domain)
     if level:
         query = query.filter(KnowledgeBase.level == level)
+
     total = query.count()
     rows = query.order_by(KnowledgeBase.id.desc()).offset(offset).limit(min(limit, 200)).all()
+
     rel_counter: Counter = Counter()
     for r in db.query(KbRelation).all():
         rel_counter[r.source_entity] += 1
+
     return {
         "total": total,
         "entries": [{
@@ -71,7 +88,8 @@ def list_entries(keyword: str = "", domain: str = "", level: int = 0, limit: int
             "domain": e.domain, "level": e.level,
             "definition": (e.definition or "")[:400],
             "source": e.source, "credibility": e.credibility,
-            "related_terms": e.related_terms or [], "relation_count": rel_counter.get(e.entity, 0),
+            "related_terms": e.related_terms or [],
+            "relation_count": rel_counter.get(e.entity, 0),
             "created_at": e.created_at.isoformat() if e.created_at else None,
         } for e in rows],
     }
@@ -89,6 +107,7 @@ class EntryPayload(BaseModel):
 
 @router.post("/entries")
 def create_entry(payload: EntryPayload, db: Session = Depends(get_db)):
+    """新增知识库条目（手工维护）"""
     exists = db.query(KnowledgeBase).filter(KnowledgeBase.entity == payload.entity).first()
     if exists:
         return {"ok": False, "message": f"知识点「{payload.entity}」已存在", "id": exists.id}
@@ -107,6 +126,7 @@ def create_entry(payload: EntryPayload, db: Session = Depends(get_db)):
 
 @router.put("/entries/{entry_id}")
 def update_entry(entry_id: int, payload: EntryPayload, db: Session = Depends(get_db)):
+    """编辑知识库条目"""
     row = db.query(KnowledgeBase).filter_by(id=entry_id).first()
     if not row:
         return {"ok": False, "message": "条目不存在"}
@@ -124,6 +144,7 @@ def update_entry(entry_id: int, payload: EntryPayload, db: Session = Depends(get
 
 @router.delete("/entries/{entry_id}")
 def delete_entry(entry_id: int, db: Session = Depends(get_db)):
+    """删除知识库条目及其关系边"""
     row = db.query(KnowledgeBase).filter_by(id=entry_id).first()
     if not row:
         return {"ok": False, "message": "条目不存在"}
@@ -136,8 +157,11 @@ def delete_entry(entry_id: int, db: Session = Depends(get_db)):
     return {"ok": True, "message": f"已删除知识点「{entity}」"}
 
 
+# ---------------------------------------------------------------- 关系（本体）
+
 @router.get("/relations")
 def list_relations(entity: str = "", limit: int = 200, db: Session = Depends(get_db)):
+    """知识库关系边列表（可按实体过滤）"""
     query = db.query(KbRelation)
     if entity:
         query = query.filter(
@@ -162,8 +186,10 @@ class RelationPayload(BaseModel):
 
 @router.post("/relations")
 def create_relation(payload: RelationPayload, db: Session = Depends(get_db)):
+    """手工新增知识库关系边"""
     dup = db.query(KbRelation).filter_by(
-        source_entity=payload.source_entity, target_entity=payload.target_entity,
+        source_entity=payload.source_entity,
+        target_entity=payload.target_entity,
         relation_type=payload.relation_type,
     ).first()
     if dup:
@@ -187,12 +213,22 @@ def delete_relation(rel_id: int, db: Session = Depends(get_db)):
 
 @router.get("/neighbors")
 def kb_neighbors(entity: str, limit: int = 20, db: Session = Depends(get_db)):
+    """某个知识点在知识库中的邻域（用于「它连着谁」证据展示）"""
     index = load_index(db)
     return {"entity": entity, "neighbors": index.neighbors(entity, limit=limit)}
 
 
+# ---------------------------------------------------------------- 上传理解
+
 @router.post("/upload")
-async def upload_kb(file: UploadFile = FastAPIFile(...), user_id: int = 1, dry_run: bool = False, overwrite: bool = False, db: Session = Depends(get_db)):
+async def upload_kb(
+    file: UploadFile = FastAPIFile(...),
+    user_id: int = 1,
+    dry_run: bool = False,
+    overwrite: bool = False,
+    db: Session = Depends(get_db),
+):
+    """上传知识库文档 → 理解 → 入库（dry_run=true 时只出报告不落库）"""
     raw = await file.read()
     try:
         text = raw.decode("utf-8")
@@ -214,6 +250,7 @@ class PreviewPayload(BaseModel):
 
 @router.post("/preview")
 def preview_kb(payload: PreviewPayload, user_id: int = 1, db: Session = Depends(get_db)):
+    """粘贴文本方式理解知识库（不落库，用于预览）"""
     report = understand_kb_document(
         db, name=payload.name, content=payload.text, user_id=user_id,
         dry_run=payload.dry_run, overwrite_definitions=payload.overwrite,
@@ -223,6 +260,7 @@ def preview_kb(payload: PreviewPayload, user_id: int = 1, db: Session = Depends(
 
 @router.get("/imports")
 def list_imports(limit: int = 20, db: Session = Depends(get_db)):
+    """知识库上传历史"""
     rows = db.query(KbImport).order_by(KbImport.id.desc()).limit(min(limit, 100)).all()
     return {"imports": [{
         "id": r.id, "name": r.name, "format": r.format, "status": r.status,
@@ -236,6 +274,7 @@ def list_imports(limit: int = 20, db: Session = Depends(get_db)):
 
 @router.get("/imports/{import_id}")
 def get_import(import_id: int, db: Session = Depends(get_db)):
+    """单次导入的完整理解报告"""
     row = db.query(KbImport).filter_by(id=import_id).first()
     if not row:
         return {"ok": False, "message": "记录不存在"}
@@ -246,6 +285,8 @@ def get_import(import_id: int, db: Session = Depends(get_db)):
     }}
 
 
+# ---------------------------------------------------------------- 锚定匹配
+
 class MatchPayload(BaseModel):
     text: str
     limit: int = 30
@@ -253,6 +294,7 @@ class MatchPayload(BaseModel):
 
 @router.post("/match")
 def kb_match(payload: MatchPayload, db: Session = Depends(get_db)):
+    """知识锚定：一段文本命中了知识库里的哪些知识点（含未覆盖率）"""
     index = load_index(db)
     hits = index.scan(payload.text)
     counter = Counter(h["entity"] for h in hits)
@@ -278,8 +320,11 @@ def kb_match(payload: MatchPayload, db: Session = Depends(get_db)):
     }
 
 
+# ---------------------------------------------------------------- 本体图
+
 @router.get("/graph")
 def kb_graph(domain: str = "", keyword: str = "", limit: int = 150, db: Session = Depends(get_db)):
+    """知识库本体图（知识点 + 关系边），供前端 D3 渲染"""
     query = db.query(KnowledgeBase)
     if domain:
         query = query.filter(KnowledgeBase.domain == domain)
@@ -287,12 +332,14 @@ def kb_graph(domain: str = "", keyword: str = "", limit: int = 150, db: Session 
         query = query.filter(KnowledgeBase.entity.ilike(f"%{keyword}%"))
     rows = query.order_by(KnowledgeBase.level.asc()).limit(min(limit, 400)).all()
     names = {e.entity for e in rows}
+
     rels = db.query(KbRelation).all()
     links = [{
         "source": r.source_entity, "target": r.target_entity,
         "relation_type": r.relation_type, "relation_label": r.relation_label,
         "weight": r.weight, "evidence": r.evidence, "origin": r.origin,
     } for r in rels if r.source_entity in names and r.target_entity in names]
+
     linked = {l["source"] for l in links} | {l["target"] for l in links}
     return {
         "nodes": [{
@@ -308,17 +355,23 @@ def kb_graph(domain: str = "", keyword: str = "", limit: int = 150, db: Session 
     }
 
 
+# ---------------------------------------------------------------- 关联：文件与文件
+
 @router.get("/files")
 def kb_files(threshold: float = 0.0, user_id: int = 1, db: Session = Depends(get_db)):
+    """文件知识画像 + 文件间知识关联（知识库视角的关联视图数据）"""
     files = {f.id: f for f in db.query(File).filter_by(user_id=user_id).all()}
     profiles = {p.file_id: p for p in db.query(FileKnowledgeProfile).all()}
     links = db.query(FileKnowledgeLink).filter_by(user_id=user_id).all()
+
     def _top_concepts(p: FileKnowledgeProfile):
         return [{"entity": c.get("entity"), "weight": c.get("weight"), "count": c.get("count")}
                 for c in (p.concepts or [])[:12]]
+
     return {
         "files": [{
-            "file_id": fid, "name": files[fid].name, "node_count": files[fid].node_count,
+            "file_id": fid, "name": files[fid].name,
+            "node_count": files[fid].node_count,
             "anchor_count": profiles[fid].anchor_count if fid in profiles else 0,
             "concept_count": profiles[fid].concept_count if fid in profiles else 0,
             "coverage": profiles[fid].coverage if fid in profiles else 0.0,
@@ -341,12 +394,14 @@ def kb_files(threshold: float = 0.0, user_id: int = 1, db: Session = Depends(get
 
 @router.get("/file/{file_id}")
 def kb_file_detail(file_id: int, db: Session = Depends(get_db)):
+    """单个文件的知识画像详情（含证据下钻）"""
     index = load_index(db)
     file_row = db.query(File).filter_by(id=file_id).first()
     if not file_row:
         return {"ok": False, "message": "文件不存在"}
     prof_row = db.query(FileKnowledgeProfile).filter_by(file_id=file_id).first()
     if not prof_row:
+        # 现场构建（不落库）
         fresh = index.build_profile(file_row.content or "")
         concepts, anchor_count = fresh["concepts"], fresh["anchor_count"]
         coverage, concept_count = fresh["coverage"], fresh["concept_count"]
@@ -354,25 +409,31 @@ def kb_file_detail(file_id: int, db: Session = Depends(get_db)):
         concepts = prof_row.concepts or []
         anchor_count, coverage = prof_row.anchor_count or 0, prof_row.coverage or 0.0
         concept_count = prof_row.concept_count or 0
+
     related_rows = db.query(FileKnowledgeLink).filter(
         (FileKnowledgeLink.source_file_id == file_id) |
         (FileKnowledgeLink.target_file_id == file_id)
     ).order_by(FileKnowledgeLink.kb_similarity.desc()).limit(10).all()
     peer_files = {f.id: f.name for f in db.query(File).all()}
+
     return {
         "ok": True,
         "file": {"file_id": file_id, "name": file_row.name, "node_count": file_row.node_count},
         "profile": {
-            "anchor_count": anchor_count, "concept_count": concept_count, "coverage": coverage,
+            "anchor_count": anchor_count, "concept_count": concept_count,
+            "coverage": coverage,
             "domains": prof_row.domains if prof_row else {},
             "levels": prof_row.levels if prof_row else {},
         },
         "concepts": [{
-            **c, "neighbors": index.neighbors(c.get("entity"), limit=6),
+            **c,
+            "neighbors": index.neighbors(c.get("entity"), limit=6),
         } for c in concepts[:30]],
         "related_files": [{
-            "file_id": other_id, "name": peer_files.get(other_id, ""),
-            "kb_similarity": l.kb_similarity, "shared_concepts": l.shared_concepts or [],
+            "file_id": other_id,
+            "name": peer_files.get(other_id, ""),
+            "kb_similarity": l.kb_similarity,
+            "shared_concepts": l.shared_concepts or [],
             "bridges": (l.bridges or [])[:8],
             "direct_score": l.direct_score, "bridge_score": l.bridge_score,
             "domain_score": l.domain_score,
@@ -383,6 +444,8 @@ def kb_file_detail(file_id: int, db: Session = Depends(get_db)):
     }
 
 
+# ---------------------------------------------------------------- 重建
+
 class RebuildPayload(BaseModel):
     user_id: int = 1
     threshold: float = 0.15
@@ -392,6 +455,7 @@ class RebuildPayload(BaseModel):
 
 @router.post("/rebuild")
 def kb_rebuild(payload: RebuildPayload, db: Session = Depends(get_db)):
+    """重建知识库推理链：关系边 → 文件锚定 → 知识画像 → 文件/节点关联"""
     result = {}
     if payload.rebuild_relations:
         result["relations"] = build_relations_from_entries(db)

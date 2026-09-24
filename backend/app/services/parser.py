@@ -21,44 +21,76 @@ def parse_and_extract(file_id: int, user_id: int = 1):
         if not file_record:
             logger.error(f"File {file_id} not found")
             return
+
         content = file_record.content or ""
         file_record.status = "parsing"
+
+        # 提取知识点（按实体去重合并）
         nodes_data = extract_nodes_from_text(content, file_id, user_id)
         merged = merge_same_entity(nodes_data)
+
+        # 存入数据库
         saved_nodes = []
         for nd in merged:
             node = Node(
-                user_id=user_id, file_id=file_id, entity=nd["entity"],
-                title=nd.get("title", nd["entity"]), type=nd.get("type", "knowledge"),
-                description=nd.get("description", ""), content=nd.get("content", ""),
-                keywords=nd.get("keywords", []), entities=nd.get("entities", []),
-                level=nd.get("level", 3), level_label=nd.get("level_label", ""),
-                domain=nd.get("domain", ""), group_id=nd.get("group_id", "default"),
+                user_id=user_id,
+                file_id=file_id,
+                entity=nd["entity"],
+                title=nd.get("title", nd["entity"]),
+                type=nd.get("type", "knowledge"),
+                description=nd.get("description", ""),
+                content=nd.get("content", ""),
+                keywords=nd.get("keywords", []),
+                entities=nd.get("entities", []),
+                level=nd.get("level", 3),
+                level_label=nd.get("level_label", ""),
+                domain=nd.get("domain", ""),
+                group_id=nd.get("group_id", "default"),
                 group_name=nd.get("group_name", file_record.name),
                 upload_time=datetime.utcnow().timestamp(),
-                confidence=nd.get("confidence", 0.7), status="active"
+                confidence=nd.get("confidence", 0.7),
+                status="active"
             )
             db.add(node)
-            db.flush()
+            db.flush()  # 获取ID
             saved_nodes.append({
-                "id": node.id, "entity": node.entity, "description": node.description,
-                "keywords": node.keywords, "entities": node.entities,
-                "level": node.level, "domain": node.domain,
-                "group_id": node.group_id, "upload_time": node.upload_time
+                "id": node.id,
+                "entity": node.entity,
+                "description": node.description,
+                "keywords": node.keywords,
+                "entities": node.entities,
+                "level": node.level,
+                "domain": node.domain,
+                "group_id": node.group_id,
+                "upload_time": node.upload_time
             })
+
+            # 存储来源（一个知识点可对应多个原文段落）
             for raw in nd.get("raw_sources", []) or [nd.get("raw_text", "")]:
                 source = NodeSource(
-                    node_id=node.id, source_type="file", source_id=file_id,
-                    paragraph=raw, line_start=nd.get("line_start", 0),
-                    line_end=nd.get("line_end", 0), confidence=nd.get("confidence", 0.7)
+                    node_id=node.id,
+                    source_type="file",
+                    source_id=file_id,
+                    paragraph=raw,
+                    line_start=nd.get("line_start", 0),
+                    line_end=nd.get("line_end", 0),
+                    confidence=nd.get("confidence", 0.7)
                 )
                 db.add(source)
+
+        # 更新文件状态
         file_record.status = "done"
         file_record.node_count = len(saved_nodes)
         file_record.parsed_at = datetime.utcnow()
         db.commit()
+
+        # 生成向量
         if saved_nodes:
             embed_to_db(saved_nodes, db)
+
+        # ★ 知识库层：先把节点锚定到知识库知识点，再由知识库决定关联
+        #   （锚定 → 知识画像 → 知识锚定连线 → 文件间知识关联）
+        #   放在四维推理之前：锚定补齐的 entities/层面信息会参与后续推理
         if saved_nodes:
             try:
                 from app.services.kb_link import kb_incremental_for_file
@@ -71,10 +103,14 @@ def parse_and_extract(file_id: int, user_id: int = 1):
                 )
             except Exception as kb_exc:
                 logger.warning(f"KB anchoring skipped for file {file_id}: {kb_exc}")
+
+        # 自动推理关联（四维加权，其中 γ 维直接读知识库桥接）
         if saved_nodes:
             from app.services.inference import infer_links_for_new_file
             infer_links_for_new_file(file_id, user_id, db)
+
         logger.info(f"File {file_record.name} parsed: {len(saved_nodes)} nodes")
+
     except Exception as e:
         logger.error(f"Parse error for file {file_id}: {e}")
         if file_record:
@@ -84,6 +120,10 @@ def parse_and_extract(file_id: int, user_id: int = 1):
         db.close()
 
 
+# ---------------------------------------------------------- 主语/实体识别
+# 常见“主语-谓语”连接词/动词（按优先级从长到短匹配），用于切出句子的主语实体
+# 注意：剔除易被误命中为“词中成分”的动词（处理/应用/生成/完成等），
+#       这些词常出现在复合名词中间（如“自然语言处理”“并行计算”）。
 _VERB_MARKERS = [
     "特别擅长", "主要用于", "是一种", "指的是", "通常用于", "擅长",
     "基于", "通过", "利用", "采用", "引入", "降低", "提升", "解决",
@@ -91,11 +131,15 @@ _VERB_MARKERS = [
     "让", "把", "将", "从", "由", "使", "指", "是",
 ]
 
+# 主语尾缀清理（切分残留的修饰词）
 _SUBJECT_TRIM = re.compile(r"(完全|主要|通常|常|等|和|与|及|并且|之后|之中|中)$")
+
+# 通用后缀：实体归一化时剥离（仅当实体为“纯英文缩写 + 中文类别词”结构）
 _EN_SUFFIX = ["架构", "技术", "模型", "机制", "方法", "算法", "框架", "语言", "网络", "结构"]
 
 
 def _first_verb_pos(text: str) -> int:
+    """返回首个谓语连接词的位置（从 2 个字之后才开始找，避免吃掉短主语）"""
     best = -1
     for verb in _VERB_MARKERS:
         idx = text.find(verb, 2)
@@ -105,9 +149,12 @@ def _first_verb_pos(text: str) -> int:
 
 
 def _extract_subject(text: str) -> str:
+    """切分句子得到核心主语（实体名候选）"""
+    # 形如 “X（AI）是/：“ 的括号缩写紧跟主语
     m = re.match(r'^([\u4e00-\u9fffA-Za-z0-9]{2,20})[（(]([A-Za-z0-9_\-]{1,10})[)）]([是:：]|$)', text)
     if m:
         return m.group(1)
+
     pos = _first_verb_pos(text)
     if pos >= 2:
         subject = text[:pos].strip(" ，,。:：")
@@ -118,44 +165,67 @@ def _extract_subject(text: str) -> str:
 
 
 def normalize_entity(name: str) -> Tuple[str, List[str]]:
+    """归一化实体名，返回 (实体, 别名列表)
+
+    - “循环神经网络RNN” → (RNN, [循环神经网络])，避免跨文档重复
+    - “Transformer架构” → (Transformer, [])
+    - “自然语言处理（NLP）” → (自然语言处理, [NLP])
+    """
     name = name.strip(" ，,。:：.")
     if not name:
         return name, []
+
     aliases: List[str] = []
+
+    # 中文 + 尾部大写缩写（如 卷积神经网络CNN / 循环神经网络RNN / 自然语言处理NLP）
     m = re.match(r'^([\u4e00-\u9fff]{2,20})([A-Z]{2,8})$', name)
     if m:
         cn, abbr = m.groups()
         aliases.append(cn)
         return abbr, aliases
+
+    # 大写缩写开头 + 中文全称（如 LSTM长短期记忆网络 → LSTM）
     m = re.match(r'^([A-Z]{2,10})([\u4e00-\u9fff]{4,20})$', name)
     if m:
         abbr, cn = m.groups()
         aliases.append(cn)
         return abbr, aliases
+
+    # 中文（括号缩写）→ 归一为中文本体 + 别名
     m = re.match(r'^([\u4e00-\u9fff]{2,20})[（(]([A-Za-z0-9_\-]{1,12})[)）]$', name)
     if m:
         cn, abbr = m.groups()
         aliases.append(abbr)
         return cn, aliases
+
+    # 英文/中英混合 + 中文类别后缀（Transformer架构 / LSTM网络）
     m = re.match(r'^([A-Za-z][A-Za-z0-9_\-]{2,30})([\u4e00-\u9fff]{1,4})$', name)
     if m:
         en, suffix = m.groups()
         if suffix in _EN_SUFFIX:
             aliases.append(name)
             return en, aliases
+
     return name, aliases
 
 
 def extract_entity(text: str, heading: str = "") -> str:
+    """提取句子的核心实体名（优先真实主语，其次正文名词短语，标题兜底）"""
     subject = _extract_subject(text)
     if subject:
         ent, _ = normalize_entity(subject)
         return ent[:50]
+
+    # 兜底 1：正文中出现的大写缩写（CNN / NLP / BERT / 循环神经网络RNN 等）
     m = re.findall(r'[A-Z]{2,10}\d?', text)
     if m:
         return m[0]
+
+    # 兜底 2：标题（仅当标题本身长度适中，不强行把标题复制到所有句子）
     if heading and len(heading) <= 16 and len(heading) >= 2:
         return heading[:50]
+
+    # 兜底 3：正文前 2~4 个汉字组成的短语
     cn = re.findall(r'[\u4e00-\u9fff]{2,}', text)
     if cn:
         return cn[0][:50]
@@ -163,58 +233,91 @@ def extract_entity(text: str, heading: str = "") -> str:
 
 
 def extract_nodes_from_text(text: str, file_id: int, user_id: int) -> List[Dict]:
+    """从文本中提取知识点（按行抽取；同义合并交给 merge_same_entity）"""
     nodes = []
     if not text or not text.strip():
         return nodes
+
     lines = text.split("\n")
     current_heading = ""
+    current_section = ""
+
     for i, line in enumerate(lines):
         stripped = line.strip()
         if not stripped:
             continue
+
+        # 标题行：记录层级标题，不生成节点
         if stripped.startswith("#"):
             current_heading = stripped.lstrip("#").strip()
             continue
+
+        # 分类句子
         sent_type = classify_sentence(stripped)
+
         if sent_type == "meta":
             continue
+
+        # 提取实体（主语优先）
         entity = extract_entity(stripped, current_heading)
         keywords = extract_keywords(stripped)
         domain = classify_domain(stripped, current_heading)
         level = classify_level(entity, stripped)
+
         nodes.append({
-            "entity": entity, "title": entity, "type": sent_type,
-            "description": stripped[:500], "content": stripped,
-            "keywords": keywords, "entities": keywords[:5],
-            "level": level, "level_label": get_level_label(level),
-            "domain": domain, "group_id": "default", "group_name": "",
+            "entity": entity,
+            "title": entity,
+            "type": sent_type,
+            "description": stripped[:500],
+            "content": stripped,
+            "keywords": keywords,
+            "entities": keywords[:5],
+            "level": level,
+            "level_label": get_level_label(level),
+            "domain": domain,
+            "group_id": "default",
+            "group_name": "",
             "confidence": estimate_confidence(stripped, sent_type),
-            "raw_text": stripped, "raw_sources": [stripped],
-            "line_start": i + 1, "line_end": i + 1
+            "raw_text": stripped,
+            "raw_sources": [stripped],
+            "line_start": i + 1,
+            "line_end": i + 1
         })
+
     return nodes
 
 
 def merge_same_entity(nodes: List[Dict]) -> List[Dict]:
+    """同文件内按 (实体, 领域) 合并同义知识点（§8 同义去重的保守实现：
+    仅合并实体名完全一致且来源于同一文件的节点，保留各自原文作为多条来源）"""
     buckets: Dict[Tuple[str, str], Dict] = {}
     order: List[Tuple[str, str]] = []
+
     for nd in nodes:
         key = (nd["entity"], nd.get("domain", ""))
         if key not in buckets:
             buckets[key] = {
-                "entity": nd["entity"], "title": nd["entity"], "type": nd["type"],
-                "description": nd["description"], "content": nd.get("content", ""),
-                "keywords": list(nd.get("keywords", [])), "entities": list(nd.get("entities", [])),
-                "level": nd["level"], "level_label": nd["level_label"],
-                "domain": nd.get("domain", ""), "group_id": nd.get("group_id", "default"),
+                "entity": nd["entity"],
+                "title": nd["entity"],
+                "type": nd["type"],
+                "description": nd["description"],
+                "content": nd.get("content", ""),
+                "keywords": list(nd.get("keywords", [])),
+                "entities": list(nd.get("entities", [])),
+                "level": nd["level"],
+                "level_label": nd["level_label"],
+                "domain": nd.get("domain", ""),
+                "group_id": nd.get("group_id", "default"),
                 "group_name": nd.get("group_name", ""),
                 "confidence": nd.get("confidence", 0.7),
                 "raw_sources": list(nd.get("raw_sources", []) or [nd.get("raw_text", "")]),
-                "line_start": nd.get("line_start", 0), "line_end": nd.get("line_end", 0),
+                "line_start": nd.get("line_start", 0),
+                "line_end": nd.get("line_end", 0),
             }
             order.append(key)
         else:
             b = buckets[key]
+            # 取最长描述，合并其余原文与关键词
             if len(nd["description"]) > len(b["description"]):
                 b["description"] = nd["description"]
             for raw in (nd.get("raw_sources", []) or [nd.get("raw_text", "")]):
@@ -228,14 +331,16 @@ def merge_same_entity(nodes: List[Dict]) -> List[Dict]:
                     b["entities"].append(ent)
             b["confidence"] = max(b["confidence"], nd.get("confidence", 0))
             b["line_end"] = nd.get("line_end", b["line_end"])
+
     return [buckets[k] for k in order]
 
 
 def classify_sentence(text: str) -> str:
+    """句子分类：knowledge/question/thought/example/meta"""
     if re.match(r'^[#\-\*>\d]+', text) or re.match(r'^\d{4}[年/-]', text):
         return "meta"
     if re.search(r'[为什么|如何|怎么|怎样|什么|哪|谁|何时|是否|能否]', text):
-        if text.endswith("?") or text.endswith("?") or "?" in text or "?" in text:
+        if text.endswith("?") or text.endswith("？") or "?" in text or "？" in text:
             return "question"
         if len(text) < 30 and re.search(r'[为什么|如何|怎么]', text):
             return "question"
@@ -247,7 +352,13 @@ def classify_sentence(text: str) -> str:
 
 
 def classify_level(entity: str, text: str = "") -> int:
+    """层级判定（基于实体 + 句内证据，避免被章节标题带偏）：
+
+    L1 元概念 / L2 核心理论 / L3 具体技术 / L4 实现工具
+    """
     probe = f"{entity} {text}"
+
+    # L1: 实体本身是顶层元概念
     l1_terms = [
         "人工智能", "机器学习", "深度学习", "编程范式", "面向对象编程", "函数式编程",
         "设计模式", "架构模式", "软件工程", "计算机科学", "数据结构", "算法",
@@ -255,6 +366,9 @@ def classify_level(entity: str, text: str = "") -> int:
     ]
     if entity in l1_terms:
         return 1
+    # 句内以“XX 是 YY 的分支/学科/领域”方式定义 L1 元概念的下级关系，仍按实体主判定
+
+    # L4: 实体是具体实现/工具/语言/库
     l4_patterns = [
         "pip", "npm", "docker", "git", "vscode", "intellij", "pycharm",
         "pytorch", "tensorflow", "spring", "django", "flask", "fastapi",
@@ -266,12 +380,16 @@ def classify_level(entity: str, text: str = "") -> int:
     for p in l4_patterns:
         if p in en:
             return 4
+
+    # L2: 术语本身或句内出现核心理论特征词
     l2_words = ["原理", "理论", "模型", "定理", "定律", "机制", "策略", "协议",
                 "标准", "规范", "范式", "方法论"]
     if any(w in entity for w in l2_words):
         return 2
     if any(w in probe for w in l2_words):
         return 2
+
+    # L3: 具体技术（默认）
     return 3
 
 
@@ -281,13 +399,17 @@ def get_level_label(level: int) -> str:
 
 
 def extract_keywords(text: str) -> List[str]:
+    """提取关键词（中文 2~5 字词 + 英文缩写/术语）"""
+    # 中文词：连续 2-6 个汉字片段取前 6
     cn_words = re.findall(r'[\u4e00-\u9fff]{2,6}', text)
+    # 英文：全大写缩写（CNN/NLP/BERT）+ 驼峰/普通词
     en_words = re.findall(r'[A-Z]{2,8}|[A-Z][a-z]{2,}(?:\s+[A-Z][a-z]+)*|[a-z]+(?:_[a-z]+)+', text)
     words = list(dict.fromkeys(cn_words[:6] + [w for w in en_words if len(w) >= 2]))
     return words[:12]
 
 
 def classify_domain(text: str, heading: str = "") -> str:
+    """领域分类"""
     combined = heading + " " + text
     domains = {
         "software": ["编程", "代码", "开发", "软件", "框架", "API", "库", "模块"],
@@ -305,6 +427,7 @@ def classify_domain(text: str, heading: str = "") -> str:
 
 
 def estimate_confidence(text: str, sent_type: str) -> float:
+    """估算置信度"""
     base = 0.7
     if sent_type == "knowledge":
         base = 0.8
@@ -312,10 +435,15 @@ def estimate_confidence(text: str, sent_type: str) -> float:
         base = 0.4
     elif sent_type == "thought":
         base = 0.5
+
+    # 长度加成
     if len(text) > 50:
         base += 0.1
     if len(text) > 100:
         base += 0.05
+
+    # 关键词加成
     if extract_keywords(text):
         base += 0.05
+
     return min(1.0, base)

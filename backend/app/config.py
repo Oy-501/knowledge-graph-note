@@ -25,15 +25,18 @@ def _pg_reachable(host: str, port: int, timeout: float = 1.2) -> bool:
 
 class Settings(BaseSettings):
     # ---- Database ----
+    # 显式连接串（如 postgresql://user:pass@host:5432/kg），为空则由 DB_MODE 决策
     DATABASE_URL: str = ""
     DB_MODE: str = "auto"  # auto | postgres | sqlite
 
+    # PostgreSQL 探测参数（仅 DB_MODE=auto 或 postgres 时使用）
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: int = 5432
     POSTGRES_USER: str = "kg_user"
     POSTGRES_PASSWORD: str = "kg_pass"
     POSTGRES_DB: str = "knowledge_graph"
 
+    # SQLite 兜底文件
     SQLITE_PATH: str = "./kg.db"
 
     # ---- Server ----
@@ -41,6 +44,7 @@ class Settings(BaseSettings):
     PORT: int = 8000
     DEBUG: bool = False
 
+    # ---- CORS ----
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000"
 
     # ---- Vector Engine ----
@@ -64,9 +68,13 @@ class Settings(BaseSettings):
     @property
     def resolved_database_url(self) -> str:
         """决策最终数据库连接串"""
+        # 1) 显式覆盖
         if self.DATABASE_URL:
             return self.DATABASE_URL
+
         mode = self.DB_MODE.lower()
+
+        # 2) 强制 / 自动探测 PostgreSQL
         if mode in ("auto", "postgres"):
             if _pg_reachable(self.POSTGRES_HOST, self.POSTGRES_PORT):
                 return (
@@ -79,6 +87,8 @@ class Settings(BaseSettings):
                     f"但 DB_MODE=postgres 强制要求使用 PostgreSQL。"
                     f"请先 docker compose up -d db，或改 DB_MODE=auto/sqlite。"
                 )
+
+        # 3) SQLite 兜底
         return f"sqlite:///{self.SQLITE_PATH}"
 
     @property

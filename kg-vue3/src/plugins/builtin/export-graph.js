@@ -1,16 +1,27 @@
 /**
- * export-graph.js 内置插件「知识图谱导出」
+ * export-graph.js
+ * 内置插件「知识图谱导出」
+ *
+ * 通过插件 API 注册两种导出格式：
+ *  - 导出 JSON：把 { nodes, links, exportedAt } 序列化后触发浏览器下载
+ *  - 导出 Markdown：生成节点清单 + 连线清单的 Markdown 文档
  */
+
 import { registerPlugin } from '../registry'
 import { downloadText } from '@/utils/download'
 import { endpointId } from '@/utils/graph'
 
+/**
+ * 生成 Markdown：节点清单（表格）+ 连线清单（表格）
+ */
 function buildMarkdown(nodes, links) {
   const lines = []
   lines.push('# 知识图谱导出')
   lines.push('')
   lines.push('> 导出时间：' + new Date().toISOString())
   lines.push('')
+
+  // 节点清单
   lines.push('## 节点清单（' + nodes.length + '）')
   lines.push('')
   if (nodes.length) {
@@ -21,19 +32,27 @@ function buildMarkdown(nodes, links) {
       const desc = (n.description || '').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ')
       lines.push(`| ${title} | ${n.type || ''} | ${n.groupName || n.groupId || ''} | ${desc} |`)
     }
-  } else lines.push('_暂无节点_')
+  } else {
+    lines.push('_暂无节点_')
+  }
   lines.push('')
+
+  // 连线清单
   lines.push('## 连线清单（' + links.length + '）')
   lines.push('')
   if (links.length) {
     lines.push('| 源节点 | 关系 | 目标节点 |')
     lines.push('| --- | --- | --- |')
     for (const l of links) {
-      const s = endpointId(l.source); const t = endpointId(l.target)
+      const s = endpointId(l.source)
+      const t = endpointId(l.target)
       const label = l.relation_label || l.relation_type || '关联'
       lines.push(`| ${s} | ${label} | ${t} |`)
     }
-  } else lines.push('_暂无连线_')
+  } else {
+    lines.push('_暂无连线_')
+  }
+
   return lines.join('\n')
 }
 
@@ -45,8 +64,14 @@ registerPlugin({
     api.registerExportFormat('导出 JSON', () => {
       const graphStore = api.getContext().graphStore
       if (!graphStore) return
-      downloadText('knowledge-graph.json', JSON.stringify({ nodes: graphStore.nodes, links: graphStore.links, exportedAt: new Date().toISOString() }, null, 2), 'application/json')
+      const payload = {
+        nodes: graphStore.nodes,
+        links: graphStore.links,
+        exportedAt: new Date().toISOString()
+      }
+      downloadText('knowledge-graph.json', JSON.stringify(payload, null, 2), 'application/json')
     })
+
     api.registerExportFormat('导出 Markdown', () => {
       const graphStore = api.getContext().graphStore
       if (!graphStore) return

@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.database import SessionLocal, engine, Base
 from app.models.models import User, KnowledgeBase
 
+# 项目内语料候选路径（按优先级；多个候选目录都会被搜索，文件按 isfile 过滤）
 CORPUS_CANDIDATES = [
     os.path.join(os.path.dirname(__file__), "..", "..", "kg-vue3", "src", "domain_corpus"),
     os.path.join(os.path.dirname(__file__), "..", "..", "domain_corpus"),
@@ -23,7 +24,9 @@ CORPUS_CANDIDATES = [
 CORPUS_FILES = ["software_kg.md", "software.md", "embedded.md", "writing.md"]
 
 
+# ---------------------------------------------------------------- 解析
 def _parse_aliases(name: str):
+    """从 '面向对象编程 (OOP)' 提取实体名与别名；无括号时别名取空"""
     m = re.match(r"^(.*?)[（(]([^（）()]*)[)）]$", name.strip())
     if m:
         entity = m.group(1).strip()
@@ -34,14 +37,18 @@ def _parse_aliases(name: str):
 
 
 def _infer_level(entity: str, domain: str, related: List[str]) -> int:
-    """启发式推断知识层级（L1 元概念 / L4 具体工具 / L2 核心理论）"""
+    """启发式推断知识层级（L0 种子条目大多缺少显式层级字段）"""
     en = entity.lower().strip()
+
+    # L1 元概念：与词表完全一致（“算法”“操作系统”这类顶层术语）
     l1_terms = {"编程范式", "面向对象编程", "函数式编程", "软件工程", "计算机科学",
                 "人工智能", "机器学习", "深度学习", "数据结构", "算法", "操作系统",
                 "计算机网络", "数据库", "知识图谱", "语义网", "设计模式", "架构模式",
                 "版本控制", "并发编程", "编译原理", "内存模型"}
     if entity in l1_terms:
         return 1
+
+    # L4 具体工具 / 语言 / 库
     l4_tokens = ["git", "docker", "kubernetes", "pytorch", "tensorflow", "vue", "react",
                  "spring", "mysql", "redis", "kafka", "nginx", "webpack", "vite",
                  "flask", "django", "fastapi", "postgresql", "mongodb", "sqlite",
@@ -49,28 +56,35 @@ def _infer_level(entity: str, domain: str, related: List[str]) -> int:
                  "linux", "http", "tcp", "jvm", "golang", "rust", "electron", "axios"]
     if any(t in en for t in l4_tokens):
         return 4
+
+    # L2 核心理论：术语本身含原理/理论/协议/机制等
     l2_words = ["原理", "理论", "模型", "协议", "机制", "范式", "标准", "设计模式", "设计"]
     if any(w in entity for w in l2_words):
         return 2
+
     return 3
 
 
 def parse_kb_md(content: str) -> List[Dict]:
     """解析单份知识库语料 md，返回 KnowledgeBase 同构字典列表"""
     entries: List[Dict] = []
+    # 按 `## ` 条目切分
     sections = re.split(r"^##\s+", content, flags=re.MULTILINE)
     for section in sections[1:]:
         lines = [ln for ln in section.splitlines() if ln.strip()]
         if not lines:
             continue
+
         name = lines[0].strip().lstrip("#").strip()
         if not name or name.startswith("<!--"):
             continue
         entity, aliases = _parse_aliases(name)
+
         related: List[str] = []
         bridge_sentence = ""
         domain = "general"
         definition_paras: List[str] = []
+
         for line in lines[1:]:
             line = line.strip()
             m = re.match(r"^[-*]\s*related_entities\s*[:：]\s*(.*)$", line)
@@ -88,6 +102,8 @@ def parse_kb_md(content: str) -> List[Dict]:
             if m:
                 domain = m.group(1).strip() or "general"
                 continue
+            # ---- 向后兼容 trio 语料格式（software.md / embedded.md / writing.md）----
+            # `别名:` / `别名：` 行 → aliases（按中英文逗号分隔，可为空）
             m = re.match(r"^[-*]?\s*别名\s*[:：]\s*(.*)$", line)
             if m:
                 arr = m.group(1).strip()
@@ -95,6 +111,7 @@ def parse_kb_md(content: str) -> List[Dict]:
                 if trio_aliases:
                     aliases = trio_aliases
                 continue
+            # `关系:` / `关联:` 行 → related_terms
             m = re.match(r"^[-*]?\s*(?:关系|关联)\s*[:：]\s*(.*)$", line)
             if m:
                 arr = m.group(1).strip()
@@ -102,31 +119,41 @@ def parse_kb_md(content: str) -> List[Dict]:
                     arr = arr.strip("[]")
                 related = [x.strip() for x in re.split(r"[,，]", arr) if x.strip()]
                 continue
+            # 其它非空非字段行 → definition（多段拼接，strip 后加入）
             definition_paras.append(line)
+
         if not entity:
             continue
+
         if bridge_sentence:
             definition = bridge_sentence
         elif definition_paras:
             definition = "\n".join(p.strip() for p in definition_paras if p.strip())
         else:
             definition = entity
+
         entries.append({
-            "entity": entity, "aliases": aliases, "domain": domain,
+            "entity": entity,
+            "aliases": aliases,
+            "domain": domain,
             "level": _infer_level(entity, domain, related),
             "definition": definition,
             "bridge_sentences": [bridge_sentence] if bridge_sentence else [],
-            "related_terms": related, "opposite_terms": [],
-            "source": "seed_corpus", "credibility": 5,
+            "related_terms": related,
+            "opposite_terms": [],
+            "source": "seed_corpus",
+            "credibility": 5,
         })
     return entries
 
 
 def load_all_corpora() -> List[Dict]:
+    """遍历所有候选语料目录加载 corpora 文件（两处都搜，按 os.path.isfile 过滤）"""
     corpus_dirs = [c for c in CORPUS_CANDIDATES if os.path.isdir(c)]
     if not corpus_dirs:
         logger.warning("domain_corpus 目录不存在，将使用内置种子数据")
         return _builtin_entries()
+
     entries: List[Dict] = []
     for corpus_dir in corpus_dirs:
         for fname in CORPUS_FILES:
@@ -141,6 +168,7 @@ def load_all_corpora() -> List[Dict]:
 
 
 def _builtin_entries() -> List[Dict]:
+    """兜底：语料缺失时内置最小桥接种子，保证推理可演示"""
     return [
         {"entity": "面向对象编程", "aliases": ["OOP"], "domain": "programming_paradigm",
          "level": 1, "definition": "以封装、继承、多态组织代码的编程范式",
@@ -170,14 +198,19 @@ def _builtin_entries() -> List[Dict]:
     ]
 
 
+# ---------------------------------------------------------------- 落库
 def seed_knowledge_base(db: Session, force: bool = False) -> Dict[str, int]:
+    """幂等导入种子知识库；force=True 时清空重建（用于语料更新后重灌）"""
     if force:
         db.query(KnowledgeBase).filter(KnowledgeBase.source.in_(["seed_corpus", "builtin"])).delete()
         db.commit()
+
     existing_count = db.query(KnowledgeBase).count()
     if existing_count > 0 and not force:
         return {"status": "skipped", "count": existing_count}
+
     entries = load_all_corpora()
+
     imported = 0
     existing = {e.entity for e in db.query(KnowledgeBase).all()}
     for entry in entries:
@@ -192,6 +225,7 @@ def seed_knowledge_base(db: Session, force: bool = False) -> Dict[str, int]:
 
 
 def ensure_default_user(db: Session) -> int:
+    """确保存在默认单用户（user_id=1）"""
     user = db.query(User).filter_by(id=1).first()
     if not user:
         user = User(id=1, username="default")
@@ -202,6 +236,7 @@ def ensure_default_user(db: Session) -> int:
 
 
 def bootstrap():
+    """CLI/启动复用：建表 + 默认用户 + 种子知识库"""
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:

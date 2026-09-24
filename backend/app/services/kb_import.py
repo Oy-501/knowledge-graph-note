@@ -3,7 +3,12 @@
 用户上传知识库文件 → 解析 → 与既有知识库比对（新增 / 同义合并 / 定义冲突）→
 落库 → 输出人类可读的「理解报告」。
 
-支持格式：markdown 条目式 / markdown 表格 / csv/tsv / json / 纯文本。
+支持格式：
+  - markdown 条目式：`## 实体 (别名)` + `别名:` / `关系:` / `bridge_sentence:` / `domain:` / 正文定义
+  - markdown 表格：  `| 实体 | 别名 | 领域 | 定义 |`
+  - csv / tsv：     表头含 实体/entity、别名/aliases、领域/domain、定义/definition、关系/related
+  - json：          `[{...}]` 或 `{"entries": [...]}`
+  - 纯文本：        `实体：定义` / `实体 - 定义` 逐行
 """
 import csv
 import io
@@ -41,6 +46,7 @@ def _to_list(value) -> List[str]:
 
 
 def _canon_field(name: str) -> str:
+    # Excel 导出的 CSV/表头常带 BOM 或零宽字符，先清掉再匹配
     key = (name or "").replace("\ufeff", "").replace("\u200b", "").strip().lower()
     for canon, names in FIELD_ALIASES.items():
         if key in names:
@@ -48,7 +54,11 @@ def _canon_field(name: str) -> str:
     return ""
 
 
+# ---------------------------------------------------------------- 各格式解析
+
+
 def _parse_table_rows(rows: List[List[str]]) -> List[Dict]:
+    """把带表头的二维表转为条目列表"""
     if not rows:
         return []
     header = [_canon_field(h) for h in rows[0]]
@@ -94,7 +104,7 @@ def _parse_markdown_table(text: str) -> List[Dict]:
             continue
         cells = [c.strip() for c in line.strip("|").split("|")]
         if all(re.fullmatch(r":?-{2,}:?", c or "-") for c in cells):
-            continue
+            continue  # 分隔行
         rows.append(cells)
     return _parse_table_rows(rows)
 
@@ -129,6 +139,7 @@ def _parse_json(text: str) -> List[Dict]:
 
 
 def _parse_plain(text: str) -> List[Dict]:
+    """纯文本：`实体：定义` / `实体 - 定义` / `实体 — 定义`"""
     out: List[Dict] = []
     for line in text.splitlines():
         line = line.strip().lstrip("-*#> ").strip()
@@ -166,6 +177,7 @@ def detect_format(name: str, text: str) -> str:
 
 
 def parse_kb_document(name: str, content: str) -> Tuple[str, List[Dict]]:
+    """解析知识库文档 → (格式, 条目列表[{entity, aliases, domain, level, definition, related, bridge}])"""
     content = (content or "").lstrip("\ufeff")
     fmt = detect_format(name, content)
     entries: List[Dict] = []
@@ -177,13 +189,14 @@ def parse_kb_document(name: str, content: str) -> Tuple[str, List[Dict]]:
         elif fmt == "markdown_table":
             entries = _parse_markdown_table(content)
         elif fmt == "markdown":
-            entries = parse_kb_md(content)
+            entries = parse_kb_md(content)  # 复用项目语料同构解析
         else:
             entries = _parse_plain(content)
-    except Exception as exc:
+    except Exception as exc:  # 解析失败降级再试纯文本
         logger.warning(f"知识库文档解析失败（{fmt}）：{exc}")
         entries = _parse_plain(content)
         fmt = "text"
+
     normalized = []
     for e in entries:
         entity = (e.get("entity") or "").strip()
@@ -194,13 +207,19 @@ def parse_kb_document(name: str, content: str) -> Tuple[str, List[Dict]]:
         if e.get("bridge") and isinstance(e["bridge"], str) and not definition:
             definition = e["bridge"]
         normalized.append({
-            "entity": entity[:255], "aliases": _to_list(e.get("aliases")),
-            "domain": e.get("domain") or "general", "level": e.get("level"),
+            "entity": entity[:255],
+            "aliases": _to_list(e.get("aliases")),
+            "domain": e.get("domain") or "general",
+            "level": e.get("level"),
             "definition": definition[:2000] or entity,
             "related": _to_list(e.get("related")) or _to_list(e.get("related_terms")),
-            "bridge_sentences": bridges, "raw": e,
+            "bridge_sentences": bridges,
+            "raw": e,
         })
     return fmt, normalized
+
+
+# ---------------------------------------------------------------- 理解与入库
 
 
 def _bigrams(text: str) -> set:
@@ -230,10 +249,16 @@ def _reject_reason(entry: Dict) -> str:
     return ""
 
 
-def understand_kb_document(db, name: str, content: str, user_id: int = 1, dry_run: bool = False, overwrite_definitions: bool = False) -> Dict:
+def understand_kb_document(
+    db, name: str, content: str, user_id: int = 1, dry_run: bool = False,
+    overwrite_definitions: bool = False,
+) -> Dict:
+    """理解一份知识库文档并（可选）入库，返回理解报告。"""
     from app.models.models import KnowledgeBase, KbRelation, KbImport
     from app.services.kb_index import KbIndex, build_relations_from_entries, normalize_key
+
     fmt, entries = parse_kb_document(name, content)
+
     existing_rows = db.query(KnowledgeBase).all()
     index = KbIndex([{
         "entity": e.entity, "aliases": e.aliases or [], "domain": e.domain,
@@ -242,23 +267,30 @@ def understand_kb_document(db, name: str, content: str, user_id: int = 1, dry_ru
     by_canonical = {e.entity: e for e in existing_rows}
     taken_entities = {normalize_key(e.entity) for e in existing_rows}
     taken_aliases = {normalize_key(a) for e in existing_rows for a in (e.aliases or [])}
+
     report = {
-        "format": fmt, "total": len(entries),
+        "format": fmt,
+        "total": len(entries),
         "new_entries": [], "merged_entries": [], "conflicts": [],
-        "relations_added": [], "rejected": [], "dry_run": bool(dry_run),
+        "relations_added": [], "rejected": [],
+        "dry_run": bool(dry_run),
     }
     pending_relations: List[Dict] = []
     new_canonicals: List[str] = []
+
     for entry in entries:
         reason = _reject_reason(entry)
         if reason:
             report["rejected"].append({"entity": entry["entity"][:60], "reason": reason})
             continue
+
         key = normalize_key(entry["entity"])
         canonical = index.alias_map.get(key) or index.alias_map.get(
             next((normalize_key(a) for a in entry["aliases"] if normalize_key(a) in index.alias_map), "")
         )
         row = by_canonical.get(canonical) if canonical else None
+
+        # ---- 已存在：同义合并 ----
         if row:
             added_aliases, added_related, added_bridge = [], [], []
             alias_keys = {normalize_key(a) for a in (row.aliases or [])}
@@ -275,8 +307,10 @@ def understand_kb_document(db, name: str, content: str, user_id: int = 1, dry_ru
             for b in entry["bridge_sentences"]:
                 if b and normalize_key(b) not in bridge_keys:
                     added_bridge.append(b)
+
             sim = _def_similarity(row.definition or "", entry["definition"])
             conflict = sim < 0.25 and len(entry["definition"]) > 8 and len(row.definition or "") > 8
+
             if conflict:
                 report["conflicts"].append({
                     "entity": row.entity,
@@ -293,13 +327,17 @@ def understand_kb_document(db, name: str, content: str, user_id: int = 1, dry_ru
                     row.related_terms = list(dict.fromkeys((row.related_terms or []) + added_related))
                     row.bridge_sentences = list(dict.fromkeys((row.bridge_sentences or []) + added_bridge))
                 report["merged_entries"].append({
-                    "entity": row.entity, "added_aliases": added_aliases,
-                    "added_related": added_related, "definition_conflict": conflict,
+                    "entity": row.entity,
+                    "added_aliases": added_aliases,
+                    "added_related": added_related,
+                    "definition_conflict": conflict,
                 })
             for r in entry["related"]:
                 pending_relations.append({"source": row.entity, "target": r, "type": "related",
                                           "evidence": f"来自上传知识库《{name}》的「{row.entity}」相关术语"})
             continue
+
+        # ---- 新知识点 ----
         level = entry["level"] or _infer_level(entry["entity"], entry["domain"], entry["related"])
         report["new_entries"].append({
             "entity": entry["entity"], "domain": entry["domain"], "level": level,
@@ -309,15 +347,22 @@ def understand_kb_document(db, name: str, content: str, user_id: int = 1, dry_ru
         taken_entities.add(key)
         for a in entry["aliases"]:
             taken_aliases.add(normalize_key(a))
+        # 让后续条目也能命中本次新增（同批文件内的引用关系）
         index.alias_map.setdefault(key, entry["entity"])
         for a in entry["aliases"]:
             index.alias_map.setdefault(normalize_key(a), entry["entity"])
+
         if not dry_run:
             row = KnowledgeBase(
-                entity=entry["entity"], aliases=entry["aliases"], domain=entry["domain"],
-                level=level, definition=entry["definition"],
-                source=f"upload:{name[:80]}", credibility=6,
-                bridge_sentences=entry["bridge_sentences"], opposite_terms=[],
+                entity=entry["entity"],
+                aliases=entry["aliases"],
+                domain=entry["domain"],
+                level=level,
+                definition=entry["definition"],
+                source=f"upload:{name[:80]}",
+                credibility=6,
+                bridge_sentences=entry["bridge_sentences"],
+                opposite_terms=[],
                 related_terms=entry["related"],
             )
             db.add(row)
@@ -326,6 +371,8 @@ def understand_kb_document(db, name: str, content: str, user_id: int = 1, dry_ru
         for r in entry["related"]:
             pending_relations.append({"source": entry["entity"], "target": r, "type": "related",
                                       "evidence": f"来自上传知识库《{name}》的「{entry['entity']}」相关术语"})
+
+    # ---- 关系落库（目标必须能在知识库中找到，否则只作新术语候选） ----
     if not dry_run:
         known = {normalize_key(e.entity): e.entity for e in by_canonical.values()}
         for aliases_row in by_canonical.values():
@@ -347,11 +394,18 @@ def understand_kb_document(db, name: str, content: str, user_id: int = 1, dry_ru
             ))
             report["relations_added"].append({"source": source, "target": target, "type": rel["type"]})
         db.commit()
+
+        # 由新条目继续推导（别名等价 / 桥接句）；只报告本次导入净增的关系数
         rel_before = db.query(KbRelation).count()
         build_relations_from_entries(db)
         report["relations_derived"] = max(0, db.query(KbRelation).count() - rel_before)
-    stats = {"kb_total": db.query(KnowledgeBase).count(), "relations_total": db.query(KbRelation).count()}
+
+    stats = {
+        "kb_total": db.query(KnowledgeBase).count(),
+        "relations_total": db.query(KbRelation).count(),
+    }
     report["stats"] = stats
+
     if not dry_run:
         record = KbImport(
             user_id=user_id, name=name, content=content[:200000], format=fmt,
@@ -363,6 +417,7 @@ def understand_kb_document(db, name: str, content: str, user_id: int = 1, dry_ru
         db.add(record)
         db.commit()
         report["import_id"] = record.id
+
     summary = (
         f"识别 {report['total']} 条：新增 {len(report['new_entries'])}、"
         f"同义合并 {len(report['merged_entries'])}、定义冲突 {len(report['conflicts'])}、"

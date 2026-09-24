@@ -41,49 +41,69 @@ class SearchRequest(BaseModel):
 
 @router.post("/validate")
 def validate_knowledge(request: ValidateRequest, user_id: int = 1, db: Session = Depends(get_db)):
+    """校验笔记内容的知识准确性（v2：7 类 × 4 级，返回带全文偏移的 issues）"""
     if not request.content or not request.content.strip():
         return {
-            "passed": True, "can_force_save": True,
+            "passed": True,
+            "can_force_save": True,
             "issues": [], "results": [], "errors": [], "warnings": [],
             "summary": {
                 "total": 0, "passed": 0, "errors": 0, "warnings": 0,
-                "critical": 0, "major": 0, "minor": 0, "info": 0, "accuracy": 100
+                "critical": 0, "major": 0, "minor": 0, "info": 0,
+                "accuracy": 100
             },
             "accuracy_score": 1.0
         }
+
     issues = validate_content(request.content, db)
     errors = [i for i in issues if i['severity'] in ('critical', 'major')]
     warnings = [i for i in issues if i['severity'] in ('minor', 'info')]
     sentence_count = len(split_sentence_ranges(request.content))
     summary = summarize(issues, sentence_count=sentence_count)
     accuracy = summary['accuracy'] / 100.0
+
     return {
-        "passed": len(errors) == 0, "can_force_save": not any(i['severity'] == 'critical' for i in issues),
-        "issues": issues, "results": issues, "errors": errors, "warnings": warnings,
-        "summary": summary, "accuracy_score": round(accuracy, 3)
+        "passed": len(errors) == 0,
+        "can_force_save": not any(i['severity'] == 'critical' for i in issues),
+        "issues": issues,
+        "results": issues,  # 兼容旧字段名
+        "errors": errors,
+        "warnings": warnings,
+        "summary": summary,
+        "accuracy_score": round(accuracy, 3)
     }
 
 
 @router.post("/infer")
 def infer_links(request: InferRequest, user_id: int = 1, db: Session = Depends(get_db)):
+    """为新节点推理关联连线"""
     nodes = request.nodes
     weights = request.weights or {}
     threshold = request.threshold or 0.15
+
     if not nodes:
         return {"links": [], "message": "无节点可推理"}
+
     links = infer_links_batch(nodes, user_id, weights, threshold, db)
     return {"links": links, "count": len(links)}
 
 
 @router.get("/search")
 def search_knowledge(keyword: str, limit: int = 20, db: Session = Depends(get_db)):
+    """搜索知识库中的知识点"""
     from app.models.models import KnowledgeBase, Node
+
+    # 搜索知识库
     kb_results = db.query(KnowledgeBase).filter(
         KnowledgeBase.entity.ilike(f"%{keyword}%")
     ).limit(limit).all()
+
+    # 搜索已有节点
     node_results = db.query(Node).filter(
-        Node.entity.ilike(f"%{keyword}%"), Node.status == "active"
+        Node.entity.ilike(f"%{keyword}%"),
+        Node.status == "active"
     ).limit(limit).all()
+
     return {
         "knowledge_base": [
             {"id": k.id, "entity": k.entity, "domain": k.domain, "definition": k.definition}

@@ -1,4 +1,18 @@
-"""基于知识库的关联引擎：先锚定，后关联；关联靠知识，不靠字面。"""
+"""基于知识库的关联引擎
+
+与「文本语义相似」本质不同的三条规则：
+
+  1. 先锚定，后关联：文档节点先锚定到知识库知识点，没被知识库覆盖的内容不参与关联。
+  2. 关联靠知识，不靠字面：两个知识点关联，要么命中同一个知识库条目（同一知识点），
+     要么在知识库关系图上存在通路（1 跳/2 跳桥接），字面像但知识库不认的一律不连。
+  3. 文件相似度 = 知识画像的向量化比较：由知识库概念空间给出，并附带可下钻的证据
+     （共享了哪些知识点、经由哪些关系桥接、领域层级是否一致）。
+
+产物：
+  - file_knowledge_profiles  文件知识画像
+  - file_knowledge_links     文件-文件知识关联（带证据）
+  - links（semantic_bridge=True, source_file='知识库'）  节点级知识锚定关联
+"""
 from collections import Counter, defaultdict
 from typing import Dict, List, Optional
 
@@ -6,6 +20,7 @@ from loguru import logger
 
 KB_SOURCE_TAG = "知识库"
 
+# 知识库关系类型 → 图谱关系类型（复用前端 8+1 类关系配色）
 _RELATION_MAP = {
     "equivalent": ("equivalent", "等价知识点"),
     "包含": ("theory", "包含于理论"),
@@ -35,25 +50,34 @@ def _node_text(node) -> str:
 
 
 def _anchors_of(node, index) -> Dict[str, int]:
+    """节点文本 → {知识库知识点: 命中次数}"""
     return dict(Counter(h["entity"] for h in index.scan(_node_text(node))))
 
 
+# ---------------------------------------------------------------- 锚定
+
+
 def apply_kb_anchoring(db, file_id: int, user_id: int = 1, index=None, persist: bool = True) -> Dict:
+    """把文件的节点锚定到知识库知识点：补 entities、以知识库为准校正领域/层级、写来源证据。"""
     from app.models.models import Node, NodeSource
     from app.services.kb_index import load_index
     from app.services.parser import get_level_label
+
     index = index or load_index(db)
     nodes = db.query(Node).filter_by(file_id=file_id, user_id=user_id).all()
     anchored_nodes, anchor_hits = 0, 0
+
     for node in nodes:
         anchors = _anchors_of(node, index)
         if not anchors:
             continue
         anchor_hits += sum(anchors.values())
         anchored_nodes += 1
+
         kb_entities = [e for e, _ in sorted(anchors.items(), key=lambda kv: -kv[1])][:8]
         old = [e for e in (node.entities or []) if e not in kb_entities]
         node.entities = (kb_entities + old)[:15]
+
         top_entity = kb_entities[0]
         entry = index.entries.get(top_entity, {})
         if anchors[top_entity] >= 2:
@@ -63,6 +87,7 @@ def apply_kb_anchoring(db, file_id: int, user_id: int = 1, index=None, persist: 
             kb_domain = entry.get("domain") or ""
             if kb_domain and kb_domain != "general":
                 node.domain = kb_domain
+
         if persist:
             exists = db.query(NodeSource).filter_by(node_id=node.id, source_type="kb").first()
             if not exists:
@@ -75,6 +100,7 @@ def apply_kb_anchoring(db, file_id: int, user_id: int = 1, index=None, persist: 
                     paragraph="知识库锚定｜" + "；".join(parts),
                     confidence=round(min(1.0, anchors[kb_entities[0]] / 3.0), 2),
                 ))
+
     if persist:
         db.commit()
     logger.info(f"文件 {file_id} 知识库锚定：{anchored_nodes} 个节点、{anchor_hits} 次命中")
@@ -82,14 +108,20 @@ def apply_kb_anchoring(db, file_id: int, user_id: int = 1, index=None, persist: 
             "total_nodes": len(nodes)}
 
 
+# ---------------------------------------------------------------- 画像
+
+
 def profile_file(db, file_id: int, user_id: int = 1, index=None, persist: bool = True) -> Dict:
+    """构建/更新单个文件的知识画像"""
     from app.models.models import File, FileKnowledgeProfile
     from app.services.kb_index import load_index
+
     index = index or load_index(db)
     file_row = db.query(File).filter_by(id=file_id).first()
     if not file_row:
         return {}
     prof = index.build_profile(file_row.content or "")
+
     if persist:
         row = db.query(FileKnowledgeProfile).filter_by(file_id=file_id).first()
         if not row:
@@ -105,12 +137,15 @@ def profile_file(db, file_id: int, user_id: int = 1, index=None, persist: bool =
         from datetime import datetime
         row.updated_at = datetime.utcnow()
         db.commit()
+
     return {"file_id": file_id, "name": file_row.name, **prof}
 
 
 def build_profiles(db, user_id: int = 1, index=None) -> Dict:
+    """为全部文件重建知识画像"""
     from app.models.models import File
     from app.services.kb_index import load_index
+
     index = index or load_index(db)
     files = db.query(File).filter_by(user_id=user_id).all()
     covered = 0
@@ -121,15 +156,22 @@ def build_profiles(db, user_id: int = 1, index=None) -> Dict:
     return {"files": len(files), "covered": covered}
 
 
+# ---------------------------------------------------------------- 文件-文件知识关联
+
+
 def link_files(db, user_id: int = 1, threshold: float = 0.15, index=None) -> Dict:
+    """按知识画像计算文件-文件知识关联（README：不是语义相似度）"""
     from app.models.models import File, FileKnowledgeProfile, FileKnowledgeLink
     from app.services.kb_index import load_index
+
     index = index or load_index(db)
     files = {f.id: f for f in db.query(File).filter_by(user_id=user_id).all()}
     profiles = {p.file_id: {"concepts": p.concepts or [], "domains": p.domains or {},
                             "levels": p.levels or {}} for p in db.query(FileKnowledgeProfile).all()}
+
     db.query(FileKnowledgeLink).filter_by(user_id=user_id).delete(synchronize_session=False)
     db.commit()
+
     ids = sorted(f for f in files if profiles.get(f))
     created, scored = 0, 0
     for i, fid_a in enumerate(ids):
@@ -152,19 +194,23 @@ def link_files(db, user_id: int = 1, threshold: float = 0.15, index=None) -> Dic
 
 
 def link_files_for(db, file_id: int, user_id: int = 1, threshold: float = 0.15, index=None) -> Dict:
+    """增量：只更新与该文件相关的知识关联"""
     from app.models.models import File, FileKnowledgeProfile, FileKnowledgeLink
     from app.services.kb_index import load_index
+
     index = index or load_index(db)
     profiles = {p.file_id: {"concepts": p.concepts or [], "domains": p.domains or {},
                             "levels": p.levels or {}} for p in db.query(FileKnowledgeProfile).all()}
     if not profiles.get(file_id):
         return {"pairs_scored": 0, "links": 0}
+
     others = [fid for fid in profiles if fid != file_id]
     db.query(FileKnowledgeLink).filter(
         FileKnowledgeLink.user_id == user_id,
         (FileKnowledgeLink.source_file_id == file_id) | (FileKnowledgeLink.target_file_id == file_id),
     ).delete(synchronize_session=False)
     db.commit()
+
     created = 0
     for fid in others:
         sim = index.similarity(profiles[file_id], profiles[fid])
@@ -183,13 +229,26 @@ def link_files_for(db, file_id: int, user_id: int = 1, threshold: float = 0.15, 
     return {"pairs_scored": len(others), "links": created}
 
 
-def link_nodes_by_kb(db, user_id: int = 1, threshold: float = 0.15, index=None, only_file_id: Optional[int] = None, max_nodes_per_concept: int = 6) -> Dict:
+# ---------------------------------------------------------------- 节点级知识关联
+
+
+def link_nodes_by_kb(
+    db, user_id: int = 1, threshold: float = 0.15,
+    index=None, only_file_id: Optional[int] = None, max_nodes_per_concept: int = 6,
+) -> Dict:
+    """节点级关联：只有被知识库锚定的知识点之间才连线。
+
+    - 同一知识点（同一 KB 条目）→ 等价知识点
+    - 知识库关系边两端        → 按 KB 关系类型映射（前置/理论/对比/桥接…）
+    """
     from app.models.models import Node, Link, File
     from app.services.kb_index import load_index
+
     index = index or load_index(db)
     nodes = db.query(Node).filter_by(user_id=user_id, status="active").all()
     if not nodes:
         return {"same_concept": 0, "bridged": 0, "total": 0}
+
     anchors: Dict[int, Dict[str, int]] = {}
     for n in nodes:
         a = _anchors_of(n, index)
@@ -197,19 +256,24 @@ def link_nodes_by_kb(db, user_id: int = 1, threshold: float = 0.15, index=None, 
             anchors[n.id] = a
     if not anchors:
         return {"same_concept": 0, "bridged": 0, "total": 0}
+
     nodes_by_id = {n.id: n for n in nodes}
+    # 概念 → 该概念下的代表节点（每个文件只留命中最强的一个，避免同文件内堆叠）
     concept_nodes: Dict[str, List[tuple]] = defaultdict(list)
     for nid, a in anchors.items():
         for ent, cnt in a.items():
             concept_nodes[ent].append((nid, cnt))
+
     existing_pairs = set()
     for l in db.query(Link).filter(
         (Link.source_id.in_(list(nodes_by_id))) | (Link.target_id.in_(list(nodes_by_id)))
     ).all():
         existing_pairs.add(frozenset((l.source_id, l.target_id)))
+
     new_links: List[Dict] = []
 
     def _pick(entries: List[tuple]) -> List[tuple]:
+        """每文件取命中最强者，按命中次数降序"""
         best: Dict[int, tuple] = {}
         for nid, cnt in entries:
             fid = nodes_by_id[nid].file_id
@@ -233,6 +297,7 @@ def link_nodes_by_kb(db, user_id: int = 1, threshold: float = 0.15, index=None, 
             "evidence": evidence, "source_text": source_text,
         })
 
+    # 1) 同一知识点 → 等价知识点
     same_concept = 0
     for ent, entries in concept_nodes.items():
         picked = _pick(entries)
@@ -252,6 +317,8 @@ def link_nodes_by_kb(db, user_id: int = 1, threshold: float = 0.15, index=None, 
                      f"知识库定义：{definition}" if definition else ent)
                 if len(new_links) > before:
                     same_concept += 1
+
+    # 2) 知识库关系边 → 跨知识点关联
     bridged = 0
     for (ent_a, ent_b), detail in list(index.rel_detail.items()):
         if ent_a not in concept_nodes or ent_b not in concept_nodes:
@@ -274,8 +341,9 @@ def link_nodes_by_kb(db, user_id: int = 1, threshold: float = 0.15, index=None, 
                 if len(new_links) > before:
                     bridged += 1
                     pairs += 1
-        if len(new_links) > 4000:
+        if len(new_links) > 4000:  # 防御性上限，避免极端语料炸图
             break
+
     for item in new_links[:4000]:
         db.add(Link(
             source_id=item["source_id"], target_id=item["target_id"],
@@ -291,7 +359,9 @@ def link_nodes_by_kb(db, user_id: int = 1, threshold: float = 0.15, index=None, 
 
 
 def purge_kb_links(db, user_id: int = 1) -> int:
+    """清除由知识库生成的节点连线（source_file == '知识库'）"""
     from app.models.models import Link, Node
+
     node_ids = [n.id for n in db.query(Node).filter_by(user_id=user_id).all()]
     if not node_ids:
         return 0
@@ -303,9 +373,14 @@ def purge_kb_links(db, user_id: int = 1) -> int:
     return count
 
 
+# ---------------------------------------------------------------- 全量/增量编排
+
+
 def kb_rebuild_all(db, user_id: int = 1, threshold: float = 0.15, node_threshold: float = 0.15) -> Dict:
+    """重建：锚定 → 画像 → 文件关联 → 节点关联（幂等）"""
     from app.models.models import File
     from app.services.kb_index import load_index
+
     index = load_index(db)
     files = db.query(File).filter_by(user_id=user_id).all()
     anchor_stats = [apply_kb_anchoring(db, f.id, user_id, index=index, persist=True) for f in files]
@@ -313,19 +388,28 @@ def kb_rebuild_all(db, user_id: int = 1, threshold: float = 0.15, node_threshold
     removed = purge_kb_links(db, user_id)
     file_links = link_files(db, user_id, threshold=threshold, index=index)
     node_links = link_nodes_by_kb(db, user_id, threshold=node_threshold, index=index)
+
     return {
-        "files": len(files), "anchored_nodes": sum(s["anchored_nodes"] for s in anchor_stats),
+        "files": len(files),
+        "anchored_nodes": sum(s["anchored_nodes"] for s in anchor_stats),
         "anchor_hits": sum(s["anchor_hits"] for s in anchor_stats),
-        "profiles": profile_stats, "file_links": file_links, "node_links": node_links,
-        "purged_stale_links": removed, "kb": index.stats(),
+        "profiles": profile_stats,
+        "file_links": file_links,
+        "node_links": node_links,
+        "purged_stale_links": removed,
+        "kb": index.stats(),
     }
 
 
-def kb_incremental_for_file(db, file_id: int, user_id: int = 1, index=None, threshold: float = 0.15, node_threshold: float = 0.15) -> Dict:
+def kb_incremental_for_file(db, file_id: int, user_id: int = 1, index=None,
+                            threshold: float = 0.15, node_threshold: float = 0.15) -> Dict:
+    """新文件上传后的增量：锚定该文件 → 画像 → 更新它与既有文件的知识关联"""
     from app.services.kb_index import load_index
+
     index = index or load_index(db)
     anchor = apply_kb_anchoring(db, file_id, user_id, index=index, persist=True)
     prof = profile_file(db, file_id, user_id, index=index, persist=True)
+    # 该文件已有节点连线先清掉，避免重复（仅清除 KB 生成且涉及本文件节点的连线）
     from app.models.models import Link, Node
     node_ids = [n.id for n in db.query(Node).filter_by(file_id=file_id).all()]
     if node_ids:

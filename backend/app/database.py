@@ -13,6 +13,7 @@ from app.config import settings
 _DB_URL = settings.resolved_database_url
 _IS_SQLITE = settings.db_is_sqlite
 
+# SQLite 相对路径落库前，确保所在目录存在
 if _IS_SQLITE and _DB_URL.startswith("sqlite:///"):
     db_file = _DB_URL.replace("sqlite:///", "", 1)
     if not db_file.startswith("/") and ":" not in db_file[:2]:
@@ -22,7 +23,7 @@ if _IS_SQLITE and _DB_URL.startswith("sqlite:///"):
 engine = create_engine(
     _DB_URL,
     connect_args={"check_same_thread": False} if _IS_SQLITE else {},
-    echo=False,
+    echo=False,  # SQL 回显量大，需要排查时改 True
     pool_pre_ping=True,
 )
 
@@ -52,6 +53,8 @@ def init_db():
     _migrate()
 
 
+# 列级迁移清单：表名 -> [(列名, ALTER 片段)]。create_all 不会修改已存在的表，
+# 历史库通过这里补列（SQLite / PostgreSQL 通用，缺列判定走 inspector）。
 _COLUMN_MIGRATIONS = {
     "files": [
         ("source_path", "ALTER TABLE files ADD COLUMN source_path VARCHAR(255)"),

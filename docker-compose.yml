@@ -16,6 +16,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
   backend:
     build: ./backend
     ports:
@@ -33,6 +34,7 @@ services:
       - ./backend:/app
       - ./kg-vue3/src/domain_corpus:/app/domain_corpus
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
   frontend:
     build: ./kg-vue3
     ports:

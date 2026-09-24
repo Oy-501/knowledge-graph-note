@@ -13,10 +13,18 @@ router = APIRouter()
 
 
 def _purge_file_nodes(db: Session, file_id: int) -> int:
+    """清除某文件产出的全部节点与关联（来源段/连线/隔离黑名单），返回清除的节点数。
+
+    供「删除文件」与「本地文件重新解析（sync 内容更新）」复用，
+    保证图谱中不留已删文档的孤立残影（§15 无残留）。
+    """
     node_ids = [n.id for n in db.query(Node).filter_by(file_id=file_id).all()]
     if not node_ids:
         return 0
-    db.query(NodeSource).filter(NodeSource.node_id.in_(node_ids)).delete(synchronize_session=False)
+    # bulk delete 不走 ORM cascade，须先清所有引用 node_id 的关联行
+    db.query(NodeSource).filter(
+        NodeSource.node_id.in_(node_ids)
+    ).delete(synchronize_session=False)
     db.query(Link).filter(
         (Link.source_id.in_(node_ids)) | (Link.target_id.in_(node_ids))
     ).delete(synchronize_session=False)
@@ -24,61 +32,108 @@ def _purge_file_nodes(db: Session, file_id: int) -> int:
         (IsolateBlacklist.node_id.in_(node_ids)) |
         (IsolateBlacklist.blocked_node_id.in_(node_ids))
     ).delete(synchronize_session=False)
-    db.query(NoteNode).filter(NoteNode.node_id.in_(node_ids)).delete(synchronize_session=False)
+    db.query(NoteNode).filter(
+        NoteNode.node_id.in_(node_ids)
+    ).delete(synchronize_session=False)
     db.query(Node).filter(Node.id.in_(node_ids)).delete(synchronize_session=False)
     return len(node_ids)
 
 
 @router.post("/upload")
-async def upload_file(file: UploadFile = FastAPIFile(...), user_id: int = 1, db: Session = Depends(get_db), background_tasks: BackgroundTasks = None):
+async def upload_file(
+    file: UploadFile = FastAPIFile(...),
+    user_id: int = 1,
+    db: Session = Depends(get_db),
+    background_tasks: BackgroundTasks = None
+):
+    """上传文件并异步解析"""
     content = await file.read()
     try:
         text = content.decode("utf-8")
     except UnicodeDecodeError:
         text = content.decode("gbk", errors="replace")
-    file_record = File(user_id=user_id, name=file.filename, content=text, status="parsing")
+
+    # 创建文件记录
+    file_record = File(
+        user_id=user_id,
+        name=file.filename,
+        content=text,
+        status="parsing"
+    )
     db.add(file_record)
     db.commit()
     db.refresh(file_record)
+
+    # 异步解析
     if background_tasks:
         background_tasks.add_task(parse_and_extract, file_record.id, user_id)
     else:
         parse_and_extract(file_record.id, user_id)
-    return {"file_id": file_record.id, "name": file.filename, "status": "parsing", "message": "文件已上传，正在解析"}
+
+    return {
+        "file_id": file_record.id,
+        "name": file.filename,
+        "status": "parsing",
+        "message": "文件已上传，正在解析"
+    }
 
 
 @router.delete("/{file_id}")
 def delete_file(file_id: int, user_id: int = 1, db: Session = Depends(get_db)):
+    """删除文件及其关联的节点和连线"""
     file_record = db.query(File).filter_by(id=file_id, user_id=user_id).first()
     if not file_record:
         return {"ok": False, "message": "文件不存在"}
+
     deleted_nodes = _purge_file_nodes(db, file_id)
     db.delete(file_record)
     db.commit()
-    return {"ok": True, "deleted_nodes": deleted_nodes,
-            "message": f"文件 '{file_record.name}' 及其 {deleted_nodes} 个节点已删除"}
+
+    return {
+        "ok": True,
+        "deleted_nodes": deleted_nodes,
+        "message": f"文件 '{file_record.name}' 及其 {deleted_nodes} 个节点已删除"
+    }
 
 
 class FileSyncRequest(BaseModel):
+    """本地文件夹笔记同步请求（模块1：本地为源 + 双写）"""
     user_id: int = 1
-    source_path: str = ""
+    source_path: str = ""          # 'ws:{workspaceId}:{relPath}' 幂等键
     name: str = ""
     content: str = ""
 
 
 @router.post("/sync")
 def sync_file(req: FileSyncRequest, db: Session = Depends(get_db)):
+    """按 source_path 幂等登记/更新文件并（重新）解析。
+
+    - 本地笔记首次同步 → 建 File 并解析出知识节点；
+    - 本地笔记内容更新 → 清掉旧节点/连线后按新内容重新解析（全量 rebuild 该文件）。
+    """
     if not req.source_path:
         return {"ok": False, "message": "缺少 source_path"}
-    file_record = db.query(File).filter_by(user_id=req.user_id, source_path=req.source_path).first()
+
+    file_record = (
+        db.query(File)
+        .filter_by(user_id=req.user_id, source_path=req.source_path)
+        .first()
+    )
     created = file_record is None
+
     if created:
-        file_record = File(user_id=req.user_id, name=req.name, content=req.content,
-                           source_path=req.source_path, status="parsing")
+        file_record = File(
+            user_id=req.user_id,
+            name=req.name,
+            content=req.content,
+            source_path=req.source_path,
+            status="parsing"
+        )
         db.add(file_record)
         db.commit()
         db.refresh(file_record)
     else:
+        # 内容已变化的更新：先清旧节点，避免新旧两套并存
         file_record.name = req.name
         file_record.content = req.content
         file_record.status = "parsing"
@@ -88,16 +143,25 @@ def sync_file(req: FileSyncRequest, db: Session = Depends(get_db)):
         except Exception as exc:
             db.rollback()
             return {"ok": False, "message": f"旧节点清理失败：{exc}", "file_id": file_record.id}
+
+    # 同步解析（笔记规模小，避免 background 双 session 竞态导致图谱闪烁）
+    # parse_and_extract 内部已完成向量化与自动推理
     try:
         parse_and_extract(file_record.id, req.user_id)
     except Exception as exc:
         file_record.status = "error"
         db.commit()
         return {"ok": False, "message": f"解析失败：{exc}", "file_id": file_record.id}
+
     db.refresh(file_record)
-    return {"ok": True, "file_id": file_record.id, "created": created,
-            "name": file_record.name, "status": file_record.status,
-            "node_count": file_record.node_count}
+    return {
+        "ok": True,
+        "file_id": file_record.id,
+        "created": created,
+        "name": file_record.name,
+        "status": file_record.status,
+        "node_count": file_record.node_count
+    }
 
 
 class FileRenameRequest(BaseModel):
@@ -107,10 +171,16 @@ class FileRenameRequest(BaseModel):
 
 
 @router.patch("/{file_id}")
-def update_file_meta(file_id: int, req: FileRenameRequest, db: Session = Depends(get_db)):
-    file_record = db.query(File).filter_by(id=file_id, user_id=req.user_id).first()
+def update_file_meta(
+    file_id: int, req: FileRenameRequest, db: Session = Depends(get_db)
+):
+    """更新文件元数据（本地重命名后同步 name / source_path）"""
+    file_record = (
+        db.query(File).filter_by(id=file_id, user_id=req.user_id).first()
+    )
     if not file_record:
         return {"ok": False, "message": "文件不存在"}
+
     if req.name is not None:
         file_record.name = req.name
     if req.source_path is not None:
@@ -121,17 +191,40 @@ def update_file_meta(file_id: int, req: FileRenameRequest, db: Session = Depends
 
 @router.get("")
 def list_files(user_id: int = 1, db: Session = Depends(get_db)):
+    """获取用户的所有文件"""
     files = db.query(File).filter_by(user_id=user_id).order_by(File.uploaded_at.desc()).all()
-    return {"files": [{"id": f.id, "name": f.name, "status": f.status,
-                        "node_count": f.node_count,
-                        "uploaded_at": f.uploaded_at.isoformat() if f.uploaded_at else None}
-                       for f in files]}
+    return {
+        "files": [
+            {
+                "id": f.id,
+                "name": f.name,
+                "status": f.status,
+                "node_count": f.node_count,
+                "uploaded_at": f.uploaded_at.isoformat() if f.uploaded_at else None
+            }
+            for f in files
+        ]
+    }
 
 
 @router.get("/{file_id}/nodes")
 def get_file_nodes(file_id: int, user_id: int = 1, db: Session = Depends(get_db)):
+    """获取文件的所有节点"""
     nodes = db.query(Node).filter_by(file_id=file_id, user_id=user_id).all()
-    return {"nodes": [{"id": n.id, "entity": n.entity, "title": n.title, "type": n.type,
-                        "description": n.description, "keywords": n.keywords or [],
-                        "entities": n.entities or [], "level": n.level, "domain": n.domain,
-                        "status": n.status} for n in nodes]}
+    return {
+        "nodes": [
+            {
+                "id": n.id,
+                "entity": n.entity,
+                "title": n.title,
+                "type": n.type,
+                "description": n.description,
+                "keywords": n.keywords or [],
+                "entities": n.entities or [],
+                "level": n.level,
+                "domain": n.domain,
+                "status": n.status
+            }
+            for n in nodes
+        ]
+    }

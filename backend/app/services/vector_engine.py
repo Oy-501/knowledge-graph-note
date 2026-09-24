@@ -5,14 +5,17 @@ import re
 from typing import List, Optional
 from loguru import logger
 
+# 尝试加载 sentence-transformers，失败则使用降级方法
 _encoder = None
 _engine_mode = "fallback-tfidf"
 
 
 def _init_encoder():
+    """延迟初始化向量编码器"""
     global _encoder, _engine_mode
     if _encoder is not None:
         return
+
     try:
         from sentence_transformers import SentenceTransformer
         from app.config import settings
@@ -26,28 +29,36 @@ def _init_encoder():
 
 
 def encode(text: str) -> List[float]:
+    """将文本编码为向量"""
     _init_encoder()
+
     if _encoder is not None:
         try:
             vec = _encoder.encode(text, convert_to_numpy=True)
             return vec.tolist()
         except Exception as e:
             logger.error(f"Transformers encode failed: {e}")
+
+    # TF-IDF 降级
     return _tfidf_encode(text)
 
 
 def encode_batch(texts: List[str]) -> List[List[float]]:
+    """批量编码"""
     _init_encoder()
+
     if _encoder is not None:
         try:
             vecs = _encoder.encode(texts, convert_to_numpy=True)
             return [v.tolist() for v in vecs]
         except Exception:
             pass
+
     return [_tfidf_encode(t) for t in texts]
 
 
 def cosine_similarity(a: List[float], b: List[float]) -> float:
+    """计算余弦相似度"""
     if not a or not b or len(a) != len(b):
         return 0.0
     dot = sum(x * y for x, y in zip(a, b))
@@ -59,6 +70,7 @@ def cosine_similarity(a: List[float], b: List[float]) -> float:
 
 
 def jaccard_similarity(a: List[str], b: List[str]) -> float:
+    """计算 Jaccard 相似度"""
     if not a or not b:
         return 0.0
     sa = set(a)
@@ -69,24 +81,33 @@ def jaccard_similarity(a: List[str], b: List[str]) -> float:
 
 
 def _tfidf_encode(text: str, dim: int = 100) -> List[float]:
+    """TF-IDF 降级编码"""
     text = re.sub(r'[^\w\s\u4e00-\u9fff]', ' ', text.lower())
     words = text.split()
     if not words:
         return [0.0] * dim
+
+    # 词频统计
     tf = {}
     for w in words:
         tf[w] = tf.get(w, 0) + 1
+
+    # 哈希到固定维度
     vec = [0.0] * dim
     for w, freq in tf.items():
         h = int(hashlib.md5(w.encode()).hexdigest(), 16) % dim
         vec[h] += freq / len(words)
+
+    # 归一化
     norm = sum(x * x for x in vec) ** 0.5
     if norm > 0:
         vec = [x / norm for x in vec]
+
     return vec
 
 
 def get_engine_info() -> dict:
+    """获取向量引擎信息"""
     return {
         "mode": _engine_mode,
         "dim": 768 if _engine_mode == "transformers" else 100
@@ -94,6 +115,7 @@ def get_engine_info() -> dict:
 
 
 def embed_to_db(nodes: list, db) -> None:
+    """为节点生成向量并存储到数据库"""
     from app.models.models import Node
 
     def _text(n):
@@ -108,11 +130,13 @@ def embed_to_db(nodes: list, db) -> None:
     texts = [_text(n) for n in nodes]
     if not texts:
         return
+
     try:
         vectors = encode_batch(texts)
     except Exception as e:
         logger.error(f"Batch encode failed: {e}")
         return
+
     for i, node_data in enumerate(nodes):
         if i < len(vectors):
             node_id = node_data.get("id")

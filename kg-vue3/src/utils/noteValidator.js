@@ -1,7 +1,20 @@
 /**
- * noteValidator.js v2 知识校验统一内核
+ * noteValidator.js  v2 — 知识校验统一内核（模块2 · 知识抽取与校验）
+ *
+ * 统一口径：
+ *   - 故障类型 7 种：factual_error 事实错误 / logic_error 逻辑矛盾 /
+ *     relation_error 关系错误 / confusion 概念混淆 /
+ *     imprecision 表述不精确（含碎片化断言）/ outdated 过时知识 / ambiguous 歧义术语
+ *   - 严重度 4 级：critical 严重(红, 阻断) / major 主要(橙) / minor 次要(黄) / info 提示(蓝)
+ *   - 每条 issue 携带字符范围（matchStart/matchEnd 为句内偏移；
+ *     validateText 产出 start/end 为全文偏移），供编辑器波浪线/悬浮提示/跳转使用
+ *   - 兼容旧导出面：RealtimeValidator / preSaveValidation / deepValidation /
+ *     getNodeValidationStatus / getCredibility / CREDIBILITY_LEVELS（既有组件 import 不动）
  */
+
 import { getOntologySnapshot, findEntitiesInText, getEntityByName } from './corpusMatcher'
+
+// ==================== 严重度（4 级） ====================
 
 export const SEVERITIES = {
   critical: { code: 'critical', label: '严重', weight: 4, icon: '⛔', color: '#ff3b30', desc: '与知识库明确相悖，建议修正后保存' },
@@ -12,21 +25,64 @@ export const SEVERITIES = {
 export const SEVERITY_ORDER = ['critical', 'major', 'minor', 'info']
 const _sevWeight = s => SEVERITIES[s] ? SEVERITIES[s].weight : 0
 
-const LEGACY_SEVERITY_MAP = { error: 'critical', high: 'critical', warning: 'major', medium: 'major', low: 'minor', info: 'info' }
-export function normalizeSeverity(s) { return LEGACY_SEVERITY_MAP[s] || (SEVERITIES[s] ? s : 'major') }
-
-export const ERROR_TYPES = {
-  factual_error: { code: 'factual_error', label: '事实错误', severity: 'critical', icon: '⛔', description: '与知识库明确知识相悖' },
-  logic_error: { code: 'logic_error', label: '逻辑矛盾', severity: 'critical', icon: '⛔', description: '推理链条断裂或自相矛盾' },
-  relation_error: { code: 'relation_error', label: '关系错误', severity: 'major', icon: '🟠', description: '知识之间的关系类型/方向判断错误' },
-  confusion: { code: 'confusion', label: '概念混淆', severity: 'major', icon: '🟠', description: '多个不同概念被混为一谈' },
-  imprecision: { code: 'imprecision', label: '表述不精确', severity: 'minor', icon: '🟡', description: '描述模糊/碎片化，缺乏关键限定' },
-  outdated: { code: 'outdated', label: '过时知识', severity: 'major', icon: '🟠', description: '已被新技术/新标准取代' },
-  ambiguous: { code: 'ambiguous', label: '歧义术语', severity: 'minor', icon: '🟡', description: '同一术语有多个含义，未明确上下文' }
+// 旧口径映射（兼容历史数据：error/warning/info、high/medium/low）
+const LEGACY_SEVERITY_MAP = {
+  error: 'critical', high: 'critical',
+  warning: 'major', medium: 'major',
+  low: 'minor',
+  info: 'info'
+}
+export function normalizeSeverity(s) {
+  return LEGACY_SEVERITY_MAP[s] || (SEVERITIES[s] ? s : 'major')
 }
 
-const TYPE_ALIAS = { invalid_fragment: 'imprecision', nonstandard_naming: 'ambiguous', fragment: 'imprecision', knowledge_error: 'factual_error', potential_confusion: 'confusion', conflict: 'logic_error' }
-export function normalizeType(t) { return ERROR_TYPES[t] ? t : (TYPE_ALIAS[t] || 'factual_error') }
+// ==================== 故障类型（7 种） ====================
+
+export const ERROR_TYPES = {
+  factual_error: {
+    code: 'factual_error', label: '事实错误', severity: 'critical', icon: '⛔',
+    description: '与知识库明确知识相悖'
+  },
+  logic_error: {
+    code: 'logic_error', label: '逻辑矛盾', severity: 'critical', icon: '⛔',
+    description: '推理链条断裂或自相矛盾'
+  },
+  relation_error: {
+    code: 'relation_error', label: '关系错误', severity: 'major', icon: '🟠',
+    description: '知识之间的关系类型/方向判断错误'
+  },
+  confusion: {
+    code: 'confusion', label: '概念混淆', severity: 'major', icon: '🟠',
+    description: '多个不同概念被混为一谈'
+  },
+  imprecision: {
+    code: 'imprecision', label: '表述不精确', severity: 'minor', icon: '🟡',
+    description: '描述模糊/碎片化，缺乏关键限定'
+  },
+  outdated: {
+    code: 'outdated', label: '过时知识', severity: 'major', icon: '🟠',
+    description: '已被新技术/新标准取代'
+  },
+  ambiguous: {
+    code: 'ambiguous', label: '歧义术语', severity: 'minor', icon: '🟡',
+    description: '同一术语有多个含义，未明确上下文'
+  }
+}
+
+// 旧错误码别名：fragment 已并入 imprecision，这里给出兼容映射
+const TYPE_ALIAS = {
+  invalid_fragment: 'imprecision',
+  nonstandard_naming: 'ambiguous',
+  fragment: 'imprecision',
+  knowledge_error: 'factual_error',
+  potential_confusion: 'confusion',
+  conflict: 'logic_error'
+}
+export function normalizeType(t) {
+  return ERROR_TYPES[t] ? t : (TYPE_ALIAS[t] || 'factual_error')
+}
+
+// ==================== 知识来源可信度分级（图层面板展示用，语义不变） ====================
 
 export const CREDIBILITY_LEVELS = {
   L0: { level: 0, label: '内置种子知识库', weight: 5, stars: '⭐⭐⭐⭐⭐', tag: '权威' },
@@ -36,18 +92,72 @@ export const CREDIBILITY_LEVELS = {
   L4: { level: 4, label: '无来源断言', weight: 0, stars: '☆', tag: '请补充来源' }
 }
 
+// ==================== 知识库事实校验基准（含严重度分级） ====================
+
 const KB_FACT_CHECKS = [
-  { pattern: /java.*解释型|java.*解释执行.*语言|java.*纯解释/, correction: 'Java 是"编译为字节码 + JVM 解释执行"的混合型语言', evidence: '软件知识库 - 编程语言篇', severity: 'critical' },
-  { pattern: /python.*编译型|python.*编译型语言/, correction: 'Python 是解释型语言（.pyc 只是字节码缓存，本质仍解释执行）', evidence: '软件知识库 - 编程语言篇', severity: 'critical' },
-  { pattern: /(javascript|java).*脚本.*(编译|编译型)/, correction: 'JavaScript 是解释型/即时编译（JIT）语言，非传统编译型', evidence: '软件知识库 - 编程语言篇', severity: 'major' },
-  { pattern: /http(?!s).*(?<!不)(?<!无)(?<!未)加密|http(?!s).*自带加密/, correction: 'HTTP 本身不加密，HTTPS 通过 TLS 层实现加密', evidence: '软件知识库 - 网络全链路篇', severity: 'critical' },
-  { pattern: /js.*单线程.*不能并发|node.*单线程.*不能并发|javascript.*不能并发/, correction: 'JavaScript 是单线程事件循环，但异步 I/O + Worker Threads 可支持并发', evidence: '软件知识库 - 编程语言篇', severity: 'major' },
-  { pattern: /sql.*不支持.*查询|sql.*不能.*复杂/, correction: 'SQL 支持复杂查询（JOIN、子查询、窗口函数、CTE 等）', evidence: '软件知识库 - 数据库篇', severity: 'major' },
-  { pattern: /jvm.*内存.*只有.*堆|jvm.*内存.*只有.*栈/, correction: 'JVM 内存区域包括：堆、栈、方法区、程序计数器、本地方法栈', evidence: '软件知识库 - 编程语言篇', severity: 'critical' },
-  { pattern: /栈.*存储.*堆|堆.*存储.*栈|gc.*回收.*栈|栈.*垃圾回收/, correction: '栈(Stack)与堆(Heap)是独立内存区域；GC 只作用于堆，栈由调用帧自动管理', evidence: '软件知识库 - 内存模型篇', severity: 'critical' },
-  { pattern: /tcp.*无连接|udp.*面向连接/, correction: 'TCP 是面向连接的协议，UDP 是无连接协议', evidence: '软件知识库 - 网络传输篇', severity: 'critical' },
-  { pattern: /索引.*减慢.*查询|索引.*降低.*查询.*速度/, correction: '索引通过 B+树等结构加速查询，但会增加写入开销', evidence: '软件知识库 - 数据库篇', severity: 'critical' }
+  {
+    pattern: /java.*解释型|java.*解释执行.*语言|java.*纯解释/,
+    correction: 'Java 是"编译为字节码 + JVM 解释执行"的混合型语言',
+    evidence: '软件知识库 - 编程语言篇',
+    severity: 'critical'
+  },
+  {
+    pattern: /python.*编译型|python.*编译型语言/,
+    correction: 'Python 是解释型语言（.pyc 只是字节码缓存，本质仍解释执行）',
+    evidence: '软件知识库 - 编程语言篇',
+    severity: 'critical'
+  },
+  {
+    pattern: /(javascript|java).*脚本.*(编译|编译型)/,
+    correction: 'JavaScript 是解释型/即时编译（JIT）语言，非传统编译型',
+    evidence: '软件知识库 - 编程语言篇',
+    severity: 'major'
+  },
+  {
+    pattern: /http(?!s).*(?<!不)(?<!无)(?<!未)加密|http(?!s).*自带加密/,
+    correction: 'HTTP 本身不加密，HTTPS 通过 TLS 层实现加密',
+    evidence: '软件知识库 - 网络全链路篇',
+    severity: 'critical'
+  },
+  {
+    pattern: /js.*单线程.*不能并发|node.*单线程.*不能并发|javascript.*不能并发/,
+    correction: 'JavaScript 是单线程事件循环，但异步 I/O + Worker Threads 可支持并发',
+    evidence: '软件知识库 - 编程语言篇',
+    severity: 'major'
+  },
+  {
+    pattern: /sql.*不支持.*查询|sql.*不能.*复杂/,
+    correction: 'SQL 支持复杂查询（JOIN、子查询、窗口函数、CTE 等）',
+    evidence: '软件知识库 - 数据库篇',
+    severity: 'major'
+  },
+  {
+    pattern: /jvm.*内存.*只有.*堆|jvm.*内存.*只有.*栈/,
+    correction: 'JVM 内存区域包括：堆、栈、方法区、程序计数器、本地方法栈',
+    evidence: '软件知识库 - 编程语言篇',
+    severity: 'critical'
+  },
+  {
+    pattern: /栈.*存储.*堆|堆.*存储.*栈|gc.*回收.*栈|栈.*垃圾回收/,
+    correction: '栈(Stack)与堆(Heap)是独立内存区域；GC 只作用于堆，栈由调用帧自动管理',
+    evidence: '软件知识库 - 内存模型篇',
+    severity: 'critical'
+  },
+  {
+    pattern: /tcp.*无连接|udp.*面向连接/,
+    correction: 'TCP 是面向连接的协议，UDP 是无连接协议',
+    evidence: '软件知识库 - 网络传输篇',
+    severity: 'critical'
+  },
+  {
+    pattern: /索引.*减慢.*查询|索引.*降低.*查询.*速度/,
+    correction: '索引通过 B+树等结构加速查询，但会增加写入开销',
+    evidence: '软件知识库 - 数据库篇',
+    severity: 'critical'
+  }
 ]
+
+// ==================== 过时术语映射表 ====================
 
 const OUTDATED_TERMS = new Map([
   ['j2ee', { replacement: 'Jakarta EE', since: '2018', reason: 'J2EE 已更名为 Jakarta EE' }],
@@ -59,6 +169,8 @@ const OUTDATED_TERMS = new Map([
   ['ie浏览器', { replacement: 'Edge', since: '2022', reason: 'IE 浏览器已于 2022 年退役' }],
   ['svn', { replacement: 'Git', since: '2015', reason: 'SVN 已基本被 Git 取代' }]
 ])
+
+// ==================== 常见概念混淆对 ====================
 
 const CONFUSION_PAIRS = [
   { a: 'javascript', b: 'java', reason: '两者为不同编程语言，仅名称相似，无直接关系' },
@@ -76,6 +188,8 @@ const CONFUSION_PAIRS = [
   { a: '微服务', b: 'soa', reason: '微服务是 SOA 的一种实现风格，但两者有架构差异' }
 ]
 
+// ==================== 表述不精确 / 碎片化断言模式 ====================
+
 const IMPRECISION_PATTERNS = [
   { pattern: /内存分为堆和栈/, msg: '请补充上下文，如"JVM内存分为堆和栈"', suggest: '补充"JVM"上下文' },
   { pattern: /gc会暂停|gc.*暂停/, msg: 'GC 暂停需区分：Minor GC（短暂暂停）vs Full GC（长时间暂停）', suggest: '补充 GC 类型上下文' },
@@ -83,6 +197,7 @@ const IMPRECISION_PATTERNS = [
   { pattern: /所以.*就是.*全部|所以.*都是/, msg: '"全部/都"这类全称断言缺少限定条件', suggest: '补充例外或适用边界' }
 ]
 
+// 歧义术语表：命中但上下文无领域特征词时提示
 const AMBIGUOUS_TERMS = [
   { term: 'spring', ctx: /编程|语言|框架|ioc|aop|依赖注入|bean|java/ },
   { term: 'python', ctx: /编程|语言|脚本|解释器|pip|代码/ },
@@ -95,10 +210,19 @@ const AMBIGUOUS_TERMS = [
   { term: 'pool', ctx: /连接池|线程池|资源|复用|代码/ }
 ]
 
-function escapeRegExp(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }
+// ==================== 工具函数 ====================
 
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * 词边界查找首个命中位置（英文词加边界；中文直接定位）。
+ * @returns {{start:number,end:number}|null} 命中即返回范围，否则 null
+ */
 function locateTerm(text, term) {
-  const lowerText = text.toLowerCase(); const t = term.toLowerCase()
+  const lowerText = text.toLowerCase()
+  const t = term.toLowerCase()
   if (!t) return null
   if (/^[A-Za-z][A-Za-z0-9+._-]*$/.test(t)) {
     const re = new RegExp('(^|[^A-Za-z0-9_])' + escapeRegExp(t) + '($|[^A-Za-z0-9_])')
@@ -111,85 +235,236 @@ function locateTerm(text, term) {
   return { start: idx, end: idx + t.length }
 }
 
+/** 查找是否同时出现两个术语；返回先出现者范围 */
 function locatePair(text, a, b) {
-  const ra = locateTerm(text, a); const rb = locateTerm(text, b)
+  const ra = locateTerm(text, a)
+  const rb = locateTerm(text, b)
   if (!ra || !rb) return null
   return ra.start <= rb.start ? ra : rb
 }
 
+/** 判断句子是否含概念关联/包含/等价类表述（混淆提示的语境闸） */
 const _RELATION_WORDS = /相关|包含|属于|依赖|一种|类似|一样|差不多|就是|等价|相当于|基于/
 const _FUZZY_WORDS = /可能|大概|也许|或许|似乎|我觉得|我认为/
 
+// ==================== 第一层：实时句子校验 ====================
+
 export class RealtimeValidator {
-  constructor(knowledgeBase = null) { this.kb = knowledgeBase; this._ontologyCache = null }
-  _getOntology() { if (!this._ontologyCache) this._ontologyCache = getOntologySnapshot(); return this._ontologyCache }
-  _makeIssue(type, text, details) {
-    const norm = normalizeType(type); const meta = ERROR_TYPES[norm]
-    const range = details.range || { start: 0, end: (text || '').length }
-    return { type: norm, severity: normalizeSeverity(details.severity || meta.severity), text, entity: details.entity ?? null, description: details.description || meta.description, correction: details.correction || '', evidence: details.evidence || '', source: details.source || 'realtime', matchStart: range.start, matchEnd: Math.max(range.start, range.end) }
+  constructor(knowledgeBase = null) {
+    this.kb = knowledgeBase
+    this._ontologyCache = null
   }
+
+  _getOntology() {
+    if (!this._ontologyCache) {
+      this._ontologyCache = getOntologySnapshot()
+    }
+    return this._ontologyCache
+  }
+
+  _makeIssue(type, text, details) {
+    const norm = normalizeType(type)
+    const meta = ERROR_TYPES[norm]
+    const range = details.range || { start: 0, end: (text || '').length }
+    return {
+      type: norm,
+      severity: normalizeSeverity(details.severity || meta.severity),
+      text,
+      entity: details.entity ?? null,
+      description: details.description || meta.description,
+      correction: details.correction || '',
+      evidence: details.evidence || '',
+      source: details.source || 'realtime',
+      matchStart: range.start,
+      matchEnd: Math.max(range.start, range.end)
+    }
+  }
+
+  /**
+   * 校验单个句子（7 类故障规则）
+   * @param {string} sentence 句子文本
+   * @param {Object} context 上下文（unused 保留签名兼容）
+   * @returns {Array} issues（matchStart/matchEnd 为句内偏移）
+   */
   validateSentence(sentence, context = {}) {
-    const issues = []; const text = (sentence || '').trim()
+    const issues = []
+    const text = (sentence || '').trim()
     if (!text || text.length < 3) return issues
     const lowerText = text.toLowerCase()
+
+    // 1. 事实错误（与知识库相悖的断言）
     for (const check of KB_FACT_CHECKS) {
-      const re = new RegExp(check.pattern.source, 'i'); const m = re.exec(lowerText)
+      const re = new RegExp(check.pattern.source, 'i')
+      const m = re.exec(lowerText)
       if (m) {
+        // 否定守卫：命中点前 6 字符内出现否定词视为"并非如此"的正确表述
         const hitPos = m.index + Math.max(m[0].length, 1) - 1
         const win = lowerText.slice(Math.max(0, hitPos - 6), hitPos)
-        if (!/[不无未非]/.test(win)) issues.push(this._makeIssue('factual_error', text, { severity: check.severity, description: '表述与知识库相悖', correction: check.correction, evidence: check.evidence, source: 'kb_fact_check', range: { start: m.index, end: m.index + Math.max(m[0].length, 1) } }))
+        if (!/[不无未非]/.test(win)) {
+          issues.push(this._makeIssue('factual_error', text, {
+            severity: check.severity,
+            description: '表述与知识库相悖',
+            correction: check.correction,
+            evidence: check.evidence,
+            source: 'kb_fact_check',
+            range: { start: m.index, end: m.index + Math.max(m[0].length, 1) }
+          }))
+        }
       }
     }
+
+    // 2. 过时知识（已更名/退役的技术术语）
     for (const [term, info] of OUTDATED_TERMS) {
       const r = locateTerm(lowerText, term)
-      if (r) issues.push(this._makeIssue('outdated', text, { entity: term, description: `"${term}" 已被 "${info.replacement}" 取代（${info.since}）`, correction: `建议使用 "${info.replacement}" 替代 "${term}"`, evidence: info.reason, source: 'outdated_terms', range: r }))
+      if (r) {
+        issues.push(this._makeIssue('outdated', text, {
+          entity: term,
+          description: `"${term}" 已被 "${info.replacement}" 取代（${info.since}）`,
+          correction: `建议使用 "${info.replacement}" 替代 "${term}"`,
+          evidence: info.reason,
+          source: 'outdated_terms',
+          range: r
+        }))
+      }
     }
+
+    // 3. 概念混淆：一对易混概念同现且句中有"关联/包含/等价"类表述
     for (const pair of CONFUSION_PAIRS) {
       const r = locatePair(text, pair.a, pair.b)
-      if (r && _RELATION_WORDS.test(text)) issues.push(this._makeIssue('confusion', text, { entity: `${pair.a}/${pair.b}`, description: `"${pair.a}" 与 "${pair.b}" ${pair.reason}`, correction: `请区分 "${pair.a}" 与 "${pair.b}"，避免混为一谈`, evidence: '软件知识库 - 概念辨析', source: 'confusion_pairs', range: r }))
+      if (r && _RELATION_WORDS.test(text)) {
+        issues.push(this._makeIssue('confusion', text, {
+          entity: `${pair.a}/${pair.b}`,
+          description: `"${pair.a}" 与 "${pair.b}" ${pair.reason}`,
+          correction: `请区分 "${pair.a}" 与 "${pair.b}"，避免混为一谈`,
+          evidence: '软件知识库 - 概念辨析',
+          source: 'confusion_pairs',
+          range: r
+        }))
+      }
     }
+
+    // 4. 歧义术语：命中多义词但上下文无领域特征词
     for (const amb of AMBIGUOUS_TERMS) {
       const r = locateTerm(text, amb.term)
-      if (r && !amb.ctx.test(text)) issues.push(this._makeIssue('ambiguous', text, { entity: amb.term, description: `"${amb.term}" 存在歧义（技术术语 vs 日常用语），上下文未明确指向`, correction: `建议补充领域限定词，如 "${amb.term} 语言/框架/命令"`, evidence: '软件知识库 - 术语表', source: 'ambiguous_terms', range: r }))
+      if (r && !amb.ctx.test(text)) {
+        issues.push(this._makeIssue('ambiguous', text, {
+          entity: amb.term,
+          description: `"${amb.term}" 存在歧义（技术术语 vs 日常用语），上下文未明确指向`,
+          correction: `建议补充领域限定词，如 "${amb.term} 语言/框架/命令"`,
+          evidence: '软件知识库 - 术语表',
+          source: 'ambiguous_terms',
+          range: r
+        }))
+      }
     }
+
+    // 5. 表述不精确 / 碎片化断言
     for (const imp of IMPRECISION_PATTERNS) {
-      const re = new RegExp(imp.pattern.source, 'i'); const m = re.exec(lowerText)
-      if (m) issues.push(this._makeIssue('imprecision', text, { description: imp.msg, correction: imp.suggest, evidence: '表述规范 - 知识完整性', source: 'imprecision', range: { start: m.index, end: m.index + Math.max(m[0].length, 1) } }))
+      const re = new RegExp(imp.pattern.source, 'i')
+      const m = re.exec(lowerText)
+      if (m) {
+        issues.push(this._makeIssue('imprecision', text, {
+          description: imp.msg,
+          correction: imp.suggest,
+          evidence: '表述规范 - 知识完整性',
+          source: 'imprecision',
+          range: { start: m.index, end: m.index + Math.max(m[0].length, 1) }
+        }))
+      }
     }
-    const cnChars = (text.match(/[\u4e00-\u9fff]/g) || []).length; const enWords = (text.match(/[a-zA-Z]{2,}/g) || []).length
+    // 碎片化断言：信息量过低且非纯英文代码片段
+    const cnChars = (text.match(/[\u4e00-\u9fff]/g) || []).length
+    const enWords = (text.match(/[a-zA-Z]{2,}/g) || []).length
     const totalUnits = cnChars + enWords
-    if (totalUnits < 8 && !/^[a-zA-Z0-9_.\-\s]+$/.test(text)) issues.push(this._makeIssue('imprecision', text, { entity: null, description: `碎片化断言（有效信息约 ${totalUnits} 个字符/词），缺少上下文或来源`, correction: '补充更多上下文或出处后再保存', evidence: '内容完整性检测', source: 'fragment_check' }))
+    if (totalUnits < 8 && !/^[a-zA-Z0-9_.\-\s]+$/.test(text)) {
+      issues.push(this._makeIssue('imprecision', text, {
+        entity: null,
+        description: `碎片化断言（有效信息约 ${totalUnits} 个字符/词），缺少上下文或来源`,
+        correction: '补充更多上下文或出处后再保存',
+        evidence: '内容完整性检测',
+        source: 'fragment_check'
+      }))
+    }
+
+    // 6. 逻辑矛盾：绝对性与不确定性同现 / 语义自相反
     const hasCertainty = /一定|绝对|肯定|必然|永远/.test(text)
     const hasHedge = /不一定|可能|也许|或许|未必/.test(text)
-    if (hasCertainty && hasHedge) issues.push(this._makeIssue('logic_error', text, { entity: null, description: '句内同时出现绝对性断言与不确定性限定，存在逻辑矛盾', correction: '删除相互矛盾的限定词，只保留确定口径', evidence: '逻辑一致性检查', source: 'internal_consistency' }))
+    if (hasCertainty && hasHedge) {
+      issues.push(this._makeIssue('logic_error', text, {
+        entity: null,
+        description: '句内同时出现绝对性断言与不确定性限定，存在逻辑矛盾',
+        correction: '删除相互矛盾的限定词，只保留确定口径',
+        evidence: '逻辑一致性检查',
+        source: 'internal_consistency'
+      }))
+    }
+
+    // 7. 关系错误：跨实体断言"完全无关"或方向倒置（弱规则，配合后端深度校验）
     const entitiesInText = findEntitiesInText(text)
-    if (entitiesInText.length >= 2 && /与.*无关|和.*没有.*关系|不属于|不是.*的(一部分|分支)/.test(text)) issues.push(this._makeIssue('relation_error', text, { entity: entitiesInText.slice(0, 2).join('/'), description: '断言与知识库实体关系存疑：本体中相关实体被表述为无关', correction: '请核实实体间真实关系后再断言', evidence: '知识库桥接检测', source: 'relation_hint' }))
+    if (entitiesInText.length >= 2 && /与.*无关|和.*没有.*关系|不属于|不是.*的(一部分|分支)/.test(text)) {
+      issues.push(this._makeIssue('relation_error', text, {
+        entity: entitiesInText.slice(0, 2).join('/'),
+        description: '断言与知识库实体关系存疑：本体中相关实体被表述为无关',
+        correction: '请核实实体间真实关系后再断言',
+        evidence: '知识库桥接检测',
+        source: 'relation_hint'
+      }))
+    }
+
     return issues
   }
+
+  /** 批量校验（兼容旧调用） */
   validateParagraph(sentences, context = {}) {
     const allIssues = []
     for (let i = 0; i < sentences.length; i++) {
       const issues = this.validateSentence(sentences[i], { ...context, sentenceIndex: i })
-      for (const issue of issues) { issue.sentenceIndex = i; issue.sentence = sentences[i] }
+      for (const issue of issues) {
+        issue.sentenceIndex = i
+        issue.sentence = sentences[i]
+      }
       allIssues.push(...issues)
     }
     return allIssues
   }
 }
 
+// ==================== 全文校验（带字符范围，供编辑器波浪线） ====================
+
+/**
+ * 按句读符号拆分文本并保留每个句子的原始偏移
+ * @returns {Array<{sentence:string,start:number,end:number,line:number}>}
+ */
 export function splitSentenceRanges(content) {
-  const out = []; const text = content || ''
+  const out = []
+  const text = content || ''
   if (!text.trim()) return out
+  // 匹配到句读/换行截止的片段；用 matchAll 拿 index
   const re = /[^。！？!?\n]+[。！？!?]?|\n+/g
-  let line = 0; let m
+  let line = 0
+  let m
   while ((m = re.exec(text)) !== null) {
-    const raw = m[0]; const chunkStart = m.index; const chunkEnd = m.index + raw.length
-    if (!raw.trim()) { for (let i = chunkStart; i < chunkEnd; i++) if (text[i] === '\n') line++; continue }
-    let s0 = chunkStart; let s1 = chunkEnd
+    const raw = m[0]
+    const chunkStart = m.index
+    const chunkEnd = m.index + raw.length
+    // 跳过换行片段
+    if (!raw.trim()) {
+      for (let i = chunkStart; i < chunkEnd; i++) if (text[i] === '\n') line++
+      continue
+    }
+    // 裁剪首尾空白得到真实句界
+    let s0 = chunkStart
+    let s1 = chunkEnd
     while (s0 < s1 && /\s/.test(text[s0])) s0++
     while (s1 > s0 && /\s/.test(text[s1 - 1])) s1--
+    // 计算该句起始行号
     for (let i = 0; i < s0; i++) if (text[i] === '\n') line++
-    out.push({ sentence: text.slice(s0, s1), start: s0, end: s1, line })
+    out.push({
+      sentence: text.slice(s0, s1),
+      start: s0,
+      end: s1,
+      line
+    })
     for (let i = s0; i < s1; i++) if (text[i] === '\n') line++
   }
   return out
@@ -197,64 +472,193 @@ export function splitSentenceRanges(content) {
 
 const _validatorSingleton = new RealtimeValidator()
 
+/**
+ * 全文实时校验，返回带全文偏移的问题列表
+ * @param {string} content 笔记全文
+ * @returns {Array} [{ type,severity,text,description,correction,evidence,start,end,line,entity }]
+ */
 export function validateText(content) {
-  const issues = []; if (!content || !content.trim()) return issues
+  const issues = []
+  if (!content || !content.trim()) return issues
   const sentences = splitSentenceRanges(content)
   for (const { sentence, start, line } of sentences) {
     if (sentence.length < 3) continue
     const found = _validatorSingleton.validateSentence(sentence)
-    for (const issue of found) issues.push({ type: issue.type, severity: issue.severity, text: sentence, entity: issue.entity, description: issue.description, correction: issue.correction, evidence: issue.evidence, source: issue.source, start: start + (issue.matchStart || 0), end: start + (issue.matchEnd || sentence.length), line })
+    for (const issue of found) {
+      issues.push({
+        type: issue.type,
+        severity: issue.severity,
+        text: sentence,
+        entity: issue.entity,
+        description: issue.description,
+        correction: issue.correction,
+        evidence: issue.evidence,
+        source: issue.source,
+        start: start + (issue.matchStart || 0),
+        end: start + (issue.matchEnd || sentence.length),
+        line
+      })
+    }
   }
   return issues
 }
 
+// ==================== 第二层：保存前全量校验 ====================
+
+/**
+ * 保存前全量校验
+ * @param {Array} assertions 断言数组（string 或 {text|title}）
+ * @param {Array} existingNodes 已有知识节点（跨断言矛盾检测）
+ * @param {Object} options 预留
+ * @returns {Object} { pass, errors, warnings, canForceSave, summary }
+ *   errors   = critical + major（红/橙，需人工处理）
+ *   warnings = minor + info（黄/蓝）
+ *   canForceSave = 无 critical 级错误
+ */
 export async function preSaveValidation(assertions, existingNodes = [], options = {}) {
-  const validator = new RealtimeValidator(); const errors = []; const warnings = []
+  const validator = new RealtimeValidator()
+  const errors = []
+  const warnings = []
+
   for (const assertion of assertions) {
     const text = typeof assertion === 'string' ? assertion : (assertion.text || assertion.title || '')
+
     const issues = validator.validateSentence(text)
-    for (const issue of issues) { if (issue.severity === 'critical' || issue.severity === 'major') errors.push({ ...issue, assertion: text }); else warnings.push({ ...issue, assertion: text }) }
+    for (const issue of issues) {
+      if (issue.severity === 'critical' || issue.severity === 'major') {
+        errors.push({ ...issue, assertion: text })
+      } else {
+        warnings.push({ ...issue, assertion: text })
+      }
+    }
+
+    // 与已有知识一致性检查（冲突 → logic_error / major）
     if (existingNodes && existingNodes.length > 0) {
       const lowerText = text.toLowerCase()
       for (const node of existingNodes) {
         if (!node || node.validate?.status === 'discarded') continue
         const nodeText = (node.title + ' ' + (node.description || '')).toLowerCase()
         const conflicts = checkConflict(lowerText, nodeText, text, node.title)
-        for (const c of conflicts) errors.push({ type: 'logic_error', severity: 'major', text, assertion: text, description: `与已有知识点"${node.title}"存在潜在矛盾`, correction: c.suggestion, evidence: c.reason, source: 'existing_knowledge', conflictWith: node.id })
+        for (const c of conflicts) {
+          errors.push({
+            type: 'logic_error',
+            severity: 'major',
+            text,
+            assertion: text,
+            description: `与已有知识点"${node.title}"存在潜在矛盾`,
+            correction: c.suggestion,
+            evidence: c.reason,
+            source: 'existing_knowledge',
+            conflictWith: node.id
+          })
+        }
       }
     }
   }
+
+  // 笔记内部一致性
   if (assertions.length > 1) {
     const internalConflicts = _checkInternalConsistency(assertions)
-    for (const c of internalConflicts) errors.push({ type: 'logic_error', severity: 'critical', text: c.text, description: `笔记内部存在矛盾：与"${c.conflictingText}"不一致`, correction: c.suggestion, evidence: '逻辑一致性检查', source: 'internal_consistency' })
+    for (const c of internalConflicts) {
+      errors.push({
+        type: 'logic_error',
+        severity: 'critical',
+        text: c.text,
+        description: `笔记内部存在矛盾：与"${c.conflictingText}"不一致`,
+        correction: c.suggestion,
+        evidence: '逻辑一致性检查',
+        source: 'internal_consistency'
+      })
+    }
   }
-  const errorCount = errors.length; const warningCount = warnings.length; const total = Math.max(assertions.length, 1)
-  const pass = errorCount === 0; const canForceSave = !errors.some(e => e.severity === 'critical')
-  const deduction = errors.reduce((s, e) => s + (e.severity === 'critical' ? 1 : 0.6), 0) + warnings.reduce((s, e) => s + (e.severity === 'minor' ? 0.25 : 0.05), 0)
+
+  const errorCount = errors.length
+  const warningCount = warnings.length
+  const total = Math.max(assertions.length, 1)
+  const pass = errorCount === 0
+  const canForceSave = !errors.some(e => e.severity === 'critical')
+
+  // 加权准确率：critical 1.0 / major 0.6 / minor 0.25 / info 0.05 扣分
+  const deduction = errors.reduce((s, e) => s + (e.severity === 'critical' ? 1 : 0.6), 0)
+    + warnings.reduce((s, e) => s + (e.severity === 'minor' ? 0.25 : 0.05), 0)
   const accuracy = Math.max(0, Math.min(100, Math.round((1 - deduction / total) * 100)))
-  return { pass, errors, warnings, canForceSave, summary: { total: assertions.length, passed: Math.max(0, assertions.length - errorCount - warningCount), errors: errorCount, warnings: warningCount, accuracy, checkedAt: Date.now() } }
+
+  return {
+    pass,
+    errors,
+    warnings,
+    canForceSave,
+    summary: {
+      total: assertions.length,
+      passed: Math.max(0, assertions.length - errorCount - warningCount),
+      errors: errorCount,
+      warnings: warningCount,
+      accuracy,
+      checkedAt: Date.now()
+    }
+  }
 }
 
+// 简单矛盾检测（保持兼容）
 export function checkConflict(text1, text2, original1, original2) {
   const conflicts = []
   const opposites = [
-    { a: '是', b: '不是' }, { a: '包含', b: '不包含' }, { a: '可以', b: '不能' }, { a: '支持', b: '不支持' }, { a: '编译', b: '解释' }, { a: '编译型', b: '解释型' }, { a: '单线程', b: '多线程' }, { a: '单线程', b: '并发' }, { a: '堆', b: '栈' }, { a: '同步', b: '异步' }, { a: '阻塞', b: '非阻塞' }
+    { a: '是', b: '不是' },
+    { a: '包含', b: '不包含' },
+    { a: '可以', b: '不能' },
+    { a: '支持', b: '不支持' },
+    { a: '编译', b: '解释' },
+    { a: '编译型', b: '解释型' },
+    { a: '单线程', b: '多线程' },
+    { a: '单线程', b: '并发' },
+    { a: '堆', b: '栈' },
+    { a: '同步', b: '异步' },
+    { a: '阻塞', b: '非阻塞' }
   ]
   for (const opp of opposites) {
-    if ((text1.includes(opp.a) && text2.includes(opp.b)) || (text1.includes(opp.b) && text2.includes(opp.a))) conflicts.push({ text: original1, conflictingText: original2, suggestion: `"${original1}" 与 "${original2}" 表述矛盾，请核实`, reason: `一个说"${opp.a}"，另一个说"${opp.b}"` })
+    if ((text1.includes(opp.a) && text2.includes(opp.b))
+        || (text1.includes(opp.b) && text2.includes(opp.a))) {
+      conflicts.push({
+        text: original1,
+        conflictingText: original2,
+        suggestion: `"${original1}" 与 "${original2}" 表述矛盾，请核实`,
+        reason: `一个说"${opp.a}"，另一个说"${opp.b}"`
+      })
+    }
   }
   return conflicts
 }
 
 function _checkInternalConsistency(assertions) {
-  const conflicts = []; const texts = assertions.map(a => typeof a === 'string' ? a : (a.text || a.title || ''))
-  for (let i = 0; i < texts.length; i++) { for (let j = i + 1; j < texts.length; j++) { const c = checkConflict(texts[i].toLowerCase(), texts[j].toLowerCase(), texts[i], texts[j]); conflicts.push(...c) } }
+  const conflicts = []
+  const texts = assertions.map(a => typeof a === 'string' ? a : (a.text || a.title || ''))
+  for (let i = 0; i < texts.length; i++) {
+    for (let j = i + 1; j < texts.length; j++) {
+      const c = checkConflict(texts[i].toLowerCase(), texts[j].toLowerCase(), texts[i], texts[j])
+      conflicts.push(...c)
+    }
+  }
   return conflicts
 }
 
+// ==================== 第三层：深度校验（跨笔记） ====================
+
 export async function deepValidation(allNodes, options = {}) {
-  const report = { generatedAt: Date.now(), totalNodesChecked: allNodes.length, issuesFound: { cross_note_conflicts: 0, outdated_knowledge: 0, invalid_relations: 0, redundant_content: 0 }, recommendations: [] }
+  const report = {
+    generatedAt: Date.now(),
+    totalNodesChecked: allNodes.length,
+    issuesFound: {
+      cross_note_conflicts: 0,
+      outdated_knowledge: 0,
+      invalid_relations: 0,
+      redundant_content: 0
+    },
+    recommendations: []
+  }
+
   if (allNodes.length < 2) return report
+
+  // 1. 跨笔记一致性
   const nodeMap = new Map()
   for (const node of allNodes) {
     if (node.validate?.status === 'discarded') continue
@@ -264,51 +668,110 @@ export async function deepValidation(allNodes, options = {}) {
   }
   for (const [, nodes] of nodeMap) {
     if (nodes.length < 2) continue
-    for (let i = 0; i < nodes.length; i++) { for (let j = i + 1; j < nodes.length; j++) {
-      const textA = (nodes[i].description || nodes[i].title || '').toLowerCase(); const textB = (nodes[j].description || nodes[j].title || '').toLowerCase()
-      const conflicts = checkConflict(textA, textB, nodes[i].title, nodes[j].title)
-      for (const c of conflicts) { report.issuesFound.cross_note_conflicts++; report.recommendations.push({ type: 'cross_note_conflict', description: c.reason, suggestion: c.suggestion, nodeA: nodes[i].id, nodeB: nodes[j].id, severity: 'critical' }) }
-    } }
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const textA = (nodes[i].description || nodes[i].title || '').toLowerCase()
+        const textB = (nodes[j].description || nodes[j].title || '').toLowerCase()
+        const conflicts = checkConflict(textA, textB, nodes[i].title, nodes[j].title)
+        for (const c of conflicts) {
+          report.issuesFound.cross_note_conflicts++
+          report.recommendations.push({
+            type: 'cross_note_conflict', description: c.reason, suggestion: c.suggestion,
+            nodeA: nodes[i].id, nodeB: nodes[j].id, severity: 'critical'
+          })
+        }
+      }
+    }
   }
+
+  // 2. 过时知识
   for (const node of allNodes) {
     const text = (node.title + ' ' + (node.description || '')).toLowerCase()
-    for (const [term, info] of OUTDATED_TERMS) { if (locateTerm(text, term)) { report.issuesFound.outdated_knowledge++; report.recommendations.push({ type: 'outdated_knowledge', nodeId: node.id, description: `"${node.title}" 中使用过时术语"${term}"`, suggestion: `建议更新为 "${info.replacement}"（${info.since}）`, evidence: info.reason, severity: 'major' }) } }
+    for (const [term, info] of OUTDATED_TERMS) {
+      if (locateTerm(text, term)) {
+        report.issuesFound.outdated_knowledge++
+        report.recommendations.push({
+          type: 'outdated_knowledge', nodeId: node.id,
+          description: `"${node.title}" 中使用过时术语"${term}"`,
+          suggestion: `建议更新为 "${info.replacement}"（${info.since}）`,
+          evidence: info.reason, severity: 'major'
+        })
+      }
+    }
   }
-  for (let i = 0; i < allNodes.length; i++) { for (let j = i + 1; j < allNodes.length; j++) {
-    if (allNodes[i].validate?.status === 'discarded' || allNodes[j].validate?.status === 'discarded') continue
-    const textA = (allNodes[i].title + ' ' + (allNodes[i].description || '')).toLowerCase(); const textB = (allNodes[j].title + ' ' + (allNodes[j].description || '')).toLowerCase()
-    const overlap = textOverlap(textA, textB)
-    if (overlap > 0.85) { report.issuesFound.redundant_content++; report.recommendations.push({ type: 'redundant_content', nodeA: allNodes[i].id, nodeB: allNodes[j].id, description: `"${allNodes[i].title}" 与 "${allNodes[j].title}" 高度相似（${Math.round(overlap * 100)}%）`, suggestion: '建议合并或区分两者内容', severity: 'minor' }) }
-  } }
+
+  // 3. 冗余内容（高度相似）
+  for (let i = 0; i < allNodes.length; i++) {
+    for (let j = i + 1; j < allNodes.length; j++) {
+      if (allNodes[i].validate?.status === 'discarded' || allNodes[j].validate?.status === 'discarded') continue
+      const textA = (allNodes[i].title + ' ' + (allNodes[i].description || '')).toLowerCase()
+      const textB = (allNodes[j].title + ' ' + (allNodes[j].description || '')).toLowerCase()
+      const overlap = textOverlap(textA, textB)
+      if (overlap > 0.85) {
+        report.issuesFound.redundant_content++
+        report.recommendations.push({
+          type: 'redundant_content', nodeA: allNodes[i].id, nodeB: allNodes[j].id,
+          description: `"${allNodes[i].title}" 与 "${allNodes[j].title}" 高度相似（${Math.round(overlap * 100)}%）`,
+          suggestion: '建议合并或区分两者内容', severity: 'minor'
+        })
+      }
+    }
+  }
+
   return report
 }
 
 export function textOverlap(a, b) {
   if (!a || !b) return 0
-  const wordsA = new Set(a.split(/\s+/).filter(w => w.length > 1)); const wordsB = new Set(b.split(/\s+/).filter(w => w.length > 1))
+  const wordsA = new Set(a.split(/\s+/).filter(w => w.length > 1))
+  const wordsB = new Set(b.split(/\s+/).filter(w => w.length > 1))
   if (wordsA.size === 0 || wordsB.size === 0) return 0
   let intersection = 0
   for (const w of wordsA) if (wordsB.has(w)) intersection++
   return intersection / Math.min(wordsA.size, wordsB.size)
 }
 
+// ==================== 节点状态 / 可信度（兼容图面板） ====================
+
+/**
+ * 计算节点校验状态（validationReport 驱动）
+ * @returns {Object} { status, color, label, accuracyScore }
+ */
 export function getNodeValidationStatus(node) {
-  if (!node || node.status === 'discarded') return { status: 'discarded', color: '#888', label: '已丢弃', accuracyScore: 0 }
+  if (!node || node.status === 'discarded') {
+    return { status: 'discarded', color: '#888', label: '已丢弃', accuracyScore: 0 }
+  }
   const report = node.validationReport
-  if (!report) return { status: 'pending', color: '#8a93b0', label: '待校验', accuracyScore: 0 }
+  if (!report) {
+    return { status: 'pending', color: '#8a93b0', label: '待校验', accuracyScore: 0 }
+  }
   const total = report.totalAssertions || report.total || 1
-  const passed = report.passedAssertions != null ? report.passedAssertions : (report.summary ? report.summary.total - report.summary.errors : null)
+  const passed = report.passedAssertions != null
+    ? report.passedAssertions
+    : (report.summary ? report.summary.total - report.summary.errors : null)
   const errs = report.errors || []
   const accuracy = Math.round((total > 0 ? (passed != null ? passed : total - errs.length) / total : 1) * 100)
   const worst = errs.reduce((w, e) => Math.max(w, _sevWeight(normalizeSeverity(e.severity))), 0)
-  if (worst >= 4) return { status: 'error', color: '#e84c4c', label: '存在严重错误', accuracyScore: accuracy }
-  if (worst === 3) return { status: 'warning', color: '#ff8c1a', label: '存在主要问题', accuracyScore: accuracy }
-  if (worst >= 2) return { status: 'warning', color: '#e8a020', label: '需优化', accuracyScore: accuracy }
-  if (accuracy >= 100) return { status: 'passed', color: '#4caf50', label: '已验证', accuracyScore: 100 }
-  if (accuracy >= 60) return { status: 'warning', color: '#e8a020', label: '待审查', accuracyScore: accuracy }
+
+  if (worst >= 4) {
+    return { status: 'error', color: '#e84c4c', label: '存在严重错误', accuracyScore: accuracy }
+  }
+  if (worst === 3) {
+    return { status: 'warning', color: '#ff8c1a', label: '存在主要问题', accuracyScore: accuracy }
+  }
+  if (worst >= 2) {
+    return { status: 'warning', color: '#e8a020', label: '需优化', accuracyScore: accuracy }
+  }
+  if (accuracy >= 100) {
+    return { status: 'passed', color: '#4caf50', label: '已验证', accuracyScore: 100 }
+  }
+  if (accuracy >= 60) {
+    return { status: 'warning', color: '#e8a020', label: '待审查', accuracyScore: accuracy }
+  }
   return { status: 'warning', color: '#e8a020', label: '需修正', accuracyScore: accuracy }
 }
 
+/** 获取知识可信度（L0-L4，语义不变） */
 export function getCredibility(node) {
   if (!node) return CREDIBILITY_LEVELS.L4
   if (node._corpusNode) return CREDIBILITY_LEVELS.L0
