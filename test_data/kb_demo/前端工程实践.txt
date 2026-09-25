@@ -1,7 +1,21 @@
 # 前端工程实践笔记
 
+## JavaScript
 JavaScript 是一门动态弱类型、面向原型的脚本语言，广泛用于 Web 前端开发。
-TypeScript 是 JavaScript 的超集，添加了静态类型系统，在大型前端项目中可以提前发现类型错误。
-React 与 Vue 都是基于 JavaScript 构建的前端框架，二者都采用组件化思想组织界面。
+JavaScript 是浏览器端唯一原生语言，负责 DOM 操作与事件处理。
+
+## TypeScript
+TypeScript 是 JavaScript 的超集，添加了静态类型系统。
+TypeScript 在大型前端项目中可以提前发现类型错误，提升重构信心。
+
+## React
+React 是基于 JavaScript 构建的前端框架，采用组件化与声明式渲染思想。
+React 用虚拟 DOM 与 Hooks 管理状态，适合复杂交互界面。
+
+## Vue
+Vue 是基于 JavaScript 构建的前端框架，以模板语法与响应式数据著称。
+Vue 的学习曲线较平缓，适合中小型项目快速交付。
+
+## Webpack
 Webpack 负责模块打包，把散落的 JavaScript 模块与样式资源打包成浏览器可加载的产物。
-前端开发中，组件化与状态管理是核心话题，组件的可复用程度直接决定项目的可维护性。
+Webpack 通过 loader 与 plugin 扩展构建流程，是前端工程化的基础设施。

@@ -18,7 +18,13 @@ from typing import Dict, List, Optional
 
 from loguru import logger
 
+from app.config import settings
+
 KB_SOURCE_TAG = "知识库"
+
+# 大图谱保护：文件两两比较与节点级锚定连线都要限量，否则文件/节点一多就会卡死
+MAX_FILES_FOR_LINKING = 150
+MAX_FILE_LINK_SECONDS = 15.0
 
 # 知识库关系类型 → 图谱关系类型（复用前端 8+1 类关系配色）
 _RELATION_MAP = {
@@ -160,7 +166,11 @@ def build_profiles(db, user_id: int = 1, index=None) -> Dict:
 
 
 def link_files(db, user_id: int = 1, threshold: float = 0.15, index=None) -> Dict:
-    """按知识画像计算文件-文件知识关联（README：不是语义相似度）"""
+    """按知识画像计算文件-文件知识关联（不是语义相似度）
+
+    性能保护：文件两两比较是 O(n²)，文件很多时限制参与比较的文件数并设时间预算。
+    """
+    import time
     from app.models.models import File, FileKnowledgeProfile, FileKnowledgeLink
     from app.services.kb_index import load_index
 
@@ -173,11 +183,25 @@ def link_files(db, user_id: int = 1, threshold: float = 0.15, index=None) -> Dic
     db.commit()
 
     ids = sorted(f for f in files if profiles.get(f))
-    created, scored = 0, 0
+    total_ids = len(ids)
+    skipped = 0
+    if total_ids > MAX_FILES_FOR_LINKING:
+        # 只比较知识点最多的那批文件（画像为空/极小的文件本来就连不出东西）
+        ids.sort(key=lambda fid: -len(profiles[fid]["concepts"]))
+        ids = ids[:MAX_FILES_FOR_LINKING]
+        skipped = total_ids - len(ids)
+        logger.warning(f"文件数 {total_ids} 超过比较上限 {MAX_FILES_FOR_LINKING}，"
+                       f"仅比较知识点最多的 {len(ids)} 个文件")
+
+    created, scored, truncated = 0, 0, False
+    deadline = time.monotonic() + MAX_FILE_LINK_SECONDS
     for i, fid_a in enumerate(ids):
         for fid_b in ids[i + 1:]:
-            sim = index.similarity(profiles[fid_a], profiles[fid_b])
             scored += 1
+            if scored % 200 == 0 and time.monotonic() > deadline:
+                truncated = True
+                break
+            sim = index.similarity(profiles[fid_a], profiles[fid_b])
             if sim["kb_similarity"] < threshold:
                 continue
             db.add(FileKnowledgeLink(
@@ -188,9 +212,13 @@ def link_files(db, user_id: int = 1, threshold: float = 0.15, index=None) -> Dic
                 method="kb_space",
             ))
             created += 1
+        if truncated:
+            break
     db.commit()
-    logger.info(f"文件知识关联：比较 {scored} 对，落库 {created} 条（阈值 {threshold}）")
-    return {"pairs_scored": scored, "links": created, "threshold": threshold}
+    logger.info(f"文件知识关联：比较 {scored} 对，落库 {created} 条（阈值 {threshold}）"
+                f"{'，触发时间预算提前结束' if truncated else ''}")
+    return {"pairs_scored": scored, "links": created, "threshold": threshold,
+            "skipped_files": skipped, "truncated": truncated}
 
 
 def link_files_for(db, file_id: int, user_id: int = 1, threshold: float = 0.15, index=None) -> Dict:
@@ -248,6 +276,14 @@ def link_nodes_by_kb(
     nodes = db.query(Node).filter_by(user_id=user_id, status="active").all()
     if not nodes:
         return {"same_concept": 0, "bridged": 0, "total": 0}
+
+    # 节点规模保护：几万节点两两成对会直接把内存与数据库拖死
+    capped = False
+    if len(nodes) > settings.MAX_NODES_FOR_KB_LINK:
+        nodes = sorted(nodes, key=lambda n: -len(n.entities or []))[:settings.MAX_NODES_FOR_KB_LINK]
+        capped = True
+        logger.warning(f"节点数超过 {settings.MAX_NODES_FOR_KB_LINK}，"
+                       f"仅对锚定知识点最多的前 {settings.MAX_NODES_FOR_KB_LINK} 个节点做知识锚定连线")
 
     anchors: Dict[int, Dict[str, int]] = {}
     for n in nodes:
@@ -355,7 +391,8 @@ def link_nodes_by_kb(
         ))
     db.commit()
     logger.info(f"知识锚定关联：同一知识点 {same_concept} 条、知识库桥接 {bridged} 条")
-    return {"same_concept": same_concept, "bridged": bridged, "total": len(new_links[:4000])}
+    return {"same_concept": same_concept, "bridged": bridged, "total": len(new_links[:4000]),
+            "capped": capped}
 
 
 def purge_kb_links(db, user_id: int = 1) -> int:

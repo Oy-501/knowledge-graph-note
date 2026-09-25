@@ -1,0 +1,1466 @@
+{
+  "generated_at": "2026-09-25T13:31:06",
+  "empty": false,
+  "overview": {
+    "node_count": 36,
+    "link_count": 428,
+    "file_count": 5,
+    "domain_count": 5,
+    "cluster_count": 1,
+    "isolated_count": 0,
+    "avg_degree": 23.78,
+    "density": 0.6794,
+    "kb_anchor_count": 27,
+    "kb_bridge_count": 67,
+    "cross_file_bridge_count": 43,
+    "level_distribution": {
+      "2": 3,
+      "3": 18,
+      "4": 15
+    },
+    "relation_distribution": {
+      "实现关系": 126,
+      "理论基础": 108,
+      "前置知识": 92,
+      "相关": 73,
+      "知识库桥接": 20,
+      "等价知识点": 9
+    }
+  },
+  "levels": [
+    {
+      "level": 2,
+      "label": "核心理论",
+      "count": 3,
+      "samples": [
+        "青鸟缓存协议的设计目标",
+        "青鸟缓存协议",
+        "HTTP"
+      ]
+    },
+    {
+      "level": 3,
+      "label": "应用实践",
+      "count": 18,
+      "samples": [
+        "DOM",
+        "RESTful API",
+        "SQL",
+        "REST",
+        "SQL",
+        "SQL",
+        "阅读",
+        "写文章之前先想清楚读者"
+      ]
+    },
+    {
+      "level": 4,
+      "label": "实现工具",
+      "count": 15,
+      "samples": [
+        "JavaScript",
+        "React",
+        "Vue",
+        "TypeScript",
+        "Webpack",
+        "Vue",
+        "Node.js",
+        "构建工具"
+      ]
+    }
+  ],
+  "domains": [
+    {
+      "domain": "software",
+      "count": 12,
+      "share": 0.3333,
+      "top_nodes": [
+        "Node.js",
+        "Node.js",
+        "MySQL",
+        "SQL",
+        "SQL"
+      ],
+      "avg_level": 3.33
+    },
+    {
+      "domain": "frontend",
+      "count": 11,
+      "share": 0.3056,
+      "top_nodes": [
+        "JavaScript",
+        "React",
+        "Vue",
+        "TypeScript",
+        "DOM"
+      ],
+      "avg_level": 3.91
+    },
+    {
+      "domain": "network",
+      "count": 6,
+      "share": 0.1667,
+      "top_nodes": [
+        "RESTful API",
+        "REST",
+        "青鸟缓存协议的设计目标",
+        "青鸟缓存协议",
+        "HTTP"
+      ],
+      "avg_level": 2.5
+    },
+    {
+      "domain": "writing",
+      "count": 5,
+      "share": 0.1389,
+      "top_nodes": [
+        "阅读",
+        "写文章之前先想清楚读者",
+        "结构",
+        "笔记",
+        "笔记要定期整理成知识结构"
+      ],
+      "avg_level": 3.0
+    },
+    {
+      "domain": "database",
+      "count": 2,
+      "share": 0.0556,
+      "top_nodes": [
+        "MySQL",
+        "SQL"
+      ],
+      "avg_level": 3.5
+    }
+  ],
+  "hubs": [
+    {
+      "id": 8,
+      "title": "JavaScript",
+      "entity": "JavaScript",
+      "level": 4,
+      "level_label": "实现工具",
+      "domain": "frontend",
+      "type": "knowledge",
+      "description": "JavaScript 是一门动态弱类型、面向原型的脚本语言，广泛用于 Web 前端开发。",
+      "file_id": 2,
+      "degree": 34,
+      "keywords": [
+        "是一门动态弱",
+        "类型",
+        "面向原型的脚",
+        "本语言",
+        "广泛用于",
+        "前端开发"
+      ],
+      "entities": [
+        "JavaScript",
+        "前端开发",
+        "Java",
+        "DOM",
+        "是一门动态弱",
+        "类型"
+      ],
+      "relation_breakdown": {
+        "相关": 10,
+        "实现关系": 10,
+        "前置知识": 7,
+        "知识库桥接": 3,
+        "等价知识点": 2,
+        "理论基础": 2
+      },
+      "connected_titles": [
+        "写文章之前先想清楚读者",
+        "读者",
+        "结构",
+        "结构",
+        "笔记",
+        "笔记要定期整理成知识结构"
+      ]
+    },
+    {
+      "id": 10,
+      "title": "React",
+      "entity": "React",
+      "level": 4,
+      "level_label": "实现工具",
+      "domain": "frontend",
+      "type": "knowledge",
+      "description": "React 是基于 JavaScript 构建的前端框架，采用组件化与声明式渲染思想。",
+      "file_id": 2,
+      "degree": 34,
+      "keywords": [
+        "是基于",
+        "构建的前端框",
+        "采用组件化与",
+        "声明式渲染思",
+        "React",
+        "Java"
+      ],
+      "entities": [
+        "React",
+        "前端开发",
+        "JavaScript",
+        "Java",
+        "是基于",
+        "构建的前端框"
+      ],
+      "relation_breakdown": {
+        "实现关系": 10,
+        "相关": 9,
+        "前置知识": 7,
+        "知识库桥接": 4,
+        "理论基础": 4
+      },
+      "connected_titles": [
+        "写文章之前先想清楚读者",
+        "读者",
+        "结构",
+        "结构",
+        "笔记",
+        "笔记要定期整理成知识结构"
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Vue",
+      "entity": "Vue",
+      "level": 4,
+      "level_label": "实现工具",
+      "domain": "frontend",
+      "type": "knowledge",
+      "description": "Vue 是基于 JavaScript 构建的前端框架，以模板语法与响应式数据著称。",
+      "file_id": 2,
+      "degree": 34,
+      "keywords": [
+        "是基于",
+        "构建的前端框",
+        "以模板语法与",
+        "响应式数据著",
+        "Vue",
+        "Java"
+      ],
+      "entities": [
+        "Vue",
+        "前端开发",
+        "JavaScript",
+        "Java",
+        "是基于",
+        "构建的前端框"
+      ],
+      "relation_breakdown": {
+        "实现关系": 10,
+        "相关": 9,
+        "前置知识": 7,
+        "理论基础": 4,
+        "知识库桥接": 3,
+        "等价知识点": 1
+      },
+      "connected_titles": [
+        "写文章之前先想清楚读者",
+        "读者",
+        "结构",
+        "结构",
+        "笔记",
+        "笔记要定期整理成知识结构"
+      ]
+    },
+    {
+      "id": 9,
+      "title": "TypeScript",
+      "entity": "TypeScript",
+      "level": 4,
+      "level_label": "实现工具",
+      "domain": "frontend",
+      "type": "knowledge",
+      "description": "TypeScript 是 JavaScript 的超集，添加了静态类型系统。",
+      "file_id": 2,
+      "degree": 32,
+      "keywords": [
+        "的超集",
+        "添加了静态类",
+        "型系统",
+        "Type",
+        "Script",
+        "Java"
+      ],
+      "entities": [
+        "TypeScript",
+        "JavaScript",
+        "Java",
+        "前端开发",
+        "的超集",
+        "添加了静态类"
+      ],
+      "relation_breakdown": {
+        "实现关系": 10,
+        "相关": 9,
+        "前置知识": 7,
+        "理论基础": 5,
+        "等价知识点": 1
+      },
+      "connected_titles": [
+        "写文章之前先想清楚读者",
+        "读者",
+        "结构",
+        "结构",
+        "笔记",
+        "笔记要定期整理成知识结构"
+      ]
+    },
+    {
+      "id": 11,
+      "title": "DOM",
+      "entity": "DOM",
+      "level": 3,
+      "level_label": "应用实践",
+      "domain": "frontend",
+      "type": "knowledge",
+      "description": "React 用虚拟 DOM 与 Hooks 管理状态，适合复杂交互界面。",
+      "file_id": 2,
+      "degree": 32,
+      "keywords": [
+        "用虚拟",
+        "管理状态",
+        "适合复杂交互",
+        "界面",
+        "React",
+        "DOM"
+      ],
+      "entities": [
+        "DOM",
+        "React",
+        "虚拟 DOM",
+        "用虚拟",
+        "管理状态",
+        "适合复杂交互"
+      ],
+      "relation_breakdown": {
+        "理论基础": 17,
+        "前置知识": 6,
+        "知识库桥接": 5,
+        "实现关系": 3,
+        "相关": 1
+      },
+      "connected_titles": [
+        "写文章之前先想清楚读者",
+        "读者",
+        "结构",
+        "结构",
+        "笔记",
+        "笔记要定期整理成知识结构"
+      ]
+    },
+    {
+      "id": 14,
+      "title": "Webpack",
+      "entity": "Webpack",
+      "level": 4,
+      "level_label": "实现工具",
+      "domain": "frontend",
+      "type": "thought",
+      "description": "Webpack 负责模块打包，把散落的 JavaScript 模块与样式资源打包成浏览器可加载的产物。",
+      "file_id": 2,
+      "degree": 32,
+      "keywords": [
+        "负责模块打包",
+        "把散落的",
+        "模块与样式资",
+        "源打包成浏览",
+        "器可加载的产",
+        "Webpack"
+      ],
+      "entities": [
+        "Webpack",
+        "JavaScript",
+        "Java",
+        "前端开发",
+        "负责模块打包",
+        "把散落的"
+      ],
+      "relation_breakdown": {
+        "实现关系": 10,
+        "相关": 9,
+        "前置知识": 7,
+        "理论基础": 4,
+        "等价知识点": 1,
+        "知识库桥接": 1
+      },
+      "connected_titles": [
+        "写文章之前先想清楚读者",
+        "读者",
+        "结构",
+        "结构",
+        "笔记",
+        "笔记要定期整理成知识结构"
+      ]
+    },
+    {
+      "id": 15,
+      "title": "Vue",
+      "entity": "Vue",
+      "level": 4,
+      "level_label": "实现工具",
+      "domain": "frontend",
+      "type": "thought",
+      "description": "本次选型确定用 Vue 做前端框架，因为团队现有成员对 Vue 的组件写法更熟悉。",
+      "file_id": 3,
+      "degree": 32,
+      "keywords": [
+        "本次选型确定",
+        "做前端框架",
+        "因为团队现有",
+        "成员对",
+        "的组件写法更",
+        "熟悉"
+      ],
+      "entities": [
+        "Vue",
+        "前端开发",
+        "本次选型确定",
+        "做前端框架",
+        "因为团队现有",
+        "成员对"
+      ],
+      "relation_breakdown": {
+        "实现关系": 9,
+        "相关": 8,
+        "前置知识": 7,
+        "知识库桥接": 4,
+        "等价知识点": 2,
+        "理论基础": 2
+      },
+      "connected_titles": [
+        "写文章之前先想清楚读者",
+        "读者",
+        "结构",
+        "结构",
+        "笔记",
+        "笔记要定期整理成知识结构"
+      ]
+    },
+    {
+      "id": 18,
+      "title": "Node.js",
+      "entity": "Node.js",
+      "level": 4,
+      "level_label": "实现工具",
+      "domain": "software",
+      "type": "question",
+      "description": "Node.js 适合作为 BFF 层聚合后端服务。",
+      "file_id": 3,
+      "degree": 31,
+      "keywords": [
+        "适合作为",
+        "层聚合后端服",
+        "Node",
+        "BFF"
+      ],
+      "entities": [
+        "Node.js",
+        "后端开发",
+        "适合作为",
+        "层聚合后端服",
+        "Node",
+        "BFF"
+      ],
+      "relation_breakdown": {
+        "相关": 11,
+        "前置知识": 8,
+        "实现关系": 8,
+        "理论基础": 3,
+        "等价知识点": 1
+      },
+      "connected_titles": [
+        "写文章之前先想清楚读者",
+        "读者",
+        "结构",
+        "结构",
+        "笔记",
+        "笔记要定期整理成知识结构"
+      ]
+    },
+    {
+      "id": 19,
+      "title": "构建工具",
+      "entity": "构建工具",
+      "level": 4,
+      "level_label": "实现工具",
+      "domain": "frontend",
+      "type": "knowledge",
+      "description": "构建工具从 Webpack 换成 Vite，开发态启动速度明显提升。",
+      "file_id": 3,
+      "degree": 31,
+      "keywords": [
+        "构建工具从",
+        "换成",
+        "开发态启动速",
+        "度明显提升",
+        "Webpack",
+        "Vite"
+      ],
+      "entities": [
+        "Webpack",
+        "Vite",
+        "构建工具从",
+        "换成",
+        "开发态启动速",
+        "度明显提升"
+      ],
+      "relation_breakdown": {
+        "相关": 9,
+        "实现关系": 9,
+        "前置知识": 8,
+        "理论基础": 3,
+        "知识库桥接": 1,
+        "等价知识点": 1
+      },
+      "connected_titles": [
+        "写文章之前先想清楚读者",
+        "读者",
+        "结构",
+        "结构",
+        "笔记",
+        "笔记要定期整理成知识结构"
+      ]
+    },
+    {
+      "id": 20,
+      "title": "Vite",
+      "entity": "Vite",
+      "level": 4,
+      "level_label": "实现工具",
+      "domain": "frontend",
+      "type": "knowledge",
+      "description": "Vite 基于原生 ESM 提供按需编译，热更新更快。",
+      "file_id": 3,
+      "degree": 30,
+      "keywords": [
+        "基于原生",
+        "提供按需编译",
+        "热更新更快",
+        "Vite",
+        "ESM"
+      ],
+      "entities": [
+        "Vite",
+        "热更新",
+        "基于原生",
+        "提供按需编译",
+        "热更新更快",
+        "ESM"
+      ],
+      "relation_breakdown": {
+        "实现关系": 9,
+        "前置知识": 7,
+        "知识库桥接": 6,
+        "理论基础": 4,
+        "相关": 4
+      },
+      "connected_titles": [
+        "写文章之前先想清楚读者",
+        "读者",
+        "结构",
+        "结构",
+        "笔记",
+        "笔记要定期整理成知识结构"
+      ]
+    },
+    {
+      "id": 21,
+      "title": "MySQL",
+      "entity": "MySQL",
+      "level": 4,
+      "level_label": "实现工具",
+      "domain": "database",
+      "type": "knowledge",
+      "description": "MySQL 负责持久化业务数据，配合 SQL 完成复杂查询。",
+      "file_id": 3,
+      "degree": 30,
+      "keywords": [
+        "负责持久化业",
+        "务数据",
+        "配合",
+        "完成复杂查询",
+        "SQL"
+      ],
+      "entities": [
+        "MySQL",
+        "持久化",
+        "SQL",
+        "负责持久化业",
+        "务数据",
+        "配合"
+      ],
+      "relation_breakdown": {
+        "前置知识": 8,
+        "实现关系": 7,
+        "理论基础": 5,
+        "相关": 5,
+        "知识库桥接": 3,
+        "等价知识点": 2
+      },
+      "connected_titles": [
+        "写文章之前先想清楚读者",
+        "读者",
+        "结构",
+        "结构",
+        "笔记",
+        "笔记要定期整理成知识结构"
+      ]
+    },
+    {
+      "id": 23,
+      "title": "Node.js",
+      "entity": "Node.js",
+      "level": 4,
+      "level_label": "实现工具",
+      "domain": "software",
+      "type": "thought",
+      "description": "Node.js 让 JavaScript 可以运行在服务端，从而用同一门语言完成前后端开发。",
+      "file_id": 4,
+      "degree": 30,
+      "keywords": [
+        "可以运行在服",
+        "务端",
+        "从而用同一门",
+        "语言完成前后",
+        "端开发",
+        "Node"
+      ],
+      "entities": [
+        "Node.js",
+        "JavaScript",
+        "后端开发",
+        "Java",
+        "事件循环",
+        "可以运行在服"
+      ],
+      "relation_breakdown": {
+        "相关": 12,
+        "前置知识": 8,
+        "实现关系": 4,
+        "理论基础": 3,
+        "等价知识点": 2,
+        "知识库桥接": 1
+      },
+      "connected_titles": [
+        "写文章之前先想清楚读者",
+        "读者",
+        "结构",
+        "结构",
+        "笔记",
+        "笔记要定期整理成知识结构"
+      ]
+    }
+  ],
+  "clusters": [
+    {
+      "size": 36,
+      "label": "JavaScript",
+      "dominant_domain": "software",
+      "domains": [
+        "software",
+        "frontend",
+        "network",
+        "writing"
+      ],
+      "file_count": 5,
+      "top_nodes": [
+        {
+          "id": 8,
+          "title": "JavaScript",
+          "degree": 34
+        },
+        {
+          "id": 10,
+          "title": "React",
+          "degree": 34
+        },
+        {
+          "id": 12,
+          "title": "Vue",
+          "degree": 34
+        },
+        {
+          "id": 9,
+          "title": "TypeScript",
+          "degree": 32
+        },
+        {
+          "id": 11,
+          "title": "DOM",
+          "degree": 32
+        },
+        {
+          "id": 14,
+          "title": "Webpack",
+          "degree": 32
+        }
+      ]
+    }
+  ],
+  "paths": [
+    {
+      "title": "SQL → Node.js",
+      "start": "SQL",
+      "end": "Node.js",
+      "length": 3,
+      "domains": [
+        "software"
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "id": 22,
+          "title": "SQL",
+          "level": 3,
+          "level_label": "应用实践",
+          "domain": "software",
+          "relation_from_prev": null,
+          "relation_label_from_prev": null
+        },
+        {
+          "order": 2,
+          "id": 28,
+          "title": "MySQL",
+          "level": 4,
+          "level_label": "实现工具",
+          "domain": "software",
+          "relation_from_prev": "bridged",
+          "relation_label_from_prev": "知识库桥接"
+        },
+        {
+          "order": 3,
+          "id": 18,
+          "title": "Node.js",
+          "level": 4,
+          "level_label": "实现工具",
+          "domain": "software",
+          "relation_from_prev": "related",
+          "relation_label_from_prev": "相关"
+        }
+      ]
+    },
+    {
+      "title": "DOM → Vue",
+      "start": "DOM",
+      "end": "Vue",
+      "length": 3,
+      "domains": [
+        "frontend"
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "id": 11,
+          "title": "DOM",
+          "level": 3,
+          "level_label": "应用实践",
+          "domain": "frontend",
+          "relation_from_prev": null,
+          "relation_label_from_prev": null
+        },
+        {
+          "order": 2,
+          "id": 8,
+          "title": "JavaScript",
+          "level": 4,
+          "level_label": "实现工具",
+          "domain": "frontend",
+          "relation_from_prev": "bridged",
+          "relation_label_from_prev": "知识库桥接"
+        },
+        {
+          "order": 3,
+          "id": 15,
+          "title": "Vue",
+          "level": 4,
+          "level_label": "实现工具",
+          "domain": "frontend",
+          "relation_from_prev": "equivalent",
+          "relation_label_from_prev": "等价知识点"
+        }
+      ]
+    },
+    {
+      "title": "TypeScript → JavaScript",
+      "start": "TypeScript",
+      "end": "JavaScript",
+      "length": 4,
+      "domains": [
+        "frontend"
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "id": 16,
+          "title": "TypeScript",
+          "level": 4,
+          "level_label": "实现工具",
+          "domain": "frontend",
+          "relation_from_prev": null,
+          "relation_label_from_prev": null
+        },
+        {
+          "order": 2,
+          "id": 10,
+          "title": "React",
+          "level": 4,
+          "level_label": "实现工具",
+          "domain": "frontend",
+          "relation_from_prev": "related",
+          "relation_label_from_prev": "相关"
+        },
+        {
+          "order": 3,
+          "id": 12,
+          "title": "Vue",
+          "level": 4,
+          "level_label": "实现工具",
+          "domain": "frontend",
+          "relation_from_prev": "bridged",
+          "relation_label_from_prev": "知识库桥接"
+        },
+        {
+          "order": 4,
+          "id": 8,
+          "title": "JavaScript",
+          "level": 4,
+          "level_label": "实现工具",
+          "domain": "frontend",
+          "relation_from_prev": "related",
+          "relation_label_from_prev": "相关"
+        }
+      ]
+    },
+    {
+      "title": "Vite → Vue",
+      "start": "Vite",
+      "end": "Vue",
+      "length": 3,
+      "domains": [
+        "frontend"
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "id": 20,
+          "title": "Vite",
+          "level": 4,
+          "level_label": "实现工具",
+          "domain": "frontend",
+          "relation_from_prev": null,
+          "relation_label_from_prev": null
+        },
+        {
+          "order": 2,
+          "id": 8,
+          "title": "JavaScript",
+          "level": 4,
+          "level_label": "实现工具",
+          "domain": "frontend",
+          "relation_from_prev": "bridged",
+          "relation_label_from_prev": "知识库桥接"
+        },
+        {
+          "order": 3,
+          "id": 15,
+          "title": "Vue",
+          "level": 4,
+          "level_label": "实现工具",
+          "domain": "frontend",
+          "relation_from_prev": "equivalent",
+          "relation_label_from_prev": "等价知识点"
+        }
+      ]
+    },
+    {
+      "title": "Vue → 构建工具",
+      "start": "Vue",
+      "end": "构建工具",
+      "length": 6,
+      "domains": [
+        "frontend"
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "id": 12,
+          "title": "Vue",
+          "level": 4,
+          "level_label": "实现工具",
+          "domain": "frontend",
+          "relation_from_prev": null,
+          "relation_label_from_prev": null
+        },
+        {
+          "order": 2,
+          "id": 8,
+          "title": "JavaScript",
+          "level": 4,
+          "level_label": "实现工具",
+          "domain": "frontend",
+          "relation_from_prev": "related",
+          "relation_label_from_prev": "相关"
+        },
+        {
+          "order": 3,
+          "id": 9,
+          "title": "TypeScript",
+          "level": 4,
+          "level_label": "实现工具",
+          "domain": "frontend",
+          "relation_from_prev": "related",
+          "relation_label_from_prev": "相关"
+        },
+        {
+          "order": 4,
+          "id": 10,
+          "title": "React",
+          "level": 4,
+          "level_label": "实现工具",
+          "domain": "frontend",
+          "relation_from_prev": "related",
+          "relation_label_from_prev": "相关"
+        },
+        {
+          "order": 5,
+          "id": 14,
+          "title": "Webpack",
+          "level": 4,
+          "level_label": "实现工具",
+          "domain": "frontend",
+          "relation_from_prev": "related",
+          "relation_label_from_prev": "相关"
+        },
+        {
+          "order": 6,
+          "id": 19,
+          "title": "构建工具",
+          "level": 4,
+          "level_label": "实现工具",
+          "domain": "frontend",
+          "relation_from_prev": "equivalent",
+          "relation_label_from_prev": "等价知识点"
+        }
+      ]
+    }
+  ],
+  "kb_anchors": [
+    {
+      "entity": "前端开发",
+      "anchored_nodes": 7,
+      "level": 3,
+      "domain": "general",
+      "definition": "前端开发关注用户界面，以 JavaScript 为核心语言。React 和 Vue 是前端开发的两大框架。TypeScript 在前端开发中越来越普及。Webpack 是前端开发的模块打包工具。前端开发涉及 HTML 和 CSS 基础技术。"
+    },
+    {
+      "entity": "JavaScript",
+      "anchored_nodes": 6,
+      "level": 4,
+      "domain": "frontend",
+      "definition": "JavaScript 是浏览器端唯一原生编程语言，操控 DOM 与事件循环，是前端框架与异步任务的基础。"
+    },
+    {
+      "entity": "Java",
+      "anchored_nodes": 6,
+      "level": 4,
+      "domain": "general",
+      "definition": "Java 是企业级后端开发的主流语言，基于 JVM 运行。Spring 框架是 Java 生态的核心，广泛用于微服务架构。Maven 是 Java 项目的主要构建工具。Java 在大规模分布式系统中表现稳定。"
+    },
+    {
+      "entity": "Node.js",
+      "anchored_nodes": 6,
+      "level": 4,
+      "domain": "general",
+      "definition": "Node.js 是基于 V8 引擎的 JavaScript 运行时，让 JavaScript 可以用于后端开发。Express 是 Node.js 上最流行的 Web 框架。npm 是 Node.js 的包管理器，拥有全球最大的开源库生态…"
+    },
+    {
+      "entity": "结构",
+      "anchored_nodes": 5,
+      "level": 3,
+      "domain": "general",
+      "definition": "结构是作品的整体框架。结构体现在大纲和章节中。结构与情节和叙事相关。好的结构让情节更紧凑。结构有三幕剧、英雄之旅等模式。结构是写作的骨架。"
+    },
+    {
+      "entity": "SQL",
+      "anchored_nodes": 5,
+      "level": 3,
+      "domain": "general",
+      "definition": "SQL 是结构化查询语言，用于操作关系型数据库。MySQL 和 PostgreSQL 都支持 SQL。SQL 是数据库领域的通用语言。SQL 与 NoSQL 形成对比。"
+    },
+    {
+      "entity": "MySQL",
+      "anchored_nodes": 4,
+      "level": 4,
+      "domain": "general",
+      "definition": "MySQL 是最流行的关系型数据库，使用 SQL 查询语言。MySQL 在后端开发中用于持久化存储。MySQL 与 Redis 常配合使用，前者负责持久化后者负责缓存。MySQL 是 LAMP 架构的 M。"
+    },
+    {
+      "entity": "RESTful API",
+      "anchored_nodes": 4,
+      "level": 3,
+      "domain": "network",
+      "definition": "RESTful API 以 HTTP 方法映射资源操作，是后端网关与微服务对外暴露接口的常用风格。"
+    },
+    {
+      "entity": "Vue",
+      "anchored_nodes": 3,
+      "level": 4,
+      "domain": "frontend",
+      "definition": "Vue 以响应式数据绑定与虚拟 DOM 构建 UI，组合式 API 管组织逻辑，与 React 共同主导前端开发生态。"
+    },
+    {
+      "entity": "读者",
+      "anchored_nodes": 2,
+      "level": 3,
+      "domain": "general",
+      "definition": "读者是作品的接受者。读者的期待受体裁影响。读者通过主题获得共鸣。节奏和视角影响读者体验。读者是写作的最终服务对象。了解读者让写作更有针对性。"
+    },
+    {
+      "entity": "DOM",
+      "anchored_nodes": 2,
+      "level": 3,
+      "domain": "frontend",
+      "definition": "DOM 是浏览器解析 HTML 后构建的树形节点模型，JavaScript 操作 DOM 触发渲染更新，是虚拟 DOM 要优化的对象。"
+    },
+    {
+      "entity": "TypeScript",
+      "anchored_nodes": 2,
+      "level": 4,
+      "domain": "frontend",
+      "definition": "TypeScript 为 JavaScript 添加静态类型系统，通过接口约束提升代码质量，是大型前端项目的标配语言。"
+    },
+    {
+      "entity": "React",
+      "anchored_nodes": 2,
+      "level": 4,
+      "domain": "frontend",
+      "definition": "React 以虚拟 DOM 与声明式组件化构建 UI，Hooks 管理状态，与 Vue 同为主流前端框架。"
+    },
+    {
+      "entity": "Webpack",
+      "anchored_nodes": 2,
+      "level": 4,
+      "domain": "frontend",
+      "definition": "Webpack 以模块打包与代码分割构建前端资源，是 Vite 之前的构建工具标准，驱动前端工程化。"
+    },
+    {
+      "entity": "后端开发",
+      "anchored_nodes": 2,
+      "level": 3,
+      "domain": "general",
+      "definition": "后端开发处理业务逻辑和数据，常用语言有 Node.js、Python、Java 和 Go。后端开发离不开数据库和 RESTful API。微服务架构是后端开发的趋势。Docker 简化了后端开发的部署。"
+    }
+  ],
+  "bridges": [
+    {
+      "source": "Vue",
+      "target": "Vue",
+      "relation_type": "equivalent",
+      "relation_label": "等价知识点",
+      "score": 0.9,
+      "evidence": "两个知识点均锚定知识库条目「Vue」",
+      "source_text": "知识库定义：Vue 以响应式数据绑定与虚拟 DOM 构建 UI，组合式 API 管组织逻辑，与 React 共同主导前端开发生态。",
+      "cross_file": true
+    },
+    {
+      "source": "JavaScript",
+      "target": "Vue",
+      "relation_type": "equivalent",
+      "relation_label": "等价知识点",
+      "score": 0.9,
+      "evidence": "两个知识点均锚定知识库条目「前端开发」",
+      "source_text": "知识库定义：前端开发关注用户界面，以 JavaScript 为核心语言。React 和 Vue 是前端开发的两大框架。TypeScript 在前端开发中越来越普及。Webpack 是前端开发的模块打包工具。前端开发涉及 HTML 和 CSS 基础技术。",
+      "cross_file": true
+    },
+    {
+      "source": "TypeScript",
+      "target": "TypeScript",
+      "relation_type": "equivalent",
+      "relation_label": "等价知识点",
+      "score": 0.9,
+      "evidence": "两个知识点均锚定知识库条目「TypeScript」",
+      "source_text": "知识库定义：TypeScript 为 JavaScript 添加静态类型系统，通过接口约束提升代码质量，是大型前端项目的标配语言。",
+      "cross_file": true
+    },
+    {
+      "source": "Webpack",
+      "target": "构建工具",
+      "relation_type": "equivalent",
+      "relation_label": "等价知识点",
+      "score": 0.9,
+      "evidence": "两个知识点均锚定知识库条目「Webpack」",
+      "source_text": "知识库定义：Webpack 以模块打包与代码分割构建前端资源，是 Vite 之前的构建工具标准，驱动前端工程化。",
+      "cross_file": true
+    },
+    {
+      "source": "SQL",
+      "target": "MySQL",
+      "relation_type": "equivalent",
+      "relation_label": "等价知识点",
+      "score": 0.9,
+      "evidence": "两个知识点均锚定知识库条目「SQL」",
+      "source_text": "知识库定义：SQL 是结构化查询语言，用于操作关系型数据库。MySQL 和 PostgreSQL 都支持 SQL。SQL 是数据库领域的通用语言。SQL 与 NoSQL 形成对比。",
+      "cross_file": true
+    },
+    {
+      "source": "JavaScript",
+      "target": "Node.js",
+      "relation_type": "equivalent",
+      "relation_label": "等价知识点",
+      "score": 0.9,
+      "evidence": "两个知识点均锚定知识库条目「JavaScript」",
+      "source_text": "知识库定义：JavaScript 是浏览器端唯一原生编程语言，操控 DOM 与事件循环，是前端框架与异步任务的基础。",
+      "cross_file": true
+    },
+    {
+      "source": "Node.js",
+      "target": "Node.js",
+      "relation_type": "equivalent",
+      "relation_label": "等价知识点",
+      "score": 0.9,
+      "evidence": "两个知识点均锚定知识库条目「Node.js」",
+      "source_text": "知识库定义：Node.js 是基于 V8 引擎的 JavaScript 运行时，让 JavaScript 可以用于后端开发。Express 是 Node.js 上最流行的 Web 框架。npm 是 Node.js 的包管理器，拥有全球最大的开源库生态。Webpack 依赖 Node.js 环境运行。Node.js 与…",
+      "cross_file": true
+    },
+    {
+      "source": "MySQL",
+      "target": "MySQL",
+      "relation_type": "equivalent",
+      "relation_label": "等价知识点",
+      "score": 0.9,
+      "evidence": "两个知识点均锚定知识库条目「MySQL」",
+      "source_text": "知识库定义：MySQL 是最流行的关系型数据库，使用 SQL 查询语言。MySQL 在后端开发中用于持久化存储。MySQL 与 Redis 常配合使用，前者负责持久化后者负责缓存。MySQL 是 LAMP 架构的 M。",
+      "cross_file": true
+    },
+    {
+      "source": "结构",
+      "target": "SQL",
+      "relation_type": "equivalent",
+      "relation_label": "等价知识点",
+      "score": 0.9,
+      "evidence": "两个知识点均锚定知识库条目「结构」",
+      "source_text": "知识库定义：结构是作品的整体框架。结构体现在大纲和章节中。结构与情节和叙事相关。好的结构让情节更紧凑。结构有三幕剧、英雄之旅等模式。结构是写作的骨架。",
+      "cross_file": true
+    },
+    {
+      "source": "React",
+      "target": "JavaScript",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：React —related→ 前端开发",
+      "source_text": "知识库条目「React」的相关术语包含「前端开发」",
+      "cross_file": false
+    },
+    {
+      "source": "Vue",
+      "target": "JavaScript",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：Vue —related→ 前端开发",
+      "source_text": "知识库条目「Vue」的相关术语包含「前端开发」",
+      "cross_file": false
+    },
+    {
+      "source": "Webpack",
+      "target": "JavaScript",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：Webpack —related→ 前端开发",
+      "source_text": "知识库条目「Webpack」的相关术语包含「前端开发」",
+      "cross_file": false
+    },
+    {
+      "source": "构建工具",
+      "target": "JavaScript",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：Webpack —related→ 前端开发",
+      "source_text": "知识库条目「Webpack」的相关术语包含「前端开发」",
+      "cross_file": true
+    },
+    {
+      "source": "JavaScript",
+      "target": "TypeScript",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：JavaScript —related→ TypeScript",
+      "source_text": "知识库条目「JavaScript」的相关术语包含「TypeScript」",
+      "cross_file": false
+    },
+    {
+      "source": "Node.js",
+      "target": "TypeScript",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：JavaScript —related→ TypeScript",
+      "source_text": "知识库条目「JavaScript」的相关术语包含「TypeScript」",
+      "cross_file": true
+    },
+    {
+      "source": "TypeScript",
+      "target": "React",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：TypeScript —related→ React",
+      "source_text": "知识库条目「TypeScript」的相关术语包含「React」",
+      "cross_file": false
+    },
+    {
+      "source": "TypeScript",
+      "target": "React",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：TypeScript —related→ React",
+      "source_text": "知识库条目「TypeScript」的相关术语包含「React」",
+      "cross_file": true
+    },
+    {
+      "source": "Node.js",
+      "target": "React",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：JavaScript —related→ React",
+      "source_text": "知识库条目「JavaScript」的相关术语包含「React」",
+      "cross_file": true
+    },
+    {
+      "source": "Vite",
+      "target": "DOM",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：热更新 —related→ 虚拟 DOM",
+      "source_text": "知识库条目「热更新」的相关术语包含「虚拟 DOM」",
+      "cross_file": true
+    },
+    {
+      "source": "TypeScript",
+      "target": "Vue",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：TypeScript —related→ Vue",
+      "source_text": "知识库条目「TypeScript」的相关术语包含「Vue」",
+      "cross_file": false
+    },
+    {
+      "source": "TypeScript",
+      "target": "Vue",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：TypeScript —related→ Vue",
+      "source_text": "知识库条目「TypeScript」的相关术语包含「Vue」",
+      "cross_file": true
+    },
+    {
+      "source": "Node.js",
+      "target": "Vue",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：JavaScript —related→ Vue",
+      "source_text": "知识库条目「JavaScript」的相关术语包含「Vue」",
+      "cross_file": true
+    },
+    {
+      "source": "React",
+      "target": "Webpack",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：React —related→ Webpack",
+      "source_text": "知识库条目「React」的相关术语包含「Webpack」",
+      "cross_file": false
+    },
+    {
+      "source": "Vue",
+      "target": "Webpack",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：Vue —related→ Webpack",
+      "source_text": "知识库条目「Vue」的相关术语包含「Webpack」",
+      "cross_file": false
+    },
+    {
+      "source": "Node.js",
+      "target": "Webpack",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：Node.js —related→ Webpack",
+      "source_text": "知识库条目「Node.js」的相关术语包含「Webpack」",
+      "cross_file": true
+    },
+    {
+      "source": "Node.js",
+      "target": "Webpack",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：JavaScript —related→ Webpack",
+      "source_text": "知识库条目「JavaScript」的相关术语包含「Webpack」",
+      "cross_file": true
+    },
+    {
+      "source": "TypeScript",
+      "target": "Vue",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：TypeScript —related→ 前端开发",
+      "source_text": "知识库条目「TypeScript」的相关术语包含「前端开发」",
+      "cross_file": true
+    },
+    {
+      "source": "TypeScript",
+      "target": "Vue",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：TypeScript —related→ 前端开发",
+      "source_text": "知识库条目「TypeScript」的相关术语包含「前端开发」",
+      "cross_file": false
+    },
+    {
+      "source": "Webpack",
+      "target": "Vue",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：Webpack —related→ 前端开发",
+      "source_text": "知识库条目「Webpack」的相关术语包含「前端开发」",
+      "cross_file": true
+    },
+    {
+      "source": "构建工具",
+      "target": "Vue",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：Webpack —related→ 前端开发",
+      "source_text": "知识库条目「Webpack」的相关术语包含「前端开发」",
+      "cross_file": false
+    },
+    {
+      "source": "Node.js",
+      "target": "Vue",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：JavaScript —related→ 前端开发",
+      "source_text": "知识库条目「JavaScript」的相关术语包含「前端开发」",
+      "cross_file": true
+    },
+    {
+      "source": "JavaScript",
+      "target": "TypeScript",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：JavaScript —related→ TypeScript",
+      "source_text": "知识库条目「JavaScript」的相关术语包含「TypeScript」",
+      "cross_file": true
+    },
+    {
+      "source": "Node.js",
+      "target": "TypeScript",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：JavaScript —related→ TypeScript",
+      "source_text": "知识库条目「JavaScript」的相关术语包含「TypeScript」",
+      "cross_file": true
+    },
+    {
+      "source": "JavaScript",
+      "target": "Node.js",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：JavaScript —related→ Node.js",
+      "source_text": "知识库条目「JavaScript」的相关术语包含「Node.js」",
+      "cross_file": true
+    },
+    {
+      "source": "TypeScript",
+      "target": "Node.js",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：TypeScript —related→ Node.js",
+      "source_text": "知识库条目「TypeScript」的相关术语包含「Node.js」",
+      "cross_file": true
+    },
+    {
+      "source": "TypeScript",
+      "target": "Node.js",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：TypeScript —related→ Node.js",
+      "source_text": "知识库条目「TypeScript」的相关术语包含「Node.js」",
+      "cross_file": false
+    },
+    {
+      "source": "MySQL",
+      "target": "Node.js",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：MySQL —related→ 后端开发",
+      "source_text": "知识库条目「MySQL」的相关术语包含「后端开发」",
+      "cross_file": false
+    },
+    {
+      "source": "MySQL",
+      "target": "Node.js",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：MySQL —related→ 后端开发",
+      "source_text": "知识库条目「MySQL」的相关术语包含「后端开发」",
+      "cross_file": true
+    },
+    {
+      "source": "RESTful API",
+      "target": "Node.js",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：RESTful API —related→ 后端开发",
+      "source_text": "知识库条目「RESTful API」的相关术语包含「后端开发」",
+      "cross_file": true
+    },
+    {
+      "source": "React",
+      "target": "构建工具",
+      "relation_type": "related",
+      "relation_label": "相关知识",
+      "score": 0.69,
+      "evidence": "知识库桥接：React —related→ Webpack",
+      "source_text": "知识库条目「React」的相关术语包含「Webpack」",
+      "cross_file": true
+    }
+  ],
+  "isolated": [],
+  "suggestions": [
+    "知识库还有这些领域未被文档覆盖：data_flow、framework、low_level、programming_paradigm，可上传相关文档补齐。",
+    "缺少 L1 元概念层知识点，图谱缺少「顶层骨架」，建议补充领域总览类文档。",
+    "「JavaScript」连接了 34 个知识点，建议拆分为更细的知识点或建立子分组，避免单点过载。",
+    "80% 的连线是低分弱关联（多由时间窗/层级差推出，非知识依据），建议在「知识库」页点「重建知识关联」，让关联改由知识库概念空间决定；否则学习主线的可信度会受影响。"
+  ]
+}

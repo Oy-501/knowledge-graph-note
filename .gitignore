@@ -12,6 +12,7 @@ venv/
 # Node
 node_modules/
 dist/
+dist-old*/
 
 # 本地数据库
 *.db
@@ -19,6 +20,16 @@ dist/
 *.db-journal
 *.sqlite
 *.sqlite3
+
+# 运行产物（不上传）
+backend/uploads/
+backend/exports/
+backend/.env
+
+# 临时/工具目录
+.tmp-verify/
+.userdata/
+.workbuddy/
 
 # 临时/工具目录
 .tmp-verify/

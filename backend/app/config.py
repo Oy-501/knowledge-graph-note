@@ -54,6 +54,38 @@ class Settings(BaseSettings):
     # ---- Knowledge Base ----
     KNOWLEDGE_SEED_PATH: str = ""
 
+    # ---- 上传与解析上限（防止大文件把服务拖死：内存 / O(n²) 关联 / 前端渲染）----
+    MAX_PARSE_LINES: int = 20000       # 单个文件最多解析的行数
+    MAX_NODES_PER_FILE: int = 600      # 单个文件（单片）最多抽取的知识点数量
+    MAX_NODES_PER_FILE_TOTAL: int = 3000  # 一个文件切割后允许的知识点总量上限
+    MAX_LINK_CANDIDATES: int = 300     # 每个新节点最多比较的既有节点数（超出则按关键词交集剪枝）
+    LINK_PAIR_BUDGET: int = 120000     # 单次关联推理的最大节点对数
+    LINK_TIME_BUDGET_S: float = 20.0   # 单次关联推理的时间上限（秒）
+    MAX_LINKS_PER_NODE: int = 8        # 每个新节点最多保留的连线数（按分数取前 N，避免连线爆炸）
+    LINK_OUTPUT_LIMIT: int = 4000      # 单次关联推理最多产出的连线数
+    MAX_NODES_FOR_KB_LINK: int = 4000  # 知识锚定连线最多处理的节点数
+
+    # ---- 智能切割（大文件不再拒绝，改为按结构切分后逐片解析）----
+    SPLIT_TARGET_LINES: int = 6000      # 单片目标行数（切分阈值也是它）
+    SPLIT_TARGET_CHARS: int = 1_200_000  # 单片目标字符数（≈1.1MB 纯文本计量）
+    SPLIT_MAX_PIECES: int = 40          # 单文件最多切多少片（防呆）
+    SPLIT_OVERLAP_LINES: int = 2        # 相邻片重叠行数（保住跨界的句子）
+    MAX_UPLOAD_MB_HARD: int = 100       # 硬上限：超过直接拒绝（切割也没意义）
+
+    # ---- 知识点智能判定 ----
+    VERDICT_AUTO_ACCEPT: float = 0.80   # ≥ 该分数且无冲突 → 自动入知识库
+    VERDICT_REJECT_BELOW: float = 0.35  # < 该分数 → 自动驳回
+    VERDICT_USE_WEB: bool = True        # 是否启用联网判定（抓不到会自动降级并标注）
+    VERDICT_WEB_TIMEOUT: float = 6.0    # 单次联网抓取超时（秒）
+    VERDICT_WEB_CACHE_TTL: int = 900    # 搜索结果缓存（秒）
+    VERDICT_MAX_WEB_CALLS: int = 30     # 单批判定最多联网几次（避免整批卡住）
+
+    # ---- 后台管理 ----
+    ADMIN_TOKEN: str = "kg-admin"       # 后台口令（务必在 .env 改成自己的）
+    UPLOAD_DIR: str = "./uploads"       # 头像/背景图等用户上传文件目录
+    MAX_IMAGE_MB: int = 5               # 图片上传上限
+    AUDIT_KEEP_ROWS: int = 20000        # 审计日志保留条数（超出清理最旧的）
+
     # ---- Scoring defaults ----
     DEFAULT_ALPHA: float = 0.15
     DEFAULT_BETA: float = 0.25

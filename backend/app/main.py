@@ -7,6 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from loguru import logger
 
@@ -14,7 +15,7 @@ from app.config import settings
 from app.database import init_db, get_db
 from app.seed import ensure_default_user, seed_knowledge_base
 from app.services.kb_index import build_relations_from_entries
-from app.api import files, knowledge, graph, notes, kb
+from app.api import files, knowledge, graph, notes, kb, summary, admin, profile
 
 
 @asynccontextmanager
@@ -64,6 +65,17 @@ app.include_router(knowledge.router, prefix="/api/knowledge", tags=["Knowledge"]
 app.include_router(graph.router, prefix="/api/graph", tags=["Graph"])
 app.include_router(notes.router, prefix="/api/notes", tags=["Notes"])
 app.include_router(kb.router, prefix="/api/kb", tags=["KnowledgeBase"])
+app.include_router(summary.router, prefix="/api/summary", tags=["GraphSummary"])
+app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
+app.include_router(profile.router, prefix="/api/profile", tags=["Profile"])
+
+# 用户上传的图片（头像 / 背景）静态服务：/uploads/...
+_upload_root = settings.UPLOAD_DIR
+if not os.path.isabs(_upload_root):
+    _upload_root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                _upload_root.lstrip("./"))
+os.makedirs(_upload_root, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=_upload_root), name="uploads")
 
 
 @app.get("/api/health")

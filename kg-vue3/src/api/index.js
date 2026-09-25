@@ -74,6 +74,12 @@ export const fileAPI = {
     return res.data
   },
 
+  /** 上传/解析上限（前端做前置校验，与后端同源，避免大文件把服务打挂） */
+  async limits() {
+    const res = await api.get('/files/limits')
+    return res.data
+  },
+
   /** 更新文件元数据（本地重命名后同步 name / source_path） */
   async renameFile(fileId, { name, sourcePath }) {
     const res = await api.patch(`/files/${fileId}`, {
@@ -284,6 +290,174 @@ export const kbAPI = {
       node_threshold: nodeThreshold,
       rebuild_relations: rebuildRelations
     })
+    return res.data
+  }
+}
+
+// ==================== 图谱总结 API ====================
+export const summaryAPI = {
+  /** 生成图谱总结（结构化总结 + Mermaid 流程图 + AI 可读摘要） */
+  async build({ groupBy = 'level', maxPaths = 6, title = '知识图谱总结' } = {}) {
+    const res = await api.post('/summary/build', {
+      user_id: 1,
+      group_by: groupBy,
+      max_paths: maxPaths,
+      title
+    })
+    return res.data
+  },
+
+  /** 只取 Mermaid 流程图源码 */
+  async mermaid(groupBy = 'level') {
+    const res = await api.get('/summary/mermaid', { params: { group_by: groupBy } })
+    return res.data
+  },
+
+  /** AI 可读摘要（纯文本） */
+  async aiDigest() {
+    const res = await api.get('/summary/ai-digest')
+    return res.data
+  },
+
+  /** 导出文件下载地址：fmt = md | docx | pptx | mermaid | digest | json */
+  downloadUrl(fmt = 'md', { groupBy = 'level', title = '知识图谱总结' } = {}) {
+    const base = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api'
+    const qs = new URLSearchParams({ fmt, group_by: groupBy, title, user_id: '1' })
+    return `${base}/summary/download?${qs.toString()}`
+  },
+
+  /** 下载导出文件（blob，避免浏览器直接打开而不是下载） */
+  async download(fmt = 'md', options = {}) {
+    const res = await api.get('/summary/download', {
+      params: {
+        fmt,
+        group_by: options.groupBy || 'level',
+        title: options.title || '知识图谱总结'
+      },
+      responseType: 'blob'
+    })
+    return res.data
+  }
+}
+
+// ==================== 个人主页 API ====================
+export const profileAPI = {
+  async get() {
+    const res = await api.get('/profile')
+    return res.data
+  },
+
+  async overview() {
+    const res = await api.get('/profile/overview')
+    return res.data
+  },
+
+  async update(payload) {
+    const res = await api.put('/profile', payload)
+    return res.data
+  },
+
+  async uploadAvatar(file) {
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await api.post('/profile/avatar', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    return res.data
+  },
+
+  async uploadBackground(file) {
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await api.post('/profile/background', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    return res.data
+  },
+
+  async clearBackground() {
+    const res = await api.delete('/profile/background')
+    return res.data
+  },
+
+  /** 把服务端的相对图片地址补全为可直接访问的 URL */
+  fileUrl(path) {
+    if (!path) return ''
+    if (/^https?:\/\//.test(path)) return path
+    const base = (import.meta.env.VITE_API_BASE || 'http://localhost:8000/api').replace(/\/api\/?$/, '')
+    return `${base}${path}`
+  }
+}
+
+// ==================== 后台管理 API（口令保护） ====================
+const adminHeaders = (token) => ({ 'X-Admin-Token': token || '' })
+
+export const adminAPI = {
+  async auth(token) {
+    const res = await api.get('/admin/auth', { headers: adminHeaders(token) })
+    return res.data
+  },
+
+  async overview(token) {
+    const res = await api.get('/admin/overview', { headers: adminHeaders(token) })
+    return res.data
+  },
+
+  async candidates(token, params = {}) {
+    const res = await api.get('/admin/candidates', { params, headers: adminHeaders(token) })
+    return res.data
+  },
+
+  async candidateDetail(token, id) {
+    const res = await api.get(`/admin/candidates/${id}`, { headers: adminHeaders(token) })
+    return res.data
+  },
+
+  async review(token, id, payload) {
+    const res = await api.post(`/admin/candidates/${id}/review`, payload,
+      { headers: adminHeaders(token) })
+    return res.data
+  },
+
+  async bulkReview(token, payload) {
+    const res = await api.post('/admin/candidates/bulk-review', payload,
+      { headers: adminHeaders(token) })
+    return res.data
+  },
+
+  async verify(token, payload) {
+    const res = await api.post('/admin/candidates/verify', payload,
+      { headers: adminHeaders(token) })
+    return res.data
+  },
+
+  async removeCandidate(token, id) {
+    const res = await api.delete(`/admin/candidates/${id}`, { headers: adminHeaders(token) })
+    return res.data
+  },
+
+  async audit(token, params = {}) {
+    const res = await api.get('/admin/audit', { params, headers: adminHeaders(token) })
+    return res.data
+  },
+
+  async auditDetail(token, id) {
+    const res = await api.get(`/admin/audit/${id}`, { headers: adminHeaders(token) })
+    return res.data
+  },
+
+  async users(token) {
+    const res = await api.get('/admin/users', { headers: adminHeaders(token) })
+    return res.data
+  },
+
+  async verdictStats(token) {
+    const res = await api.get('/admin/stats/verdicts', { headers: adminHeaders(token) })
+    return res.data
+  },
+
+  async adminFiles(token) {
+    const res = await api.get('/admin/files', { headers: adminHeaders(token) })
     return res.data
   }
 }

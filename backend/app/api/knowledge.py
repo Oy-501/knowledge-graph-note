@@ -76,7 +76,9 @@ def validate_knowledge(request: ValidateRequest, user_id: int = 1, db: Session =
 
 @router.post("/infer")
 def infer_links(request: InferRequest, user_id: int = 1, db: Session = Depends(get_db)):
-    """为新节点推理关联连线"""
+    """为新节点推理关联连线（带节点数上限，避免超大请求拖死服务）"""
+    from app.config import settings
+
     nodes = request.nodes
     weights = request.weights or {}
     threshold = request.threshold or 0.15
@@ -84,8 +86,19 @@ def infer_links(request: InferRequest, user_id: int = 1, db: Session = Depends(g
     if not nodes:
         return {"links": [], "message": "无节点可推理"}
 
+    truncated = False
+    if len(nodes) > settings.MAX_NODES_PER_FILE:
+        nodes = nodes[:settings.MAX_NODES_PER_FILE]
+        truncated = True
+
     links = infer_links_batch(nodes, user_id, weights, threshold, db)
-    return {"links": links, "count": len(links)}
+    return {
+        "links": links,
+        "count": len(links),
+        "truncated": truncated,
+        "message": (f"节点数超过上限 {settings.MAX_NODES_PER_FILE}，已截断后推理"
+                    if truncated else ""),
+    }
 
 
 @router.get("/search")

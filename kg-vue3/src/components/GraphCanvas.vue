@@ -290,12 +290,16 @@ function initSvg() {
   gLinks = gRoot.append('g').attr('class', 'links')
   gNodes = gRoot.append('g').attr('class', 'nodes')
 
+  // 大图谱下降低斥力、加快收敛：几千节点的力导向若用默认参数会长时间占满主线程
+  const nodeTotal = graphStore.nodes?.length || 0
+
   simulation = forceSimulation()
     .force('link', forceLink().id(d => d.id).distance(d => linkDistance(d)).strength(d => linkStrength(d)))
-    .force('charge', forceManyBody().strength(-180))
+    .force('charge', forceManyBody().strength(nodeTotal > 1500 ? -60 : (nodeTotal > 800 ? -110 : -180)))
     .force('center', forceCenter(width.value / 2, height.value / 2))
     .force('collide', forceCollide().radius(d => nodeRadius(d) + 4))
     .on('tick', onTick)
+  if (nodeTotal > 800) simulation.alphaDecay(0.05)
 }
 
 function linkDistance(d) {
@@ -382,6 +386,15 @@ function render() {
   // === 渐进式渲染：>200 节点时分批 ===
   const useProgressive = nodes.length > 200
 
+  // === 大图谱保护：每个节点要画 2 个 <text>，几千节点会明显拖慢甚至卡死浏览器，
+  //     因此节点多时只给度数最高的若干节点画文字标签 ===
+  const labelCap = nodes.length > 1200 ? 120 : (nodes.length > 600 ? 260 : Infinity)
+  const labelIds = labelCap === Infinity
+    ? null
+    : new Set([...nodes].sort((a, b) => (b._deg || 0) - (a._deg || 0))
+        .slice(0, labelCap).map(n => n.id))
+  const showLabel = (d) => !labelIds || labelIds.has(d.id)
+
   // === 连线（按关系类型着色，贝塞尔曲线）==========
   linkSel = gLinks
     .selectAll('path.link-line')
@@ -452,15 +465,18 @@ function render() {
     .attr('stroke-width', 1)
     .style('opacity', d => validationColor(d) === 'none' ? 0 : 1)
 
-  nodeEnter.append('text')
+  // 节点文字标签：大图谱只画度数最高的一批
+  nodeEnter.filter(showLabel)
+    .append('text')
     .attr('class', 'node-label')
     .attr('dy', d => nodeRadius(d) + 12)
     .style('font-size', d => labelFontSize(d))
     .style('fill', 'var(--text-secondary)')
     .text(d => d.title ? (d.title.length > 14 ? d.title.slice(0, 14) + '…' : d.title) : (d.id.slice(0, 8)))
 
-  // 分组名标签（节点右上角小色块+名称）
-  nodeEnter.append('text')
+  // 分组名标签（节点右上角小色块+名称）：大图谱下省略，避免噪声与开销
+  nodeEnter.filter(d => !labelIds)
+    .append('text')
     .attr('class', 'node-group-label')
     .attr('x', d => nodeRadius(d) + 2)
     .attr('y', d => -nodeRadius(d) - 2)

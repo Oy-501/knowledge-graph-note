@@ -10,13 +10,16 @@
       @drop.prevent="onDrop"
     >
       <div class="dz-icon">📄</div>
-      <div class="dz-text">拖拽 .md / .txt 到此处，或点击选择</div>
+      <div class="dz-text">拖拽 .md / .txt / .csv 到此处，或点击选择</div>
       <div class="dz-text" style="opacity:0.7">支持多选批量上传</div>
+      <div class="dz-limit">
+        单文件 ≤ {{ fileStore.maxUploadMB }}MB · 超过 {{ fileStore.splitTargetLines }} 行会自动切割解析（内容不丢）· 仅纯文本
+      </div>
       <input
         ref="inputRef"
         type="file"
         multiple
-        accept=".md,.markdown,.txt,text/*"
+        accept=".md,.markdown,.txt,.csv,.tsv,.json,.log,text/*"
         hidden
         @change="onInputChange"
       />
@@ -43,6 +46,11 @@
           v-else-if="f.status === 'failed'"
           style="background:var(--danger-soft);color:var(--danger);border-color:transparent"
         >失败</span>
+        <span
+          v-if="f.parseNote"
+          class="fi-note"
+          :title="f.parseNote"
+        >⚠ 已截断</span>
         <button type="button" class="fi-del" title="删除" @click="onDelete(f)">✕</button>
       </div>
     </div>
@@ -50,15 +58,27 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useFileStore } from '@/store/fileStore'
 import { useGraphStore } from '@/store/graphStore'
+import { fileAPI } from '@/api/index'
 
 const fileStore = useFileStore()
 const graphStore = useGraphStore()
 const inputRef = ref(null)
 const isDragging = ref(false)
+
+// 上传上限以后端为准（提示文案与拦截阈值保持一致）
+onMounted(async () => {
+  try {
+    const limits = await fileAPI.limits()
+    if (limits?.max_upload_mb) fileStore.maxUploadMB = limits.max_upload_mb
+    if (limits?.split_target_lines) fileStore.splitTargetLines = limits.split_target_lines
+  } catch (e) {
+    /* 后端不可用时沿用默认值 20MB */
+  }
+})
 
 function triggerPick() {
   inputRef.value?.click()
@@ -81,20 +101,12 @@ async function handleFiles(files) {
     ElMessage.warning('未选择文件')
     return
   }
-  const valid = Array.from(files).filter(
-    f => /\.(md|txt|markdown)$/i.test(f.name)
-      || (f.type && f.type.startsWith('text'))
-  )
-  if (valid.length === 0) {
-    ElMessage.warning('只支持 .md / .txt 文本文件')
-    return
-  }
-  ElMessage.info('开始上传 ' + valid.length + ' 个文件...')
-  const res = await fileStore.uploadFiles(valid)
+  // 体积/类型校验在 store 内完成（阈值取自后端），避免"先说开始上传、再被拒绝"的误导
+  const res = await fileStore.uploadFiles(Array.from(files))
   if (res.ok > 0) {
     ElMessage.success(res.msg)
-  } else {
-    ElMessage.error(res.msg || '上传失败')
+  } else if (res.msg) {
+    ElMessage.error(res.msg)
   }
 }
 
@@ -217,5 +229,25 @@ async function onDelete(f) {
   opacity: 1;
   color: var(--danger);
   background: var(--danger-soft);
+}
+</style>
+
+<style scoped>
+/* 上传上限提示：弱化但可见，让用户在投喂大文件前就知道边界 */
+.dz-limit {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+/* 解析备注（如：文件过大已截断） */
+.fi-note {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: var(--warning-soft);
+  color: var(--warning);
+  cursor: help;
+  white-space: nowrap;
 }
 </style>

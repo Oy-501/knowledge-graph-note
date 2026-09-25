@@ -7,13 +7,14 @@
  */
 
 import { defineStore } from 'pinia'
+import { ElMessage } from 'element-plus'
 import { useGraphStore } from './graphStore'
 import { useGroupStore } from './groupStore'
 import { fileAPI, graphAPI } from '@/api/index'
 
 // 轮询间隔（毫秒）
 const POLL_INTERVAL = 2000
-const POLL_TIMEOUT = 120000  // 2分钟超时
+const POLL_TIMEOUT = 180000  // 3 分钟超时（大文件解析+关联较慢，避免误报超时）
 
 /**
  * 轮询后端获取文件节点，直到解析完成
@@ -42,9 +43,9 @@ async function pollForNodes(fileId, onProgress, epoch, currentEpoch) {
           const fileList = await fileAPI.list()
           const fileMeta = fileList.files?.find(f => f.id === fileId)
           if (fileMeta && (fileMeta.status === 'done' || fileMeta.status === 'indexed')) {
-            // 即使nodes为空也立即返回空数组
+            // 即使nodes为空也立即返回空数组；顺带带回后端解析备注（如「已截断」）
             if (onProgress) onProgress(80)
-            return result.nodes || []
+            return { nodes: result.nodes || [], note: fileMeta.parse_note || '' }
           }
         } catch (e) {
           // 继续轮询
@@ -52,7 +53,7 @@ async function pollForNodes(fileId, onProgress, epoch, currentEpoch) {
       }
       if (result.nodes?.length > 0) {
         if (onProgress) onProgress(80)
-        return result.nodes
+        return { nodes: result.nodes, note: '' }
       }
     } catch (e) {
       if (e.message === '文件不存在') throw e
@@ -68,8 +69,10 @@ async function pollForNodes(fileId, onProgress, epoch, currentEpoch) {
 
 export const useFileStore = defineStore('file', {
   state: () => ({
-    uploadedFiles: [], // {id, name, size, status, kpCount, parsedAt}
+    uploadedFiles: [], // {id, name, size, status, kpCount, parsedAt, parseNote}
     loading: false,
+    maxUploadMB: 100,        // 硬上限（启动后从后端 /files/limits 同步）
+    splitTargetLines: 6000,  // 超过该行数会自动切割
     _pollEpoch: 0
   }),
   getters: {
@@ -93,9 +96,10 @@ export const useFileStore = defineStore('file', {
               this.uploadedFiles = filesData.files.map(f => ({
                 id: f.id,
                 name: f.name,
-                size: 0,
+                size: f.size || 0,
                 status: f.status || 'indexed',
                 kpCount: f.node_count || 0,
+                parseNote: f.parse_note || '',
                 parsedAt: f.uploaded_at ? new Date(f.uploaded_at).getTime() : 0
               }))
             }
@@ -110,14 +114,53 @@ export const useFileStore = defineStore('file', {
 
     /**
      * 上传多个文件到后端解析
+     *
+     * 大文件不再拒绝：超过阈值由后端**智能切割**后逐片解析（内容完整覆盖），
+     * 前端只挡「超过硬上限」与「非文本」两类，并把切割方案回显给用户。
      */
     async uploadFiles(fileList) {
-      const files = Array.from(fileList || []).filter(
-        f => /\.(md|txt|markdown)$/i.test(f.name) ||
-             (f.type && f.type.startsWith('text'))
-      )
+      const ACCEPT = /\.(md|txt|markdown|csv|tsv|json|log)$/i
+      let maxMB = this.maxUploadMB || 100
+
+      // 上限以服务端为准（前端只做提前拦截，两边口径一致）
+      try {
+        const limits = await fileAPI.limits()
+        if (limits?.max_upload_mb) {
+          this.maxUploadMB = limits.max_upload_mb
+          maxMB = limits.max_upload_mb
+        }
+        if (limits?.split_target_lines) {
+          this.splitTargetLines = limits.split_target_lines
+        }
+      } catch (e) {
+        console.warn('[fileStore] 获取上传上限失败，使用本地默认值', maxMB)
+      }
+
+      const tooBig = []
+      const badType = []
+      const files = Array.from(fileList || []).filter(f => {
+        if (!(ACCEPT.test(f.name) || (f.type && f.type.startsWith('text')))) {
+          badType.push(f.name)
+          return false
+        }
+        if (f.size > maxMB * 1024 * 1024) {
+          tooBig.push(f.name)
+          return false
+        }
+        return true
+      })
+
+      if (badType.length) {
+        ElMessage.warning(`已跳过 ${badType.length} 个非文本文件（如 ${badType[0]}）：仅支持 .md/.txt/.csv/.json 等纯文本`)
+      }
+      if (tooBig.length) {
+        ElMessage.error(
+          `已跳过 ${tooBig.length} 个超过 ${maxMB}MB 的文件（如 ${tooBig[0]}）：` +
+          `请拆分成多个文件分批上传`
+        )
+      }
       if (files.length === 0) {
-        return { ok: 0, msg: '只支持 .md/.txt 文本文件' }
+        return { ok: 0, msg: '没有可上传的文件（原因见上方提示）' }
       }
 
       if (this.loading) return { ok: 0, msg: '正在上传中' }
@@ -131,24 +174,31 @@ export const useFileStore = defineStore('file', {
           graphStore.setBusy('上传 ' + f.name)
           graphStore.setProgress(10)
 
-          // Step 1: 上传到后端
+          // Step 1: 上传到后端（大文件会被自动切割，返回切割方案）
           const uploadResult = await fileAPI.upload(f)
           const fileId = uploadResult.file_id
           graphStore.setProgress(25)
+          if (uploadResult.split?.needed) {
+            ElMessage.info(`《${f.name}》较大，将按结构切割为 ${uploadResult.split.pieces.length} 片逐片解析（内容不会丢）`)
+          }
 
-          // Step 2: 轮询等待解析完成
-          graphStore.setBusy('解析 ' + f.name + '（后端处理中...）')
+          // Step 2: 轮询等待解析完成（大文件会带上解析备注，例如「已截断」）
+          graphStore.setBusy('解析 ' + f.name + '（后端处理中，大文件可能需要 1-2 分钟）')
           const epoch = ++this._pollEpoch
-          const nodes = await pollForNodes(
+          const pollRes = await pollForNodes(
             fileId,
             p => graphStore.setProgress(p),
             epoch,
             this._pollEpoch
           )
-          if (nodes === null) {
+          if (pollRes === null) {
             // 轮询被新操作取消
             console.warn('[fileStore] poll cancelled for', f.name)
             break
+          }
+          const nodes = pollRes.nodes || []
+          if (pollRes.note) {
+            ElMessage.warning(`${f.name}：${pollRes.note}`)
           }
 
           // Step 3: 转换为前端格式
@@ -172,6 +222,7 @@ export const useFileStore = defineStore('file', {
             type: f.name.split('.').pop(),
             status: 'parsing',
             kpCount: kps.length,
+            parseNote: pollRes.note || '',
             parsedAt: Date.now()
           }
           this.uploadedFiles.push(fileMeta)

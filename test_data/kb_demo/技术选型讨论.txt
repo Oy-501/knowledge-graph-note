@@ -1,7 +1,21 @@
-# 技术选型讨论：Vue + Node.js 全栈方案
+# 技术选型讨论：全栈方案
 
-本次选型确定用 Vue 做前端框架，用 TypeScript 保证类型安全，服务端采用 Node.js。
-前后端之间用 RESTful API 通信，数据落 MySQL，接口文档以 HTTP 报文示例为准。
-之所以选 Vue 而不是 React，是因为团队现有成员对 Vue 的组件写法更熟悉。
+## Vue
+本次选型确定用 Vue 做前端框架，因为团队现有成员对 Vue 的组件写法更熟悉。
+Vue 与 TypeScript 的组合能保证类型安全，降低联调成本。
+
+## TypeScript
+TypeScript 保证类型安全，接口契约可以先用类型表达再写实现。
+TypeScript 的类型检查可以在构建阶段拦住大部分低级错误。
+
+## Node.js
+服务端采用 Node.js，与前端共用一门语言，减少上下文切换。
+Node.js 适合作为 BFF 层聚合后端服务。
+
+## Vite
 构建工具从 Webpack 换成 Vite，开发态启动速度明显提升。
-结论：Vue + Node.js + TypeScript + MySQL 的组合能满足当前项目的交付节奏。
+Vite 基于原生 ESM 提供按需编译，热更新更快。
+
+## MySQL
+MySQL 负责持久化业务数据，配合 SQL 完成复杂查询。
+MySQL 的读写分离方案可以缓解单库压力。

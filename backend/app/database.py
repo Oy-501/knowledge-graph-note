@@ -58,9 +58,13 @@ def init_db():
 _COLUMN_MIGRATIONS = {
     "files": [
         ("source_path", "ALTER TABLE files ADD COLUMN source_path VARCHAR(255)"),
+        ("parse_note", "ALTER TABLE files ADD COLUMN parse_note VARCHAR(255)"),
     ],
     "notes": [
         ("validation_report", "ALTER TABLE notes ADD COLUMN validation_report JSON"),
+    ],
+    "nodes": [
+        ("chunk_index", "ALTER TABLE nodes ADD COLUMN chunk_index INTEGER DEFAULT 0"),
     ],
 }
 

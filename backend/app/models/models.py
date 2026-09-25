@@ -31,6 +31,8 @@ class File(Base):
     parsed_at = Column(DateTime)
     status = Column(String(20), default="pending")  # pending, parsing, done, error
     node_count = Column(Integer, default=0)
+    # 解析备注：如「文件过大，已截断为前 20000 行 / 600 个知识点」
+    parse_note = Column(String(255))
 
     user = relationship("User", back_populates="files")
     nodes = relationship("Node", back_populates="file", cascade="all, delete-orphan")
@@ -62,6 +64,7 @@ class Node(Base):
     visible = Column(Boolean, default=True)
     isolate_blacklist = Column(JSON)  # JSON array of blocked node IDs
     upload_time = Column(Float)  # timestamp
+    chunk_index = Column(Integer, default=0)  # 大文件被切割时，本节点来自第几片
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
 
@@ -73,6 +76,87 @@ class Node(Base):
         Index("idx_nodes_file_id", "file_id"),
         Index("idx_nodes_user_status", "user_id", "status"),
     )
+
+
+class KnowledgeCandidate(Base):
+    """候选知识点（待判定/已判定）
+
+    大文件被智能切割后逐片解析，抽出的知识点先落这里；随后由「智能判定」给出
+    分数与依据，按分级策略决定：自动入知识库 / 进待审队列 / 驳回。
+    管理员可在后台看到每一条的判定依据（证据链）并人工裁决。
+    """
+    __tablename__ = "knowledge_candidates"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, default=1)
+    file_id = Column(Integer, ForeignKey("files.id"))
+    node_id = Column(Integer, ForeignKey("nodes.id"))
+    chunk_index = Column(Integer, default=0)      # 来自第几片
+    entity = Column(String(255), nullable=False)
+    title = Column(String(255))
+    description = Column(Text)
+    keywords = Column(JSON)
+    domain = Column(String(100))
+    level = Column(Integer, default=3)
+    source_text = Column(Text)                    # 原文证据
+    line_start = Column(Integer)
+    line_end = Column(Integer)
+    extract_confidence = Column(Float, default=0.7)   # 抽取阶段置信度
+    # ---- 判定结果 ----
+    verdict_score = Column(Float)                 # 智能判定总分 0~1
+    verdict_decision = Column(String(20), default="pending")  # accept|reject|pending
+    verdict_reason = Column(Text)                 # 人类可读理由
+    verdict_evidence = Column(JSON)               # 证据链 [{type, source, detail, url, weight}]
+    verdict_stage = Column(String(20), default="auto")  # auto|human
+    verdict_web = Column(String(20), default="skipped")  # ok|unavailable|skipped
+    reviewed_by = Column(String(50))
+    reviewed_at = Column(DateTime)
+    review_note = Column(Text)
+    status = Column(String(20), default="open")   # open|accepted|rejected|merged
+    kb_entry_id = Column(Integer)                 # 入库后的知识库条目 id
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_cand_status", "status", "verdict_decision"),
+        Index("idx_cand_file", "file_id"),
+    )
+
+
+class AuditLog(Base):
+    """操作审计：记录「谁做了什么、依据是什么」
+
+    detail 里保存可复核的依据：输入快照、触发的规则/判定证据、结果与耗时。
+    后台管理页据此还原"用户操作的根据"。
+    """
+    __tablename__ = "audit_logs"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, default=1)
+    actor = Column(String(50), default="user")    # user|admin|system
+    action = Column(String(60), nullable=False)   # upload|parse|split|verdict|review|delete|profile|kb_import...
+    target_type = Column(String(40))              # file|node|candidate|kb_entry|profile|user
+    target_id = Column(Integer)
+    target_name = Column(String(255))
+    summary = Column(String(500))
+    detail = Column(JSON)                         # 依据明细
+    status = Column(String(20), default="ok")     # ok|warn|error
+    duration_ms = Column(Integer)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_audit_action", "action"),
+        Index("idx_audit_created", "created_at"),
+    )
+
+
+class UserProfile(Base):
+    """个人主页：昵称/简介/头像/自定义背景（图片存服务端 uploads 目录）"""
+    __tablename__ = "user_profiles"
+    user_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
+    display_name = Column(String(100))
+    bio = Column(Text)
+    avatar_url = Column(String(500))
+    background_url = Column(String(500))
+    background_config = Column(JSON)   # {opacity, blur, scope, fit}
+    updated_at = Column(DateTime, default=datetime.utcnow)
 
 
 class NodeSource(Base):

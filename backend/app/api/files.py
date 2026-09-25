@@ -1,24 +1,84 @@
 """文件上传、解析、同步与删除 API"""
 import json
-from fastapi import APIRouter, Depends, UploadFile, File as FastAPIFile, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File as FastAPIFile, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.orm import Session
+from app.config import settings
 from app.database import get_db
-from app.models.models import File, Node, NodeSource, Link, IsolateBlacklist, NoteNode
+from app.models.models import (
+    File, Node, NodeSource, Link, IsolateBlacklist, NoteNode, KnowledgeCandidate,
+)
 from app.services.parser import parse_and_extract
 from app.services.inference import infer_links_for_new_file
+from app.services.file_splitter import plan_split, describe_plan, summarize_pieces
+from app.services import audit
+from app.services import web_probe  # noqa: F401  （保持服务模块可用性检查）
 
 router = APIRouter()
 
 
+def upload_limits() -> dict:
+    """上传统一上限（前端也读这个接口，保证前后端口径一致）"""
+    return {
+        "max_upload_mb": settings.MAX_UPLOAD_MB_HARD,
+        "soft_split_mb": round(settings.SPLIT_TARGET_CHARS / 1024 / 1024, 1),
+        "split_target_lines": settings.SPLIT_TARGET_LINES,
+        "max_nodes_per_file": settings.MAX_NODES_PER_FILE,
+        "max_nodes_total": settings.MAX_NODES_PER_FILE_TOTAL,
+        "accept": [".md", ".markdown", ".txt", ".csv", ".tsv", ".json", ".log"],
+        "advice": (
+            f"超过 {settings.SPLIT_TARGET_LINES} 行或 "
+            f"{round(settings.SPLIT_TARGET_CHARS / 1024 / 1024, 1)}MB 的文件会"
+            f"自动按结构切割成多片逐片解析（内容不会丢），无需手动拆分；"
+            f"硬上限 {settings.MAX_UPLOAD_MB_HARD}MB。"
+        ),
+    }
+
+
+async def _read_text_limited(upload: UploadFile) -> str:
+    """限额读取上传文件（硬上限内一律接收，超限交给智能切割）
+
+    - 超过硬上限 MAX_UPLOAD_MB_HARD → 413（只读到 limit+1 字节就判定，不会被撑爆）
+    - 疑似二进制（含 NUL 字节）→ 415
+    """
+    limit = settings.MAX_UPLOAD_MB_HARD * 1024 * 1024
+    raw = await upload.read(limit + 1)
+    if len(raw) > limit:
+        raise HTTPException(
+            status_code=413,
+            detail=(f"文件超过硬上限 {settings.MAX_UPLOAD_MB_HARD}MB（当前 ≥ "
+                    f"{len(raw) / 1024 / 1024:.1f}MB）。请拆分成多个文件分批上传。"),
+        )
+    if not raw:
+        raise HTTPException(status_code=400, detail="文件内容为空。")
+    if b"\x00" in raw[:8192]:
+        raise HTTPException(
+            status_code=415,
+            detail=("检测到二进制内容（PDF / Office / 压缩包等）。系统只解析纯文本，"
+                    "请先另存为 .md / .txt / .csv 再上传。"),
+        )
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return raw.decode("gbk", errors="replace")
+
+
+@router.get("/limits")
+def get_upload_limits():
+    """返回上传/解析上限，供前端做前置校验与提示"""
+    return upload_limits()
+
+
 def _purge_file_nodes(db: Session, file_id: int) -> int:
-    """清除某文件产出的全部节点与关联（来源段/连线/隔离黑名单），返回清除的节点数。
+    """清除某文件产出的全部节点与关联（来源段/连线/隔离黑名单/候选知识点），返回清除的节点数。
 
     供「删除文件」与「本地文件重新解析（sync 内容更新）」复用，
     保证图谱中不留已删文档的孤立残影（§15 无残留）。
     """
     node_ids = [n.id for n in db.query(Node).filter_by(file_id=file_id).all()]
+    # 候选知识点随文件一起清掉，避免后台待审队列里留下已删文件的条目
+    db.query(KnowledgeCandidate).filter_by(file_id=file_id).delete(synchronize_session=False)
     if not node_ids:
         return 0
     # bulk delete 不走 ORM cascade，须先清所有引用 node_id 的关联行
@@ -46,12 +106,8 @@ async def upload_file(
     db: Session = Depends(get_db),
     background_tasks: BackgroundTasks = None
 ):
-    """上传文件并异步解析"""
-    content = await file.read()
-    try:
-        text = content.decode("utf-8")
-    except UnicodeDecodeError:
-        text = content.decode("gbk", errors="replace")
+    """上传文件并异步解析（大文件自动智能切割，不再直接拒绝）"""
+    text = await _read_text_limited(file)
 
     # 创建文件记录
     file_record = File(
@@ -64,6 +120,34 @@ async def upload_file(
     db.commit()
     db.refresh(file_record)
 
+    # 预演切割方案：前端与审计都能看到「会切成几片、按什么边界切、为什么」
+    plan = plan_split(
+        text,
+        target_lines=settings.SPLIT_TARGET_LINES,
+        target_chars=settings.SPLIT_TARGET_CHARS,
+        max_pieces=settings.SPLIT_MAX_PIECES,
+        overlap_lines=settings.SPLIT_OVERLAP_LINES,
+    )
+    audit.log_event(
+        db, "upload", actor="user", user_id=user_id, target_type="file",
+        target_id=file_record.id, target_name=file.filename,
+        summary=(f"上传《{file.filename}》：{plan['total_lines']} 行 / {plan['total_chars']} 字符"
+                 + ("，将自动切割" if plan["needed"] else "，无需切割")),
+        detail={
+            "size_chars": len(text),
+            "total_lines": plan["total_lines"],
+            "need_split": plan["needed"],
+            "pieces": summarize_pieces(plan),
+            "limits": upload_limits(),
+            "decision_basis": (
+                f"切割阈值 {settings.SPLIT_TARGET_LINES} 行 / {settings.SPLIT_TARGET_CHARS} 字符；"
+                f"实际 {plan['total_lines']} 行 → " + ("需要切割" if plan["needed"] else "无需切割")
+            ),
+        },
+        commit=False,
+    )
+    db.commit()
+
     # 异步解析
     if background_tasks:
         background_tasks.add_task(parse_and_extract, file_record.id, user_id)
@@ -73,8 +157,16 @@ async def upload_file(
     return {
         "file_id": file_record.id,
         "name": file.filename,
+        "size": len(text),
         "status": "parsing",
-        "message": "文件已上传，正在解析"
+        "split": {
+            "needed": plan["needed"],
+            "pieces": summarize_pieces(plan),
+            "message": describe_plan(plan),
+        },
+        "limits": upload_limits(),
+        "message": ("文件已上传，正在解析" if not plan["needed"]
+                    else f"文件已上传，将切割为 {len(plan['pieces'])} 片逐片解析"),
     }
 
 
@@ -87,6 +179,15 @@ def delete_file(file_id: int, user_id: int = 1, db: Session = Depends(get_db)):
 
     deleted_nodes = _purge_file_nodes(db, file_id)
     db.delete(file_record)
+    audit.log_event(
+        db, "delete_file", actor="user", user_id=user_id, target_type="file",
+        target_id=file_id, target_name=file_record.name,
+        summary=f"删除文件《{file_record.name}》，连带清除 {deleted_nodes} 个知识点与相关连线、候选",
+        detail={"deleted_nodes": deleted_nodes,
+                "cascaded": ["nodes", "node_sources", "links", "isolate_blacklist",
+                             "note_nodes", "knowledge_candidates"]},
+        commit=False,
+    )
     db.commit()
 
     return {
@@ -113,6 +214,14 @@ def sync_file(req: FileSyncRequest, db: Session = Depends(get_db)):
     """
     if not req.source_path:
         return {"ok": False, "message": "缺少 source_path"}
+
+    # 本地工作区同步同样走上限保护：超大笔记拒绝入库，避免拖垮服务
+    max_chars = settings.MAX_UPLOAD_MB_HARD * 1024 * 1024
+    if len(req.content or "") > max_chars:
+        return {
+            "ok": False,
+            "message": (f"笔记内容超过 {settings.MAX_UPLOAD_MB_HARD}MB 上限，已跳过同步。")
+        }
 
     file_record = (
         db.query(File)
@@ -200,6 +309,8 @@ def list_files(user_id: int = 1, db: Session = Depends(get_db)):
                 "name": f.name,
                 "status": f.status,
                 "node_count": f.node_count,
+                "parse_note": f.parse_note,
+                "size": len(f.content or ""),
                 "uploaded_at": f.uploaded_at.isoformat() if f.uploaded_at else None
             }
             for f in files

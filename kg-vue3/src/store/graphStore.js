@@ -14,6 +14,7 @@
  */
 
 import { defineStore } from 'pinia'
+import { ElMessage } from 'element-plus'
 import { useConfigStore } from './configStore'
 import { useGroupStore } from './groupStore'
 import { knowledgeAPI, graphAPI } from '@/api/index'
@@ -87,6 +88,7 @@ export const useGraphStore = defineStore('graph', {
     restartTick: 0,
     orphanCount: 0,
     lastError: '',
+    _oversizeWarned: false,  // 大图谱提示只弹一次，避免反复打扰
     validationReport: null,
     autoAcceptLow: false,
     validationPendingCount: 0,
@@ -344,6 +346,15 @@ export const useGraphStore = defineStore('graph', {
       this.refreshOrphanCount()
       this.version++
       this.restartTick++
+
+      // 大图谱提示：渲染端会自动降级（少画标签、降斥力），这里同步告知用户可用的手段
+      if (this.nodes.length > 1200 && !this._oversizeWarned) {
+        this._oversizeWarned = true
+        ElMessage.warning(
+          `图谱较大（${this.nodes.length} 个知识点）：已自动降低渲染开销，` +
+          `仅显示高度节点的文字标签。建议用左侧「分组 / 风格筛选」聚焦一个范围。`
+        )
+      }
     },
 
     /**

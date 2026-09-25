@@ -137,11 +137,14 @@ def embed_to_db(nodes: list, db) -> None:
         logger.error(f"Batch encode failed: {e}")
         return
 
+    # 一次性查出这批节点再回填（原来每个节点一次 SELECT，大文件下几千次查询非常致命）
+    id_list = [n.get("id") for n in nodes if n.get("id")]
+    node_rows = {n.id: n for n in db.query(Node).filter(Node.id.in_(id_list)).all()} if id_list else {}
+
     for i, node_data in enumerate(nodes):
-        if i < len(vectors):
-            node_id = node_data.get("id")
-            if node_id:
-                node = db.query(Node).filter_by(id=node_id).first()
-                if node:
-                    node.embedding = json.dumps(vectors[i])
+        if i >= len(vectors):
+            continue
+        node = node_rows.get(node_data.get("id"))
+        if node:
+            node.embedding = json.dumps(vectors[i])
     db.commit()

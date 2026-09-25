@@ -19,6 +19,21 @@
           :class="{ active: currentView === 'kb' }"
           @click="currentView = 'kb'"
         >知识库</button>
+        <button type="button"
+          class="nav-tab"
+          :class="{ active: currentView === 'summary' }"
+          @click="currentView = 'summary'"
+        >图谱总结</button>
+        <button type="button"
+          class="nav-tab"
+          :class="{ active: currentView === 'profile' }"
+          @click="currentView = 'profile'"
+        >个人主页</button>
+        <button type="button"
+          class="nav-tab"
+          :class="{ active: currentView === 'admin' }"
+          @click="currentView = 'admin'"
+        >后台管理</button>
       </div>
       <div class="app-nav-actions">
         <button type="button"
@@ -92,6 +107,21 @@
     <div v-show="currentView === 'kb'" class="app-view kb-view-wrap">
       <KnowledgeBaseView v-if="kbMounted" />
     </div>
+
+    <!-- 图谱总结视图（懒加载：总结 + 流程图 + 导出文档/PPT） -->
+    <div v-show="currentView === 'summary'" class="app-view kb-view-wrap">
+      <GraphSummaryView v-if="summaryMounted" />
+    </div>
+
+    <!-- 个人主页（头像 / 自定义背景 / 我的数据） -->
+    <div v-show="currentView === 'profile'" class="app-view kb-view-wrap">
+      <ProfileView v-if="profileMounted" @open-admin="currentView = 'admin'" />
+    </div>
+
+    <!-- 后台管理（口令保护：判定依据 / 候选审阅 / 操作审计） -->
+    <div v-show="currentView === 'admin'" class="app-view kb-view-wrap">
+      <AdminView v-if="adminMounted" />
+    </div>
   </div>
 </template>
 
@@ -127,9 +157,22 @@ const workbenchMounted = ref(false)
 const KnowledgeBaseView = defineAsyncComponent(() => import('@/components/KnowledgeBaseView.vue'))
 const kbMounted = ref(false)
 
+// 图谱总结视图（含 mermaid 动态加载，必须懒挂载避免拖慢首屏）
+const GraphSummaryView = defineAsyncComponent(() => import('@/components/GraphSummaryView.vue'))
+const summaryMounted = ref(false)
+
+// 个人主页 / 后台管理（同样懒加载）
+const ProfileView = defineAsyncComponent(() => import('@/components/ProfileView.vue'))
+const AdminView = defineAsyncComponent(() => import('@/components/AdminView.vue'))
+const profileMounted = ref(false)
+const adminMounted = ref(false)
+
 watch(currentView, v => {
   if (v === 'workbench') workbenchMounted.value = true
   if (v === 'kb') kbMounted.value = true
+  if (v === 'summary') summaryMounted.value = true
+  if (v === 'profile') profileMounted.value = true
+  if (v === 'admin') adminMounted.value = true
 })
 
 // 左侧面板折叠区块状态（localStorage 持久化）

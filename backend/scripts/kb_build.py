@@ -63,6 +63,44 @@ def sync_corpus(db) -> dict:
     }
 
 
+def reparse_all(db) -> dict:
+    """按最新解析规则重新解析全部文件：清旧节点 → 重新抽取 → 重算知识关联
+
+    用于解析规则改进后（例如「一、基础概念辨析」这类章节标题不再被当成知识点）
+    把历史产出的脏节点清掉重建。注意：节点上的手工编辑（标题/描述）会随重建丢失。
+    """
+    from app.models.models import File, KbRelation
+    from app.api.files import _purge_file_nodes
+    from app.services.parser import parse_and_extract
+    from app.services.kb_index import build_relations_from_entries
+    from app.services import kb_link
+
+    files = db.query(File).order_by(File.id.asc()).all()
+    before = sum(f.node_count or 0 for f in files)
+
+    for f in files:
+        removed = _purge_file_nodes(db, f.id)
+        f.status = "pending"
+        f.node_count = 0
+        db.commit()
+        parse_and_extract(f.id, f.user_id or 1)
+        db.refresh(f)
+
+    db.query(KbRelation).filter(KbRelation.origin == "derived").delete(synchronize_session=False)
+    db.commit()
+    rel = build_relations_from_entries(db)
+    kb_link.kb_rebuild_all(db, user_id=1)
+
+    after = sum(f.node_count or 0 for f in db.query(File).all())
+    return {
+        "files": len(files),
+        "nodes_before": before,
+        "nodes_after": after,
+        "relations_derived": rel.get("created"),
+        "message": f"已按最新规则重解析 {len(files)} 个文件：节点 {before} → {after}",
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description="知识库层构建工具")
     parser.add_argument("--relations-only", action="store_true", help="只推导知识库关系边")
@@ -73,6 +111,8 @@ def main():
     parser.add_argument("--sample", type=str, default="", help="对一段文本做知识锚定抽样")
     parser.add_argument("--sync-corpus", action="store_true",
                         help="把语料里新增的条目增量补进知识库（只增不删，不覆盖已有条目）")
+    parser.add_argument("--reparse", action="store_true",
+                        help="按最新解析规则重新解析全部文件（清旧节点后重建，再重算知识关联）")
     args = parser.parse_args()
 
     init_db()
@@ -80,6 +120,11 @@ def main():
     try:
         ensure_default_user(db)
         seed_knowledge_base(db)
+
+        if args.reparse:
+            result = reparse_all(db)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return
 
         if args.sync_corpus:
             result = sync_corpus(db)
