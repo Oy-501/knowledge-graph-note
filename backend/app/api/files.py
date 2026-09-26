@@ -71,17 +71,33 @@ def get_upload_limits():
 
 
 def _purge_file_nodes(db: Session, file_id: int) -> int:
-    """清除某文件产出的全部节点与关联（来源段/连线/隔离黑名单/候选知识点），返回清除的节点数。
+    """清除某文件产出的全部节点与关联，返回清除的节点数。
 
     供「删除文件」与「本地文件重新解析（sync 内容更新）」复用，
-    保证图谱中不留已删文档的孤立残影（§15 无残留）。
+    保证图谱与知识画像中不留已删文档的残留。
+
+    ⚠ 这里必须覆盖**所有**外键指向 `files.id` 的表。
+    数据库开启了 `PRAGMA foreign_keys=ON`，漏一张表就会在删除文件时
+    抛 `FOREIGN KEY constraint failed` —— 而且报错点在 `DELETE FROM files`，
+    看不出是哪张子表没清（本轮就漏了知识画像与文件知识关联两张表）。
+    当前引用 files 的表：nodes / knowledge_candidates /
+    file_knowledge_profiles / file_knowledge_links。
+    新增此类表时，**务必同时在这里补一行**，否则删文件会失败。
     """
-    node_ids = [n.id for n in db.query(Node).filter_by(file_id=file_id).all()]
-    # 候选知识点随文件一起清掉，避免后台待审队列里留下已删文件的条目
+    from app.models.models import FileKnowledgeLink, FileKnowledgeProfile
+
+    # ---- 文件级关联表：与是否有节点无关，必须先清 ----
     db.query(KnowledgeCandidate).filter_by(file_id=file_id).delete(synchronize_session=False)
+    db.query(FileKnowledgeProfile).filter_by(file_id=file_id).delete(synchronize_session=False)
+    db.query(FileKnowledgeLink).filter(
+        (FileKnowledgeLink.source_file_id == file_id) |
+        (FileKnowledgeLink.target_file_id == file_id)
+    ).delete(synchronize_session=False)
+
+    # ---- 节点级关联表：先取 node_id 再逐张清理（bulk delete 不走 ORM cascade）----
+    node_ids = [n.id for n in db.query(Node).filter_by(file_id=file_id).all()]
     if not node_ids:
         return 0
-    # bulk delete 不走 ORM cascade，须先清所有引用 node_id 的关联行
     db.query(NodeSource).filter(
         NodeSource.node_id.in_(node_ids)
     ).delete(synchronize_session=False)

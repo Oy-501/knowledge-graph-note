@@ -1,0 +1,173 @@
+/* ============================================================
+   AI 交互增强层（ai-ui.css）
+   ------------------------------------------------------------
+   分工说明（本轮改版后重新划清）：
+     · main.css    —— 设计令牌 + 全站结构与业务样式
+     · texture.css —— 素材层（真实纹理/摄影背景 + 玻璃表面 + 霓虹辉光）
+     · ai-ui.css   —— **只放"交互反馈"**：悬停、聚焦、过渡、动效
+
+   为什么要把这三者拆开：上一版 ai-ui.css 里既有素材（极光渐变）
+   又有令牌消费（按钮渐变）又有交互（hover 发光），三件事混在一起，
+   结果「换一套视觉」必须重写整个文件。按职责拆分之后，
+   以后换素材只动 texture.css，换令牌只动 main.css，
+   交互反馈可以独立迭代。
+
+   回退方式：在 main.js 注释掉 import './styles/ai-ui.css' 即可，
+   界面失去动效但功能与布局完全不受影响。
+   ============================================================ */
+
+/* ========== ① 图谱节点 / 连线：悬停与选中反馈 ========== */
+/* 节点悬停：加描边 + 同色外发光。
+   为什么用 drop-shadow 而不是 filter: blur —— blur 会重采样整个子树，
+   节点多的时候（数百个）直接掉帧；drop-shadow 走的是同一条合成路径，
+   但半径小、开销低得多。 */
+.node-group:hover .node-circle {
+  stroke-width: 2.5;
+  filter: drop-shadow(0 0 7px var(--accent-glow));
+}
+.node-group:hover .node-label {
+  font-weight: 600;
+  fill: var(--text-primary);
+}
+/* 选中的节点给一道持续的呼吸光环，和"悬停"区分开 */
+.node-group.is-selected .node-circle {
+  filter: drop-shadow(0 0 10px var(--accent)) drop-shadow(0 0 22px var(--accent-glow));
+}
+
+.link-line { transition: stroke-opacity var(--dur-fast) var(--ease-out); }
+.link-line:hover {
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--accent) 55%, transparent));
+}
+
+/* ========== ② 主按钮上的高光扫过（shimmer） ========== */
+/* 一次性、不循环 —— 循环的 shimmer 是"加载感"，
+   而这里的按钮是"可点"，两者语义不同，混用会让用户以为没点下去。 */
+.btn-primary,
+.el-button--primary:not(.is-text):not(.is-link) {
+  position: relative;
+  overflow: hidden;
+}
+.btn-primary::after,
+.el-button--primary:not(.is-text):not(.is-link)::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0; left: -70%;
+  width: 45%;
+  background: linear-gradient(
+    105deg,
+    transparent,
+    color-mix(in srgb, #ffffff 34%, transparent),
+    transparent
+  );
+  transform: skewX(-18deg);
+  transition: left 0.55s var(--ease-out);
+  pointer-events: none;
+}
+.btn-primary:hover::after,
+.el-button--primary:not(.is-text):not(.is-link):hover::after { left: 125%; }
+
+/* ========== ③ 卡片：边缘光（只在悬停时出现） ========== */
+.ui-card,
+.el-card {
+  position: relative;
+  transition: transform var(--dur-base) var(--ease-out),
+              box-shadow var(--dur-base) var(--ease-out);
+}
+.ui-card::before,
+.el-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    140deg,
+    color-mix(in srgb, var(--accent) 45%, transparent) 0%,
+    transparent 32%,
+    transparent 68%,
+    color-mix(in srgb, var(--violet) 42%, transparent) 100%
+  );
+  /* 用 mask 抠出 1px 边框，避免再加一个 DOM 元素 */
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+.ui-card:hover::before,
+.el-card:hover::before { opacity: 1; }
+.ui-card:hover { transform: translateY(-2px); }
+
+/* ========== ④ 折叠面板：标题胶囊 ========== */
+.panel-collapse .el-collapse-item__header {
+  border-radius: 8px;
+  margin: 2px 8px 0;
+  width: calc(100% - 16px);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--bg-tertiary) 66%, transparent),
+    transparent
+  );
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.panel-collapse .el-collapse-item__header:hover {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 14%, transparent),
+    transparent
+  );
+}
+
+/* ========== ⑤ 监控卡片：数值用霓虹渐变字 ========== */
+.monitor-card .mc-num {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--violet) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+/* 但「异常」数值不能是渐变 —— 语义色被渐变吃掉就看不出是警告了 */
+.monitor-card.warn .mc-num {
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  color: var(--danger);
+}
+
+/* ========== ⑥ 骨架屏：流光扫过 ========== */
+@keyframes ai-sheen {
+  0%   { background-position: -180% 0; }
+  100% { background-position: 280% 0; }
+}
+.skeleton,
+.el-skeleton__item {
+  background-image: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--bg-tertiary) 90%, transparent) 30%,
+    color-mix(in srgb, var(--accent) 10%, transparent) 50%,
+    color-mix(in srgb, var(--bg-tertiary) 90%, transparent) 70%
+  );
+  background-size: 220% 100%;
+  animation: ai-sheen 1.5s linear infinite;
+}
+
+/* ========== ⑦ 视图切换：淡入 + 轻微上浮 ========== */
+@keyframes ai-view-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+.app-view { animation: ai-view-in 0.26s var(--ease-out); }
+
+/* 通用点按反馈 */
+.click-scale { transition: transform var(--dur-fast) var(--ease-out); }
+.click-scale:active { transform: scale(0.94); }
+
+/* ========== ⑧ 尊重「减少动态效果」偏好 ========== */
+@media (prefers-reduced-motion: reduce) {
+  .btn-primary::after,
+  .el-button--primary:not(.is-text):not(.is-link)::after { display: none; }
+  .skeleton,
+  .el-skeleton__item { animation: none; }
+  .app-view { animation: none; }
+  .node-group:hover .node-circle,
+  .node-group.is-selected .node-circle { filter: none; }
+}

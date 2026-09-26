@@ -439,14 +439,14 @@ onMounted(async () => {
   margin-bottom: 8px;
 }
 .fws-empty-title {
-  font-size: 13px;
+  font-size: var(--fs-md);
   font-weight: 600;
   color: var(--text-primary);
   margin: 0;
 }
 .fws-empty-sub,
 .fws-us-sub {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   line-height: 1.6;
   margin: 0;
@@ -457,7 +457,7 @@ onMounted(async () => {
   background: var(--bg-tertiary);
   padding: 1px 4px;
   border-radius: 3px;
-  font-size: 10px;
+  font-size: var(--fs-xs);
 }
 
 /* ---------- 通用按钮 ---------- */
@@ -468,7 +468,7 @@ onMounted(async () => {
   background: var(--bg-secondary);
   color: var(--text-secondary);
   border-radius: var(--radius-full);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   cursor: pointer;
   transition: all var(--dur-fast) var(--ease-out);
 }
@@ -485,8 +485,8 @@ onMounted(async () => {
   cursor: not-allowed;
 }
 .fws-btn-primary {
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent);
   border-color: var(--accent);
   box-shadow: var(--shadow-sm);
 }
@@ -500,7 +500,7 @@ onMounted(async () => {
 .fws-btn-small {
   margin: 0;
   padding: 3px 12px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 
 /* ---------- 头部 ---------- */
@@ -519,7 +519,7 @@ onMounted(async () => {
   flex: 1;
   min-width: 0;
   padding: 3px 8px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   background: var(--bg-secondary);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
@@ -534,7 +534,7 @@ onMounted(async () => {
 .fws-ws-name {
   flex: 1;
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--text-primary);
   overflow: hidden;
@@ -550,7 +550,7 @@ onMounted(async () => {
   border: none;
   background: transparent;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--fs-md);
   cursor: pointer;
   padding: 2px 5px;
   border-radius: var(--radius-sm);
@@ -575,7 +575,7 @@ onMounted(async () => {
   background: var(--bg-secondary);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-full);
-  font-size: 10px;
+  font-size: var(--fs-xs);
 }
 .fws-os-dot {
   width: 6px;
@@ -595,7 +595,7 @@ onMounted(async () => {
   background: none;
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   padding: 0 2px;
 }
 .fws-os-close:hover { color: var(--text-primary); }
@@ -606,7 +606,7 @@ onMounted(async () => {
   flex-shrink: 0;
   padding: 1px 6px;
   border-radius: 8px;
-  font-size: 9px;
+  font-size: var(--fs-xs);
   border: 1px solid transparent;
   max-width: 110px;
   overflow: hidden;
@@ -637,7 +637,7 @@ onMounted(async () => {
   margin-top: 6px;
 }
 .fws-scan-report {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--warning, #e8a020);
 }
 
@@ -646,7 +646,7 @@ onMounted(async () => {
 .fws-tree-empty {
   text-align: center;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   padding: 24px 12px;
 }
 .fws-tree {
@@ -663,7 +663,7 @@ onMounted(async () => {
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   transition:
     background var(--dur-fast) var(--ease-out),
@@ -686,14 +686,14 @@ onMounted(async () => {
 .fws-chevron {
   width: 14px;
   flex-shrink: 0;
-  font-size: 9px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   text-align: center;
 }
 .fws-chevron-empty { visibility: hidden; }
 .fws-row-icon {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 .fws-row-name {
   flex: 1;
@@ -703,7 +703,7 @@ onMounted(async () => {
   white-space: nowrap;
 }
 .fws-dir-count {
-  font-size: 9px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   background: var(--bg-tertiary);
   padding: 0 6px;
@@ -721,7 +721,7 @@ onMounted(async () => {
   border: none;
   background: transparent;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   cursor: pointer;
   padding: 1px 4px;
   border-radius: 3px;
@@ -741,7 +741,7 @@ onMounted(async () => {
 .fws-tree-more {
   text-align: center;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   padding: 8px;
 }
 </style>

@@ -75,6 +75,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+import { RELATION_COLORS } from '@/utils/palette'
 import { useGraphStore } from '@/store/graphStore'
 import { answer, describePath } from '@/utils/qa'
 import { endpointId } from '@/utils/graph'
@@ -119,16 +120,8 @@ const pathDesc = computed(() => {
 })
 
 function relColor(type) {
-  const map = {
-    prerequisite: '#D4A574',
-    implementation: '#7CB8A0',
-    extension: '#8A9AA8',
-    theory: '#4F6F8F',
-    related: '#8A9AA8',
-    contains: '#7CB8A0',
-    depends_on: '#D4A574'
-  }
-  return map[type] || 'var(--accent)'
+  // 关系配色统一来自 utils/palette.js 的 RELATION_COLORS
+  return RELATION_COLORS[type] || RELATION_COLORS.default
 }
 </script>
 
@@ -151,7 +144,7 @@ function relColor(type) {
   border: 1px solid var(--border);
   border-radius: var(--radius-full);
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   outline: none;
   transition: border-color var(--dur-fast);
 }
@@ -165,7 +158,7 @@ function relColor(type) {
   border: 1px solid var(--border-light);
   background: var(--bg-tertiary);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   cursor: pointer;
   transition: all var(--dur-fast) var(--ease-out);
 }
@@ -174,8 +167,8 @@ function relColor(type) {
   color: var(--text-primary);
 }
 .kqa-btn-primary {
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent);
   border-color: var(--accent);
 }
 .kqa-btn-primary:hover {
@@ -190,11 +183,11 @@ function relColor(type) {
   gap: 6px;
 }
 .kqa-examples-label {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
 }
 .kqa-chip {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   padding: 3px 9px;
   border: 1px solid var(--border-light);
   border-radius: var(--radius-full);
@@ -212,10 +205,10 @@ function relColor(type) {
   text-align: center;
   padding: 20px 12px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .kqa-empty-sub {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   margin-top: 4px;
   opacity: 0.75;
 }
@@ -226,7 +219,7 @@ function relColor(type) {
   gap: 10px;
 }
 .kqa-summary {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-primary);
   background: var(--bg-secondary);
   border: 1px solid var(--border-light);
@@ -246,7 +239,7 @@ function relColor(type) {
   flex-wrap: wrap;
 }
 .kqa-hop-node {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--accent-strong);
   background: var(--accent-soft);
@@ -263,11 +256,11 @@ function relColor(type) {
   gap: 4px;
 }
 .kqa-hop-label {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 500;
 }
 .kqa-hop-score {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-family: var(--font-mono);
   color: var(--text-muted);
 }
@@ -279,12 +272,12 @@ function relColor(type) {
   margin-top: 2px;
 }
 .kqa-evidence-title {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-secondary);
 }
 .kqa-evidence {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   background: var(--bg-tertiary);
   border-left: 2px solid var(--accent);
@@ -315,7 +308,7 @@ function relColor(type) {
   gap: 8px;
 }
 .kqa-topic-name {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--text-primary);
   overflow: hidden;
@@ -324,13 +317,13 @@ function relColor(type) {
 }
 .kqa-topic-badge {
   flex-shrink: 0;
-  font-size: 9px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   font-family: var(--font-mono);
 }
 .kqa-topic-desc {
   margin-top: 4px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   line-height: 1.5;
 }

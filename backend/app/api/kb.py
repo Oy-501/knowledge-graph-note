@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.services.errors import clamp_paging, escape_like
 from app.models.models import (
     KnowledgeBase, KbRelation, KbImport, File, FileKnowledgeProfile, FileKnowledgeLink, Node, Link,
 )
@@ -67,15 +68,16 @@ def list_entries(
     """知识库条目列表（支持关键词/领域/层级筛选）"""
     query = db.query(KnowledgeBase)
     if keyword:
-        like = f"%{keyword}%"
-        query = query.filter(KnowledgeBase.entity.ilike(like))
+        like = f"%{escape_like(keyword)}%"
+        query = query.filter(KnowledgeBase.entity.ilike(like, escape='\\'))
     if domain:
         query = query.filter(KnowledgeBase.domain == domain)
     if level:
         query = query.filter(KnowledgeBase.level == level)
 
     total = query.count()
-    rows = query.order_by(KnowledgeBase.id.desc()).offset(offset).limit(min(limit, 200)).all()
+    _lim, _off = clamp_paging(limit, offset, max_limit=200)
+    rows = query.order_by(KnowledgeBase.id.desc()).offset(_off).limit(_lim).all()
 
     rel_counter: Counter = Counter()
     for r in db.query(KbRelation).all():
@@ -167,7 +169,8 @@ def list_relations(entity: str = "", limit: int = 200, db: Session = Depends(get
         query = query.filter(
             (KbRelation.source_entity == entity) | (KbRelation.target_entity == entity)
         )
-    rows = query.order_by(KbRelation.weight.desc()).limit(min(limit, 500)).all()
+    _lim, _ = clamp_paging(limit, max_limit=500, default_limit=100)
+    rows = query.order_by(KbRelation.weight.desc()).limit(_lim).all()
     return {"total": len(rows), "relations": [{
         "id": r.id, "source": r.source_entity, "target": r.target_entity,
         "relation_type": r.relation_type, "relation_label": r.relation_label,
@@ -261,7 +264,8 @@ def preview_kb(payload: PreviewPayload, user_id: int = 1, db: Session = Depends(
 @router.get("/imports")
 def list_imports(limit: int = 20, db: Session = Depends(get_db)):
     """知识库上传历史"""
-    rows = db.query(KbImport).order_by(KbImport.id.desc()).limit(min(limit, 100)).all()
+    _lim, _ = clamp_paging(limit, max_limit=100, default_limit=30)
+    rows = db.query(KbImport).order_by(KbImport.id.desc()).limit(_lim).all()
     return {"imports": [{
         "id": r.id, "name": r.name, "format": r.format, "status": r.status,
         "entry_total": r.entry_total, "new_count": r.new_count, "merged_count": r.merged_count,
@@ -329,8 +333,9 @@ def kb_graph(domain: str = "", keyword: str = "", limit: int = 150, db: Session 
     if domain:
         query = query.filter(KnowledgeBase.domain == domain)
     if keyword:
-        query = query.filter(KnowledgeBase.entity.ilike(f"%{keyword}%"))
-    rows = query.order_by(KnowledgeBase.level.asc()).limit(min(limit, 400)).all()
+        query = query.filter(KnowledgeBase.entity.ilike(f"%{escape_like(keyword)}%", escape='\\'))
+    _lim, _ = clamp_paging(limit, max_limit=400, default_limit=200)
+    rows = query.order_by(KnowledgeBase.level.asc()).limit(_lim).all()
     names = {e.entity for e in rows}
 
     rels = db.query(KbRelation).all()

@@ -376,6 +376,43 @@ function escapeHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
+/**
+ * 转义并返回「原文下标 → 转义后下标」的映射表。
+ *
+ * 为什么需要映射：校验问题（validationIssues）的下标是基于**原文**的，
+ * 而预览必须先整体转义再套 Markdown 标签。转义会改变长度
+ * （`<` 1 字符 → `&lt;` 4 字符），直接沿用原下标会错位。
+ * 先用映射换算，才能既保证安全又不破坏波浪线标注位置。
+ */
+function escapeWithMap(src) {
+  const text = String(src)
+  const map = new Array(text.length + 1)
+  let out = ''
+  for (let i = 0; i < text.length; i++) {
+    map[i] = out.length
+    const ch = text[i]
+    if (ch === '&') out += '&amp;'
+    else if (ch === '<') out += '&lt;'
+    else if (ch === '>') out += '&gt;'
+    else out += ch
+  }
+  map[text.length] = out.length
+  return { escaped: out, map }
+}
+
+/**
+ * 链接协议白名单。
+ * 即使内容已转义，`[文字](javascript:alert(1))` 仍会生成可点击的 javascript: 链接
+ * —— 转义防不住这一点，必须在生成 href 时校验协议。
+ * 放行：http/https/mailto、站内相对路径、锚点；其余一律置为 '#'。
+ */
+function safeHref(raw) {
+  const url = String(raw || '').trim()
+  if (/^(https?:|mailto:)/i.test(url)) return url
+  if (/^[/#?]/.test(url)) return url
+  return '#'
+}
+
 const ghostRef = ref(null)
 const ghostInnerRef = ref(null)
 
@@ -430,37 +467,63 @@ watch(() => props.content, () => { nextTick(syncGhostLayout) })
 watch(() => localContent.value, () => { nextTick(syncGhostLayout) })
 
 /** 源文本按 issue 包高亮 span（预览用；跳过代码块段，交给原 md 流水线继续处理） */
-function wrapPreviewIssues(source, issues) {
-  const list = (issues || []).filter(i => Number.isFinite(i.start) && i.start < i.end)
-  if (!list.length) return source
-  // 代码块范围（fence 内的内容不做 md 高亮，避免破坏 <pre>）
+/**
+ * 在**已转义**的文本上标注校验问题（波浪线）。
+ *
+ * 与旧版的区别：旧版直接拼接原文，等于把用户内容原样注入 innerHTML。
+ * 现在只在转义后的文本上切片，offsets 由调用方用映射表换算好，
+ * 因此无论内容里写什么都不会变成可执行的 HTML。
+ */
+function highlightEscaped(escaped, mappedIssues) {
+  const list = (mappedIssues || []).filter(i => Number.isFinite(i.start) && i.start < i.end)
+  if (!list.length) return escaped
+  // 代码块范围（fence 内的内容不做高亮，避免破坏 <pre>）
   const fenceRe = /```[\w]*\n[\s\S]*?```/g
   const fences = []
   let m
-  while ((m = fenceRe.exec(source))) fences.push([m.index, m.index + m[0].length])
+  while ((m = fenceRe.exec(escaped))) fences.push([m.index, m.index + m[0].length])
+
   const sorted = [...list].sort((a, b) => a.start - b.start)
   let out = ''
   let pos = 0
   for (const issue of sorted) {
     const s = Math.max(pos, Math.max(0, issue.start))
-    const e = Math.min(source.length, issue.end)
+    const e = Math.min(escaped.length, issue.end)
     if (e <= s || s < pos) continue
     const inFence = fences.some(([fs, fe]) => s < fe && e > fs)
     if (inFence) continue
-    out += source.slice(pos, s)
+    out += escaped.slice(pos, s)
     out += `<span class="wbe-pv wbe-pv-${issue.severity}" data-sev="${issue.severity}" title="${escapeHtml(sevTitle(issue))}">`
-    out += source.slice(s, e)
+    out += escaped.slice(s, e)
     out += '</span>'
     pos = e
   }
-  out += source.slice(pos)
+  out += escaped.slice(pos)
   return out
 }
 
-// 简单 Markdown 渲染
+// Markdown 预览渲染
+//
+// 安全约束（重要，改动前请先读）：
+// 输出会交给 v-html，因此**必须先把整段内容转义**，再叠加 Markdown 标签。
+// 顺序绝不能反：先套标签再转义会把标签本身也转义掉；而不转义就等于
+// 把笔记/上传文档里的任意 HTML 直接注入页面 —— 已实测可执行 onerror 脚本，
+// 属于存储型 XSS。（编辑区的 ghostHtml 层一直是对的，预览这一层漏了。）
 const renderedHtml = computed(() => {
-  let html = wrapPreviewIssues(localContent.value || '', props.validationIssues)
-  // 代码块
+  const raw = localContent.value || ''
+  const { escaped, map } = escapeWithMap(raw)
+
+  // 校验问题：把原始下标换算到转义后的下标，再标注波浪线
+  const mapped = (props.validationIssues || [])
+    .filter(i => Number.isFinite(i.start) && i.start < i.end)
+    .map(i => ({
+      ...i,
+      start: map[Math.max(0, Math.min(raw.length, i.start))],
+      end: map[Math.max(0, Math.min(raw.length, i.end))],
+    }))
+  let html = highlightEscaped(escaped, mapped)
+
+  // 代码块（此时内容已转义，标签 $1/$2 是安全的）
   html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code class="language-$1">$2</code></pre>')
   // 行内代码
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
@@ -471,20 +534,21 @@ const renderedHtml = computed(() => {
   html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>')
   // 粗体/斜体
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>')
+  html = html.replace(/(^|[^*])\*([^*]+?)\*/g, '$1<em>$2</em>')
   // 列表
   html = html.replace(/^- (.+)$/gm, '<li>$1</li>')
   html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
   // 引用
-  html = html.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
+  html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>')
   // 段落
   html = html.split('\n\n').map(p => {
     if (!p.trim()) return ''
     if (/^<(h[1-4]|ul|pre|blockquote)/.test(p.trim())) return p
     return '<p>' + p.replace(/\n/g, '<br>') + '</p>'
   }).join('')
-  // 链接
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+  // 链接：只放行白名单协议，避免 javascript: / data: 可点击脚本
+  html = html.replace(/\[([^\]]+)\]\(([^)]*)\)/g,
+    (_, text, href) => `<a href="${escapeHtml(safeHref(href))}" target="_blank" rel="noopener noreferrer">${text}</a>`)
 
   return html
 })
@@ -916,7 +980,7 @@ defineExpose({ focus })
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   background: var(--bg-tertiary);
   color: var(--accent-light);
   padding: 2px 8px;
@@ -927,7 +991,7 @@ defineExpose({ focus })
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   background: var(--bg-tertiary);
   color: var(--text-secondary);
   padding: 2px 8px;
@@ -959,7 +1023,7 @@ defineExpose({ focus })
 .wbe-lib-pill {
   display: inline-flex;
   align-items: center;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   padding: 2px 8px;
   border-radius: 10px;
   background: var(--bg-tertiary);
@@ -980,12 +1044,12 @@ defineExpose({ focus })
   background: none;
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   padding: 0;
   line-height: 1;
 }
 .wbe-add-tag {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   background: none;
   border: 1px dashed var(--border);
   color: var(--text-muted);
@@ -999,7 +1063,7 @@ defineExpose({ focus })
 .wbe-tag-input {
   width: 80px;
   padding: 2px 6px;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   background: var(--bg-secondary);
   border: 1px solid var(--accent);
   border-radius: 4px;
@@ -1027,7 +1091,7 @@ defineExpose({ focus })
   border: none;
   background: transparent;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.15s;
@@ -1037,8 +1101,8 @@ defineExpose({ focus })
   color: var(--text-primary);
 }
 .wbe-tool-btn.active {
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent);
 }
 
 /* 内容区 */
@@ -1065,7 +1129,7 @@ defineExpose({ focus })
   border: none;
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: var(--fs-base);
   line-height: 1.7;
   resize: none;
   outline: none;
@@ -1094,7 +1158,7 @@ defineExpose({ focus })
   width: 100%;
   padding: 16px;
   font-family: var(--font-mono);
-  font-size: 14px;
+  font-size: var(--fs-base);
   line-height: 1.7;
   color: transparent;
   white-space: pre-wrap;
@@ -1143,7 +1207,7 @@ defineExpose({ focus })
 }
 .wbe-preview-content {
   padding: 16px;
-  font-size: 14px;
+  font-size: var(--fs-base);
   line-height: 1.7;
   color: var(--text-primary);
 }
@@ -1151,7 +1215,7 @@ defineExpose({ focus })
 /* 内联关联提示 */
 .wbe-inline-hint {
   position: absolute;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   background: rgba(126, 176, 255, 0.15);
   color: var(--accent-light);
   padding: 1px 6px;
@@ -1179,7 +1243,7 @@ defineExpose({ focus })
 }
 .wbe-cm-item {
   padding: 6px 12px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-primary);
   cursor: pointer;
   border-radius: 4px;
@@ -1278,7 +1342,7 @@ defineExpose({ focus })
   background: var(--bg-secondary);
   border-top: 1px solid var(--border);
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   z-index: 10;
 }
 .wbe-status-title {
@@ -1301,13 +1365,13 @@ defineExpose({ focus })
   color: var(--text-muted);
 }
 .wbe-status-stat {
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 .wbe-status-sep {
   color: var(--border);
 }
 .wbe-status-save {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 500;
 }
 .wbe-status-saved { color: var(--success); }
@@ -1322,7 +1386,7 @@ defineExpose({ focus })
   border: 1px solid var(--border);
   background: var(--bg-tertiary);
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.15s;
@@ -1332,8 +1396,8 @@ defineExpose({ focus })
   color: var(--text-primary);
 }
 .wbe-status-exit {
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent);
   border-color: var(--accent);
   font-weight: 500;
   padding: 3px 12px;
@@ -1370,7 +1434,7 @@ defineExpose({ focus })
   border-bottom: 1px solid var(--border-light);
 }
 .wbe-dialog-header h4 {
-  font-size: 14px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   margin: 0;
 }
@@ -1391,7 +1455,7 @@ defineExpose({ focus })
   margin-bottom: 12px;
 }
 .wbe-dialog-section h5 {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-secondary);
   margin: 0 0 6px;
@@ -1403,7 +1467,7 @@ defineExpose({ focus })
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   outline: none;
 }
 .wbe-dialog-search:focus {
@@ -1420,7 +1484,7 @@ defineExpose({ focus })
 }
 .wbe-dialog-cand-name {
   flex: 1;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1431,18 +1495,18 @@ defineExpose({ focus })
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--text-secondary);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   padding: 2px 4px;
   outline: none;
   cursor: pointer;
 }
 .wbe-dialog-link-btn {
   padding: 3px 10px;
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent);
   border: none;
   border-radius: 4px;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   cursor: pointer;
   white-space: nowrap;
   transition: opacity 0.15s;
@@ -1451,7 +1515,7 @@ defineExpose({ focus })
   opacity: 0.9;
 }
 .wbe-dialog-empty {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   text-align: center;
   padding: 16px;
@@ -1467,7 +1531,7 @@ defineExpose({ focus })
   border: 1px solid var(--border);
   background: var(--bg-secondary);
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   border-radius: 6px;
   cursor: pointer;
 }
@@ -1515,8 +1579,8 @@ defineExpose({ focus })
 }
 .wbe-tool-btn:active { transform: scale(0.94); }
 .wbe-tool-btn.active {
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent);
   box-shadow: 0 2px 6px var(--accent-soft);
 }
 .wbe-textarea {
@@ -1575,7 +1639,7 @@ defineExpose({ focus })
   padding: 6px 10px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-primary);
   transition: background-color var(--dur-fast), color var(--dur-fast);
 }
@@ -1590,13 +1654,13 @@ defineExpose({ focus })
   white-space: nowrap;
 }
 .wbe-wl-type {
-  font-size: 9px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   flex-shrink: 0;
 }
 .wbe-wl-empty {
   padding: 10px 12px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
 }
 </style>

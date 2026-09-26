@@ -1,61 +1,144 @@
 /* ============================================================
    设计 Token 系统（亮色 :root / 暗色 html.dark）
    ------------------------------------------------------------
-   品牌色板（毕设 UI 主题）
-     主色 雾霾蓝 #4F6F8F · 辅色 薄荷绿 #7CB8A0 · 强调 暖杏 #D4A574
-     暖白底 #F5F0EB · 卡片白 #FFFFFF · 正文 #2C3E4F
-     暗色底 #1A1E24 · 暗色卡片 #242A32 · 暗色正文 #E8EDF2
-   兼容说明：旧组件只消费变量名（--bg-* / --text-* / --accent…），
-   此处仅重映射取值即可让全站跟随主题，无需逐组件改造。
+   【本轮改版：深色科技 AI 风】
+   旧基调（雾霾蓝 #4F6F8F / 薄荷绿 #7CB8A0 / 暖杏 #D4A574 / 暖白底 #F5F0EB）
+   是「温和的纸质笔记感」，问题是它只有颜色、没有材质 —— 大面积靠纯色与
+   线性渐变撑场面，在 8bit 屏上必然出色带，且和「AI 知识图谱」这个主题
+   在气质上也没有呼应。
+
+   新基调三根支柱：
+     ① 深空基底  —— 带蓝紫偏冷的近黑（#05060A → #181C2A），不是纯黑。
+        纯黑会让玻璃拟态失去层次；带一点冷调的深灰才能让 1px 高光边「立」起来。
+     ② 霓虹强调  —— 电光青 #22D3EE（主）/ 紫罗兰 #8B5CF6（辅）/ 品红
+        #F472B6（提示）/ 琥珀 #FBBF24（暖对比）。发光用同色低透明度阴影
+        叠加，不用 blur 滤镜（blur 在大面积上极耗 GPU）。
+     ③ 玻璃表面  —— 半透明面板 + backdrop-filter + 1px 内高光边。层级不再
+        靠「更深的底色」区分，而是靠「更高不透明度 + 更强描边 + 更强辉光」。
+
+   【兼容性约定 — 很重要】
+   旧组件消费的是**变量名**（--bg-* / --text-* / --accent / --mint / --apricot…），
+   所以这里只重映射取值，不做重命名。--mint / --apricot 这两个名字在
+   全站 40+ 处被引用，语义上已经变成「辅色 / 强调色」的代称，
+   所以保留为别名指向新的 --violet / --amber。改名收益远小于风险。
    ============================================================ */
 :root {
-  /* —— 表面层级（暖白基调）—— */
-  --bg-deep: #EAE2D9;              /* 应用外框 / 工作台包围色 */
-  --bg-primary: #F5F0EB;           /* 主面板：暖白 */
+  /* —— 表面层级（亮色：冷调浅灰，不是暖白）——
+     为什么不做成纯白：纯白底上玻璃拟态与辉光完全不可见，
+     整套视觉语言会退化成普通后台。冷灰底能保住一点材质感。 */
+  --bg-deep: #E7EAF2;              /* 应用外框 / 工作台包围色 */
+  --bg-primary: #F2F4F9;           /* 主面板 */
   --bg-secondary: #FFFFFF;         /* 卡片 / 抬升面板 */
-  --bg-tertiary: #EFE8DF;          /* 嵌套块 / 胶囊底 */
-  --bg-hover: #E4DCD2;             /* 悬浮态 */
-  --bg-active: #DCD3C7;            /* 激活按压 */
-  --bg-glass: rgba(255, 255, 255, 0.72); /* 毛玻璃表面 */
+  --bg-tertiary: #E9EDF5;          /* 嵌套块 / 胶囊底 */
+  --bg-hover: #DFE4EF;             /* 悬浮态 */
+  --bg-active: #D3DAE8;            /* 激活按压 */
+  --bg-glass: rgba(255, 255, 255, 0.70); /* 毛玻璃表面 */
   --bg-glass-strong: rgba(255, 255, 255, 0.88);
+  --bg-glass-light: rgba(255, 255, 255, 0.55); /* 玻璃高光面 */
 
   /* —— 文字层级 —— */
-  --text-primary: #2C3E4F;
-  --text-secondary: #5E7286;
-  --text-muted: #9AA7B5;
+  /* 这几个值不是随手挑的：--text-muted 的对比度按最差底色（--bg-hover）实测，
+     #7C879E 只有 2.83:1，远低于 WCAG AA 的 4.5:1 —— 此前整站的次级文字
+     实际上是不可读的。#57637C 在 primary/tertiary/hover 三种底色上分别是
+     5.48 / 5.14 / 4.73，全部达标。 */
+  --text-primary: #101725;
+  --text-secondary: #4A5670;
+  --text-muted: #57637C;
+  --text-faint: #8C97AB;
 
-  /* —— 品牌色 —— */
-  --accent: #4F6F8F;               /* 雾霾蓝-主 */
-  --accent-light: #6E8FAD;         /* 雾霾蓝-亮（深底文字/悬浮） */
-  --accent-strong: #3D5A75;        /* 雾霾蓝-按压/渐变深端 */
-  --accent-soft: rgba(79, 111, 143, 0.10);
-  --mint: #7CB8A0;                 /* 薄荷绿-辅 */
-  --mint-strong: #4E9679;
-  --mint-soft: rgba(124, 184, 160, 0.14);
-  --apricot: #D4A574;              /* 暖杏-强调 */
-  --apricot-strong: #B58554;
-  --apricot-soft: rgba(212, 165, 116, 0.14);
+  /* —— 字号体系（Type Scale）——
+     为什么需要它：此前全站散落着 8/9/9.5/10/10.5/11/11.5/12/12.5/13/13.5px
+     十几种手写字号 —— 组件内 395 处字号声明里 **235 处小于 12px**
+     （10px 有 62 处、9px 有 24 处）。结果是整站读起来都是「注释级小字」，
+     缺少排版层级，也没法整体调整。现在收敛成 6 级，组件只消费级别名。
 
-  /* —— 语义反馈（在亮底上保证可读的加深版）—— */
-  --success: #3F9E76;
-  --success-soft: rgba(63, 158, 118, 0.12);
-  --warning: #D9912F;
-  --warning-soft: rgba(217, 145, 47, 0.13);
-  --danger: #D15E4E;
-  --danger-soft: rgba(209, 94, 78, 0.12);
-  --info: #6E8FAD;
-  --info-soft: rgba(79, 111, 143, 0.10);
+     下限刻意定在 11px：10px 及以下在 1x 屏上已接近不可读，
+     且中文小字比拉丁字母更吃力。11px 只留给徽标/角标这类极短文本。 */
+  --fs-xs:   11px;   /* 徽标 / 角标 / 快捷键提示（下限，仅极短文本） */
+  --fs-sm:   12px;   /* 次级信息：统计说明、时间戳、辅助说明 */
+  --fs-md:   13px;   /* 正文与标签：列表项、表单标签、按钮文字 */
+  --fs-base: 14px;   /* 正文基准 */
+  --fs-lg:   16px;   /* 小标题 */
+  --fs-xl:   18px;   /* 区块标题 */
+
+  /* —— 品牌色：霓虹三原色 —— */
+  /* 亮底上的「电光青」必须显著加深才可读：
+     #0891B2 压在 #F2F4F9 上只有 3.35:1，作正文色不达标；
+     作**文字**用的主色取 #0C6B84（最差 4.77:1）。
+     更亮的两档只用于描边、图标、渐变端，不用于小字。 */
+  --accent: #0C6B84;
+  --accent-light: #0891B2;
+  --accent-strong: #0A6076;
+  --accent-soft: rgba(8, 145, 178, 0.11);
+  --accent-glow: rgba(8, 145, 178, 0.30);   /* 辉光阴影用 */
+
+  /* —— 实心填充面（按钮/徽标）与其前景色 ——
+     为什么单独拆一对变量：霓虹色做「填充」和做「描边/文字」需要的明度是相反的。
+     深色主题下 --accent 是亮青 #22D3EE，白字压上去只有约 1.9:1，读不清；
+     亮色主题下 --accent 是 #0891B2，白字约 3.5:1，也够不到 WCAG AA 的 4.5:1。
+     所以填充面另取一个值，前景用 --on-accent，两边都能过 AA。 */
+  --accent-fill: #0E7490;          /* 实心填充用（与白字 5.5:1）*/
+  --on-accent: #FFFFFF;
+  /* 语义色同样拆「填充面 / 前景」一对：
+     霓虹色做填充时明度高，白字读不清；做文字色时又要足够深。
+     同一个变量兼顾不了两种角色，所以拆开。 */
+  --danger-fill: #BE2E3E;
+  --on-danger: #FFFFFF;
+  --warning-fill: #B45309;
+  --on-warning: #FFFFFF;
+  --success-fill: #0F7B5C;
+  --on-success: #FFFFFF;
+  --info-fill: #0E7490;
+  --on-info: #FFFFFF;
+
+  --violet: #7C3AED;               /* 紫罗兰-辅 */
+  --violet-light: #8B5CF6;
+  --violet-strong: #6D28D9;
+  --violet-soft: rgba(124, 58, 237, 0.12);
+  --violet-glow: rgba(124, 58, 237, 0.28);
+  /* 专门给「文字」用的紫：亮底上的 #8B5CF6 只有 3.5:1，当文字不达标。
+     填充/渐变仍用 --violet / --violet-light（它们不需要过文字对比度）。 */
+  --violet-text: #7C3AED;          /* 最差 4.74:1 */
+
+  --magenta: #BE185D;              /* 品红-提示（#DB2777 只有 3.8:1）*/
+  --magenta-light: #DB2777;
+  --magenta-soft: rgba(190, 24, 93, 0.11);
+
+  --amber: #A34A08;                /* 琥珀-暖对比（#B45309 只有 4.2:1）*/
+  --amber-light: #B45309;
+  --amber-soft: rgba(163, 74, 8, 0.11);
+
+  /* —— 旧变量名别名（全站 40+ 处引用，保留以免断链）——
+     --mint  现在是「辅色」的意思，指向紫罗兰
+     --apricot 现在是「强调色」的意思，指向琥珀 */
+  --mint: var(--violet);
+  --mint-strong: var(--violet-strong);
+  --mint-soft: var(--violet-soft);
+  --apricot: var(--amber);
+  --apricot-strong: var(--amber);
+  --apricot-soft: var(--amber-soft);
+
+  /* —— 语义反馈（在浅底上保证 WCAG AA 可读）—— */
+  --success: #0C6B4F;              /* 最差 5.40:1 */
+  --success-soft: rgba(12, 107, 79, 0.12);
+  --warning: #A34A08;              /* 最差 4.93:1 */
+  --warning-soft: rgba(163, 74, 8, 0.13);
+  --danger: #BE2E3E;
+  --danger-soft: rgba(190, 46, 62, 0.12);
+  --info: #0E7490;
+  --info-soft: rgba(8, 145, 178, 0.11);
 
   /* —— 分隔线 —— */
-  --border: #D9D0C6;
-  --border-light: #E9E1D8;
+  --border: #CFD6E4;
+  --border-light: #DFE4EE;
 
-  /* —— 阴影（柔和低饱和）—— */
-  --shadow-lg: 0 12px 36px rgba(58, 70, 86, 0.16);
-  --shadow-md: 0 6px 20px rgba(58, 70, 86, 0.11);
-  --shadow-sm: 0 2px 8px rgba(58, 70, 86, 0.07);
-  --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.06);
-  --shadow-card-hover: 0 8px 30px rgba(0, 0, 0, 0.10);
+  /* —— 阴影（亮色仍是柔和投影，不加辉光：浅底上辉光会糊成脏边）—— */
+  --shadow-lg: 0 12px 36px rgba(16, 23, 37, 0.16);
+  --shadow-md: 0 6px 20px rgba(16, 23, 37, 0.11);
+  --shadow-sm: 0 2px 8px rgba(16, 23, 37, 0.07);
+  --shadow-card: 0 4px 20px rgba(16, 23, 37, 0.07);
+  --shadow-card-hover: 0 8px 30px rgba(16, 23, 37, 0.12);
+  --shadow-glow: 0 0 0 1px var(--accent-soft), 0 6px 24px var(--accent-glow);
 
   /* —— 圆角 / 尺寸 —— */
   --radius: 10px;
@@ -79,109 +162,174 @@
   --editor-bg: var(--bg-secondary);
   --workbench-bg: var(--bg-primary);
 
+  /* ============================================================
+     纹理 / 素材槽位（由 texture.css 消费，由 settingsStore 在运行时写入）
+     ------------------------------------------------------------
+     为什么做成「槽位」而不是写死背景：
+     背景素材是可换的（BackgroundSelector 里 24 个图案 + 14 张图），
+     如果每个组件各自写 background-image，换一次素材就要改 N 个文件。
+     这里约定两组槽位，全站所有表面都从槽位取值，切换只需更新 :root 上的变量。
+     ============================================================ */
+  --tex-photo: none;               /* 摄影背景 url(...) */
+  --tex-photo-opacity: 0;          /* 摄影背景不透明度（0 = 关闭）*/
+  --tex-photo-blur: 0px;
+  --tex-photo-pos: center;
+  --tex-pattern: none;             /* 图案 url(...) */
+  --tex-pattern-color: rgba(16, 23, 37, 0.05);
+  --tex-pattern-size: 64px;
+  --tex-pattern-opacity: 0;
+  --tex-grain-opacity: 0.5;        /* 颗粒噪声叠加强度 */
+
   /* 原生控件取色同步 */
   color-scheme: light;
 
   /* ============ Element Plus 亮色主题 ============ */
-  --el-color-primary: #4f6f8f;
-  --el-color-primary-light-3: #84a0b8;
-  --el-color-primary-light-5: #a5b9ca;
-  --el-color-primary-light-7: #c6d2dc;
-  --el-color-primary-light-8: #d7e0e6;
-  --el-color-primary-light-9: #ebeff3;
-  --el-color-primary-dark-2: #3f5a73;
-  --el-color-success: #3f9e76;
-  --el-color-warning: #d9912f;
-  --el-color-danger: #d15e4e;
-  --el-color-error: #d15e4e;
-  --el-color-info: #6e8fad;
+  --el-color-primary: #0c6b84;
+  --el-color-primary-light-3: #3d8ea3;
+  --el-color-primary-light-5: #6fb0c1;
+  --el-color-primary-light-7: #a8d0da;
+  --el-color-primary-light-8: #c7e0e8;
+  --el-color-primary-light-9: #e2f0f4;
+  --el-color-primary-dark-2: #0a5a70;
+  --el-color-success: #0f7b5c;
+  --el-color-warning: #b45309;
+  --el-color-danger: #be2e3e;
+  --el-color-error: #be2e3e;
+  --el-color-info: #0e7490;
   --el-border-radius-base: 8px;
   --el-border-radius-small: 6px;
   --el-border-radius-round: 20px;
   --el-border-radius-circle: 100%;
   --el-font-size-base: 13px;
-  --el-text-color-primary: #2c3e4f;
-  --el-text-color-regular: #5e7286;
+  --el-text-color-primary: #101725;
+  --el-text-color-regular: #4a5670;
+  /* EP 自带的占位符色 #A8ABB2 在白底上只有 2.3:1，必须接回自己的令牌 */
+  --el-text-color-placeholder: var(--text-muted);
+  --el-text-color-secondary: var(--text-secondary);
   --el-bg-color: #ffffff;
   --el-bg-color-overlay: #ffffff;
-  --el-fill-color-light: #f5f0eb;
-  --el-fill-color: #efe8df;
-  --el-border-color: #d9d0c6;
-  --el-border-color-light: #e4dcd2;
-  --el-border-color-lighter: #ece4db;
-  --el-box-shadow-light: 0 2px 12px rgba(58, 70, 86, 0.08);
+  --el-fill-color-light: #f2f4f9;
+  --el-fill-color: #e9edf5;
+  --el-border-color: #cfd6e4;
+  --el-border-color-light: #dfe4ee;
+  --el-border-color-lighter: #e9edf5;
+  --el-box-shadow-light: 0 2px 12px rgba(16, 23, 37, 0.08);
 }
 
-/* ============ 暗色主题（html.dark） ============ */
+/* ============ 暗色主题（html.dark）—— 本产品的**主**主题 ============ */
 html.dark {
-  --bg-deep: #12151B;
-  --bg-primary: #1A1E24;
-  --bg-secondary: #242A32;
-  --bg-tertiary: #2C333D;
-  --bg-hover: #343C48;
-  --bg-active: #3D4653;
-  --bg-glass: rgba(26, 30, 36, 0.72);
-  --bg-glass-strong: rgba(26, 30, 36, 0.9);
+  /* 深空基底：冷调近黑，不是纯黑。分成 6 级是为了让「卡片浮在面板上」
+     这件事靠明度差就能表达，不必层层加阴影（阴影多了会发灰发脏）。 */
+  --bg-deep: #05060A;
+  --bg-primary: #0A0C13;
+  --bg-secondary: #11141F;
+  --bg-tertiary: #181C2A;
+  --bg-hover: #1E2434;
+  --bg-active: #262D41;
+  --bg-glass: rgba(10, 12, 19, 0.62);
+  --bg-glass-strong: rgba(14, 18, 28, 0.86);
+  --bg-glass-light: rgba(255, 255, 255, 0.035);
 
-  --text-primary: #E8EDF2;
-  --text-secondary: #AAB6C2;
-  --text-muted: #6E7B8A;
+  /* 暗色下的可读下限同样按最差底色（--bg-active #262D41）实测定：
+     muted 原为 #6B7893，最差只有 3.09:1；提到 #8E9CB4 后最差 4.93:1。 */
+  --text-primary: #E8EDF7;
+  --text-secondary: #AAB7CC;
+  --text-muted: #8E9CB4;
+  --text-faint: #5A6580;
 
-  --accent: #6E90B3;
-  --accent-light: #9DB8D2;
-  --accent-strong: #8FB0CF;
-  --accent-soft: rgba(110, 144, 179, 0.16);
-  --mint: #5FA88C;
-  --mint-strong: #7CC2A6;
-  --mint-soft: rgba(95, 168, 140, 0.16);
-  --apricot: #C89A6A;
-  --apricot-strong: #DCB181;
-  --apricot-soft: rgba(200, 154, 106, 0.16);
+  /* 霓虹色在深底上要提亮：同一个 #0891B2 放到近黑上会显得发闷，
+     提亮到 #22D3EE 才有「发光」的观感。 */
+  --accent: #22D3EE;
+  --accent-light: #67E8F9;
+  --accent-strong: #06B6D4;
+  --accent-soft: rgba(34, 211, 238, 0.13);
+  --accent-glow: rgba(34, 211, 238, 0.42);
 
-  --success: #4EBB8F;
-  --success-soft: rgba(78, 187, 143, 0.15);
-  --warning: #DE9A45;
-  --warning-soft: rgba(222, 154, 69, 0.15);
-  --danger: #E2725F;
-  --danger-soft: rgba(226, 114, 95, 0.15);
-  --info: #9DB8D2;
-  --info-soft: rgba(110, 144, 179, 0.16);
+  /* 深底上霓虹色是亮的，所以要反过来用**深色**字压在填充面上 */
+  --accent-fill: #22D3EE;
+  --on-accent: #04262E;            /* 亮青底上的深墨绿字，约 8.8:1 */
+  --danger-fill: #FB7185;
+  --on-danger: #2B0710;
+  --warning-fill: #FBBF24;
+  --on-warning: #2B1D02;
+  --success-fill: #34D399;
+  --on-success: #03251A;
+  --info-fill: #22D3EE;
+  --on-info: #04262E;
 
-  --border: #313845;
-  --border-light: #262D36;
+  --violet: #8B5CF6;
+  --violet-light: #A78BFA;
+  --violet-strong: #7C3AED;
+  --violet-soft: rgba(139, 92, 246, 0.16);
+  --violet-glow: rgba(139, 92, 246, 0.40);
 
-  --shadow-lg: 0 12px 36px rgba(0, 0, 0, 0.5);
-  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.38);
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.28);
-  --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.28);
-  --shadow-card-hover: 0 8px 30px rgba(0, 0, 0, 0.4);
+  --violet-text: #A78BFA;          /* 暗底上的文字用紫，约 6.9:1 */
+
+  --magenta: #F472B6;
+  --magenta-light: #F9A8D4;
+  --magenta-soft: rgba(244, 114, 182, 0.14);
+
+  --amber: #FBBF24;
+  --amber-light: #FCD34D;
+  --amber-soft: rgba(251, 191, 36, 0.14);
+
+  --success: #34D399;
+  --success-soft: rgba(52, 211, 153, 0.14);
+  --warning: #FBBF24;
+  --warning-soft: rgba(251, 191, 36, 0.14);
+  --danger: #FB7185;
+  --danger-soft: rgba(251, 113, 133, 0.14);
+  --info: #67E8F9;
+  --info-soft: rgba(34, 211, 238, 0.13);
+
+  /* 深底上的分隔线用「白色低透明度」而不是灰色实色：
+     灰实线在深底上会显脏，白色半透明会自然融入任何底色。 */
+  --border: rgba(255, 255, 255, 0.10);
+  --border-light: rgba(255, 255, 255, 0.06);
+
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.66);
+  --shadow-md: 0 8px 28px rgba(0, 0, 0, 0.50);
+  --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.38);
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.42);
+  --shadow-card-hover: 0 10px 38px rgba(0, 0, 0, 0.55);
+  --shadow-glow: 0 0 0 1px var(--accent-soft), 0 0 22px var(--accent-glow);
 
   color-scheme: dark;
 
   /* Element Plus 暗色（其余 --el-*-light-N 由 EP 自带 dark css-vars 提供） */
-  --el-color-primary: #6e90b3;
-  --el-color-primary-light-3: #54718f;
-  --el-color-primary-light-5: #445c76;
-  --el-color-primary-light-7: #37495e;
-  --el-color-primary-light-8: #2e3d4f;
-  --el-color-primary-light-9: #263240;
-  --el-color-primary-dark-2: #8ba6c2;
-  --el-color-success: #4ebb8f;
-  --el-color-warning: #de9a45;
-  --el-color-danger: #e2725f;
-  --el-color-error: #e2725f;
-  --el-color-info: #9db8d2;
-  --el-text-color-primary: #e8edf2;
-  --el-text-color-regular: #aab6c2;
-  --el-bg-color: #1a1e24;
-  --el-bg-color-overlay: #242a32;
-  --el-fill-color-light: #2c333d;
-  --el-fill-color: #2c333d;
-  --el-border-color: #313845;
-  --el-border-color-light: #2a313b;
-  --el-border-color-lighter: #262d36;
-  --el-box-shadow-light: 0 2px 12px rgba(0, 0, 0, 0.45);
+  --el-color-primary: #22d3ee;
+  --el-color-primary-light-3: #1aa8bf;
+  --el-color-primary-light-5: #167f90;
+  --el-color-primary-light-7: #115a66;
+  --el-color-primary-light-8: #0e4750;
+  --el-color-primary-light-9: #0b333a;
+  --el-color-primary-dark-2: #67e8f9;
+  --el-color-success: #34d399;
+  --el-color-warning: #fbbf24;
+  --el-color-danger: #fb7185;
+  --el-color-error: #fb7185;
+  --el-color-info: #67e8f9;
+  --el-text-color-primary: #e8edf7;
+  --el-text-color-regular: #aab7cc;
+  --el-text-color-placeholder: var(--text-muted);
+  --el-text-color-secondary: var(--text-secondary);
+  --el-bg-color: #0a0c13;
+  --el-bg-color-overlay: #11141f;
+  --el-fill-color-light: #181c2a;
+  --el-fill-color: #181c2a;
+  --el-border-color: rgba(255, 255, 255, 0.12);
+  --el-border-color-light: rgba(255, 255, 255, 0.08);
+  --el-border-color-lighter: rgba(255, 255, 255, 0.06);
+  --el-box-shadow-light: 0 2px 12px rgba(0, 0, 0, 0.55);
+
+  /* 深色下的图案/噪声默认值：深底上图案用白色极低透明度才看得见 */
+  --tex-pattern-color: rgba(255, 255, 255, 0.045);
+  --tex-grain-opacity: 0.35;
 }
+
+/* —— Element Plus 变量在 :root 上是「亮色一套」，dark 单独给一套，
+      但 --el-border-radius-* / --el-font-size-base 这些与主题无关的量
+      在 dark 里没重复声明，靠继承生效，这是有意为之。 —— */
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body, #app { height: 100%; overflow: hidden; }
@@ -189,7 +337,7 @@ body {
   font-family: var(--font-sans);
   background: var(--bg-deep);
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: var(--fs-base);
   line-height: 1.55;
   user-select: none;
   -webkit-font-smoothing: antialiased;
@@ -211,6 +359,52 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
               fill 0.22s var(--ease-out) !important,
               stroke 0.22s var(--ease-out) !important,
               box-shadow 0.22s var(--ease-out) !important;
+}
+
+/* ============ 可访问性基线 ============ */
+
+/* 键盘焦点环：只在「键盘导航」时出现（:focus-visible），鼠标点击不显示，
+   兼顾可达性与视觉整洁。此前全站没有任何焦点样式，纯键盘用户会完全迷失位置。 */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+/* 自带圆角的控件，焦点环收得更贴合其形状 */
+.nav-tab:focus-visible,
+.nav-theme-btn:focus-visible,
+.nav-btn:focus-visible {
+  outline-offset: 1px;
+}
+
+/* 选中文字使用品牌色，与整体色调统一 */
+::selection {
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}
+
+/* 仅供读屏器识别的文本（视觉隐藏但可被辅助技术读取） */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 尊重系统「减少动态效果」偏好。
+   对前庭功能敏感的用户开启该设置后动效会引发不适，这不是可选项，是明确的用户意图。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* ============ App 主布局 ============ */
@@ -253,7 +447,7 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
   box-shadow: 0 1px 6px rgba(58, 70, 86, 0.05);
 }
 .app-nav-brand {
-  font-size: 14px;
+  font-size: var(--fs-base);
   font-weight: 700;
   color: var(--text-primary);
   margin-right: 24px;
@@ -261,28 +455,65 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
 }
 .app-nav-tabs {
   display: flex;
+  align-items: center;
   gap: 2px;
   flex: 1;
+  min-width: 0;              /* 允许收缩，否则不会出现横向滚动条而是把右侧按钮挤出去 */
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;     /* Firefox */
+  -ms-overflow-style: none;
 }
+.app-nav-tabs::-webkit-scrollbar { display: none; }
+
 .nav-tab {
-  padding: 6px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
   border: none;
   background: transparent;
-  color: var(--text-muted);
-  font-size: 12px;
+  /* 原为 --text-muted(#9AA7B5)：暖白底上对比度约 2.4:1，未达 WCAG AA(4.5:1)。
+     导航是主要入口，用 --text-secondary(#5E7286) 提到约 4.5:1 */
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
   font-weight: 500;
   border-radius: 6px;
   cursor: pointer;
-  transition: all 0.15s;
+  white-space: nowrap;       /* 避免文字换行导致导航高度跳动 */
+  flex-shrink: 0;
+  transition: color var(--dur-fast) var(--ease-out),
+              background var(--dur-fast) var(--ease-out);
 }
 .nav-tab:hover {
   color: var(--text-primary);
   background: var(--bg-hover);
 }
 .nav-tab.active {
-  color: var(--accent-light);
-  background: var(--bg-tertiary);
+  /* 原为 --accent-light(#6E8FAD) on --bg-tertiary(#EFE8DF)：对比度仅 2.79:1，几乎看不清。
+     改 --accent-strong(#3D5A75) → 约 5.9:1；并叠加浅底 + 内描边，
+     不单靠颜色区分（色觉障碍用户也能分辨当前页） */
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px rgba(79, 111, 143, 0.24);
+  font-weight: 600;
 }
+
+/* 快捷键提示：平时隐藏，悬停/聚焦/激活时才显现，不干扰阅读 */
+.nav-tab-key {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 3px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.nav-tab:hover .nav-tab-key,
+.nav-tab:focus-visible .nav-tab-key,
+.nav-tab.active .nav-tab-key { opacity: 1; }
 .app-nav-actions {
   flex-shrink: 0;
   display: flex;
@@ -312,14 +543,14 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
   padding: 4px 14px;
   border: none;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   cursor: pointer;
   transition: opacity 0.15s;
 }
 .nav-btn-save {
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent);
 }
 .nav-btn-save:hover {
   opacity: 0.9;
@@ -382,12 +613,14 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
   justify-content: center;
   font-size: 16px;
   font-weight: 700;
-  color: #fff;
-  background: linear-gradient(135deg, var(--accent) 0%, var(--mint) 100%);
+  color: var(--on-accent);
+  /* 渐变的紫端用浅紫：头像上的字是深墨色，压在深紫上只有 2.6:1；
+     浅紫端能把对比度拉到 6.3:1，同时渐变更接近霓虹质感。 */
+  background: linear-gradient(135deg, var(--accent-fill) 0%, var(--violet-light) 100%);
   box-shadow: var(--shadow-sm);
 }
-.ph-title { font-size: 13.5px; font-weight: 600; color: var(--text-primary); letter-spacing: 0.3px; }
-.ph-stats { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; display: flex; align-items: center; gap: 5px; }
+.ph-title { font-size: var(--fs-md); font-weight: 600; color: var(--text-primary); letter-spacing: 0.3px; }
+.ph-stats { font-size: var(--fs-sm); color: var(--text-muted); margin-top: 2px; display: flex; align-items: center; gap: 5px; }
 .ph-stats .ph-dot { opacity: 0.5; }
 
 /* 折叠区块容器 */
@@ -398,7 +631,7 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
   line-height: 38px;
   background: transparent;
   border-bottom: 1px solid var(--border-light);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--text-secondary);
   padding-left: 16px;
@@ -419,7 +652,7 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
   gap: 7px;
   padding: 9px 16px;
   border-top: 1px solid var(--border-light);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   background: var(--bg-glass-strong);
 }
@@ -431,7 +664,7 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
 .panel-foot .pf-ver {
   margin-left: auto;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   background: var(--bg-tertiary);
   border-radius: 999px;
@@ -442,7 +675,7 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
   border-bottom: 1px solid var(--border-light);
 }
 .panel-section h3 {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--text-secondary);
   margin-bottom: 10px;
@@ -455,7 +688,7 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
 .panel-section h3 .count {
   background: var(--bg-tertiary);
   color: var(--accent);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   padding: 1px 7px;
   border-radius: 10px;
   margin-left: auto;
@@ -481,6 +714,8 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
 .canvas-wrap svg:active { cursor: grabbing; }
 
 /* 空状态 */
+/* 空态浮层：只负责定位与居中，具体视觉交给 AppEmpty 统一实现
+   （此前这里写死了 emoji 图标 + h2 + p，与其余页面的空态各不一致） */
 .empty-overlay {
   position: absolute;
   inset: 0;
@@ -492,16 +727,13 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
   pointer-events: none;
   text-align: center;
 }
-.empty-overlay .icon { font-size: 64px; margin-bottom: 14px; opacity: 0.5; }
-.empty-overlay h2 { font-weight: 500; color: var(--text-secondary); margin-bottom: 6px; }
-.empty-overlay p { font-size: 13px; }
 
 /* 节点样式 */
 .node-group { cursor: pointer; }
 .node-circle { transition: stroke 0.15s, stroke-width 0.15s; }
 .node-label {
   fill: var(--text-primary);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-family: var(--font-sans);
   pointer-events: none;
   text-anchor: middle;
@@ -511,7 +743,7 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
   stroke-dasharray: 3 3;
 }
 .node-group.is-adopted .node-circle {
-  stroke: #8a93b0;
+  stroke: var(--text-muted);
   stroke-dasharray: 5 3;
   stroke-width: 2;
 }
@@ -519,7 +751,7 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
 /* 连线样式（按关系类型） */
 .link-line { transition: stroke-opacity 0.15s, stroke-width 0.15s; }
 .link-line.semantic-bridge {
-  stroke: #6d7896;
+  stroke: var(--text-faint);
   stroke-dasharray: 4 3;
 }
 .link-line.user-link {
@@ -563,17 +795,17 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
   border-radius: var(--radius);
   padding: 7px 14px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--fs-md);
   transition: all 0.15s ease;
 }
 .btn:hover { background: var(--bg-hover); border-color: var(--accent); }
 .btn:active { transform: translateY(1px); }
-.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-primary { background: var(--accent-fill); color: var(--on-accent); border-color: var(--accent-fill); }
 .btn-primary:hover { background: var(--accent-light); border-color: var(--accent-light); }
 .btn-danger { color: var(--danger); border-color: var(--danger); }
-.btn-danger:hover { background: var(--danger); color: #fff; }
+.btn-danger:hover { background: var(--danger); color: var(--on-danger); }
 .btn-block { width: 100%; justify-content: center; }
-.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-sm { padding: 4px 10px; font-size: var(--fs-sm); }
 
 /* 拖拽上传 */
 .dropzone {
@@ -590,7 +822,7 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
   background: var(--bg-tertiary);
 }
 .dropzone .dz-icon { font-size: 28px; margin-bottom: 6px; }
-.dropzone .dz-text { font-size: 12px; color: var(--text-secondary); }
+.dropzone .dz-text { font-size: var(--fs-sm); color: var(--text-secondary); }
 
 /* 文件列表 */
 .file-list { display: flex; flex-direction: column; gap: 6px; }
@@ -601,7 +833,7 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
   background: var(--bg-secondary);
   border: 1px solid var(--border-light);
   border-radius: var(--radius);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   transition: all 0.15s;
 }
 .file-item:hover { background: var(--bg-tertiary); border-color: var(--border); }
@@ -613,7 +845,7 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
   color: var(--text-primary);
 }
 .file-item .fi-badge {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   padding: 1px 6px;
   border-radius: 8px;
   margin-left: 6px;
@@ -626,7 +858,7 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
   border: none;
   color: var(--danger);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--fs-base);
   padding: 0 4px;
   opacity: 0.6;
   transition: opacity 0.15s;
@@ -643,7 +875,7 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
 .slider-row .sr-head {
   display: flex;
   justify-content: space-between;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
 }
 .slider-row .sr-head .sr-val { color: var(--accent); font-family: var(--font-mono); }
@@ -667,7 +899,7 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
   font-family: var(--font-mono);
   color: var(--accent);
 }
-.monitor-card .mc-label { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+.monitor-card .mc-label { font-size: var(--fs-xs); color: var(--text-muted); margin-top: 2px; }
 .monitor-card.ok .mc-num { color: var(--success); }
 .monitor-card.warn .mc-num { color: var(--danger); }
 
@@ -683,7 +915,7 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
 .aq-mode-btn {
   flex: 1;
   padding: 4px 6px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   border: 1px solid var(--border);
   border-radius: 4px;
   background: var(--bg-secondary);
@@ -694,9 +926,9 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
 }
 .aq-mode-btn:hover { background: var(--bg-tertiary); }
 .aq-mode-btn.active {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  border-color: var(--accent-fill);
   font-weight: 600;
 }
 .aq-stats { margin-top: 4px; }
@@ -704,10 +936,10 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
   display: flex;
   justify-content: space-between;
   margin: 2px 0;
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 .aq-warning {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--warning);
   background: rgba(245, 180, 98, 0.1);
   border-left: 3px solid var(--warning);
@@ -716,7 +948,7 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
   margin-top: 4px;
 }
 .aq-warn-item {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   padding: 2px 6px;
   margin: 2px 0;
@@ -729,7 +961,7 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
 
 /* 状态条 */
 .status-bar {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   padding: 4px 8px;
   background: var(--bg-secondary);
@@ -759,7 +991,7 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
   border: 1px solid var(--border-light);
   border-radius: 10px;
   padding: 10px 12px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-primary);
   z-index: 1000;
   max-width: 360px;
@@ -767,7 +999,7 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
   font-family: var(--font-sans);
 }
 .link-tooltip h4 {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--accent);
   margin-bottom: 6px;
   padding-bottom: 4px;
@@ -786,7 +1018,7 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
   border-top: 1px dashed var(--border);
 }
 .link-tooltip .lt-section-title {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   margin-bottom: 3px;
   text-transform: uppercase;
@@ -796,7 +1028,7 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
   background: var(--bg-secondary);
   padding: 6px 8px;
   border-radius: 4px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   font-family: var(--font-mono);
   border-left: 2px solid var(--accent);
@@ -807,7 +1039,7 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
   display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;
 }
 .link-tooltip .lt-badge {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   background: var(--bg-tertiary);
   color: var(--accent-light);
   padding: 1px 6px;
@@ -833,7 +1065,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   padding: 4px 6px;
   background: var(--bg-secondary);
   border-radius: 4px;
@@ -852,7 +1084,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   white-space: nowrap;
 }
 .legend-code {
-  font-size: 9px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   font-family: var(--font-mono);
 }
@@ -867,14 +1099,14 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   border-bottom: 1px solid var(--border);
 }
 .lt-rel-badge {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: #fff;
   padding: 2px 10px;
   border-radius: 10px;
   font-weight: 500;
 }
 .lt-rel-code {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   font-family: var(--font-mono);
 }
@@ -886,7 +1118,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   background: rgba(245, 180, 98, 0.12);
   border: 1px solid rgba(245, 180, 98, 0.3);
   border-radius: 6px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--warning);
   text-align: center;
 }
@@ -896,15 +1128,15 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   padding: 4px 6px;
   margin-top: 6px;
   border-radius: 4px;
   background: var(--bg-secondary);
 }
-.health-indicator.healthy { color: #4caf50; }
-.health-indicator.warning { color: #e8a020; }
-.health-indicator.error { color: #e84c4c; }
+.health-indicator.healthy { color: var(--success); }
+.health-indicator.warning { color: var(--warning); }
+.health-indicator.error { color: var(--danger); }
 .health-dot {
   width: 6px;
   height: 6px;
@@ -915,7 +1147,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
 .health-meta {
   margin-left: auto;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--fs-xs);
 }
 .health-warnings {
   margin-top: 4px;
@@ -924,7 +1156,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   gap: 2px;
 }
 .health-warning-item {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   padding: 3px 6px;
   border-radius: 4px;
   display: flex;
@@ -933,15 +1165,15 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
 }
 .health-warning-item.health-warn {
   background: rgba(232, 160, 32, 0.1);
-  color: #e8a020;
+  color: var(--warning);
 }
 .health-warning-item.health-error {
   background: rgba(232, 76, 76, 0.1);
-  color: #e84c4c;
+  color: var(--danger);
 }
 .health-warning-item.health-info {
   background: rgba(76, 144, 193, 0.1);
-  color: #4c90c1;
+  color: var(--info);
 }
 .health-icon { flex-shrink: 0; }
 
@@ -955,14 +1187,14 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   padding: 2px 0;
 }
 .val-stat-label { color: var(--text-secondary); }
 .val-stat-value { font-weight: 600; }
-.val-stat-value.val-passed { color: #4caf50; }
-.val-stat-value.val-warning { color: #e8a020; }
-.val-stat-value.val-error { color: #e84c4c; }
+.val-stat-value.val-passed { color: var(--success); }
+.val-stat-value.val-warning { color: var(--warning); }
+.val-stat-value.val-error { color: var(--danger); }
 .val-stat-value.val-pending { color: var(--text-muted); }
 .val-stat-divider {
   height: 1px;
@@ -977,8 +1209,8 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
 .val-unverified-header {
   background: rgba(232, 160, 32, 0.1);
   padding: 4px 8px;
-  font-size: 11px;
-  color: #e8a020;
+  font-size: var(--fs-xs);
+  color: var(--warning);
   font-weight: 600;
 }
 .val-unverified-items {
@@ -990,11 +1222,11 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   align-items: center;
   gap: 6px;
   padding: 3px 8px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   border-bottom: 1px solid var(--border-light);
 }
 .val-unverified-status {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   flex-shrink: 0;
   min-width: 48px;
@@ -1007,7 +1239,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
 }
 .val-unverified-more {
   padding: 3px 8px;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   text-align: center;
 }
@@ -1021,7 +1253,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
 }
 .group-tab {
   padding: 3px 10px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   background: var(--bg-secondary);
   border: 1px solid var(--border-light);
   border-radius: 12px;
@@ -1043,17 +1275,17 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   color: var(--accent-light);
 }
 .group-tab-count {
-  font-size: 9px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   margin-left: 3px;
 }
 .group-tab-add {
   font-weight: bold;
-  font-size: 13px;
+  font-size: var(--fs-md);
   padding: 2px 8px;
 }
 .group-info {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   display: flex;
   align-items: center;
@@ -1072,7 +1304,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
 .group-search {
   flex: 1;
   padding: 3px 8px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -1086,7 +1318,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   gap: 2px;
 }
 .sort-btn {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   padding: 2px 6px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-light);
@@ -1114,16 +1346,16 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 8px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   padding: 0;
   margin-left: 2px;
   flex-shrink: 0;
 }
 .group-tab.drag-over {
-  background: var(--accent) !important;
-  color: #fff !important;
-  border-color: var(--accent) !important;
+  background: var(--accent-fill) !important;
+  color: var(--on-accent) !important;
+  border-color: var(--accent-fill) !important;
   transform: scale(1.05);
 }
 
@@ -1140,7 +1372,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   border-radius: 6px;
 }
 .batch-label {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--accent);
   font-weight: 600;
 }
@@ -1154,7 +1386,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--text-primary);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   padding: 2px 4px;
   outline: none;
   cursor: pointer;
@@ -1172,7 +1404,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   align-items: center;
   padding: 4px 8px;
   background: var(--bg-secondary);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   border-bottom: 1px solid var(--border-light);
 }
@@ -1185,7 +1417,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   align-items: center;
   gap: 4px;
   padding: 4px 8px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   cursor: grab;
   border-bottom: 1px solid var(--border-light);
@@ -1196,7 +1428,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
 .gnl-item.selected { background: rgba(126, 176, 255, 0.15); }
 .gnl-item:active { cursor: grabbing; }
 .gnl-check {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   width: 16px;
   text-align: center;
   color: var(--accent);
@@ -1213,7 +1445,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
 .gnl-empty {
   padding: 12px;
   text-align: center;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
 }
 
@@ -1229,14 +1461,14 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   align-items: center;
   justify-content: space-between;
   padding: 6px 10px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   cursor: pointer;
   background: var(--bg-tertiary);
   user-select: none;
 }
 .gd-header:hover { color: var(--text-primary); }
-.gd-toggle { font-size: 9px; color: var(--text-muted); }
+.gd-toggle { font-size: var(--fs-xs); color: var(--text-muted); }
 .gd-body { padding: 6px 10px 8px; }
 .gd-bar-row {
   display: flex;
@@ -1245,7 +1477,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   margin-bottom: 4px;
 }
 .gd-bar-label {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   width: 60px;
   flex-shrink: 0;
   overflow: hidden;
@@ -1267,14 +1499,14 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   transition: width 0.3s ease;
 }
 .gd-bar-count {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   width: 24px;
   text-align: right;
   flex-shrink: 0;
 }
 .gd-summary {
-  font-size: 9px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   margin-top: 4px;
   display: flex;
@@ -1307,7 +1539,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   border-bottom: 1px solid var(--border-light);
 }
 .merge-dialog-header h4 {
-  font-size: 14px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   margin: 0;
 }
@@ -1323,7 +1555,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   padding: 14px 16px;
 }
 .merge-dialog-body p {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   margin: 0 0 10px;
 }
@@ -1334,7 +1566,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   outline: none;
   cursor: pointer;
 }
@@ -1349,9 +1581,9 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   border-top: 1px solid var(--border-light);
 }
 .btn-primary {
-  background: var(--accent) !important;
-  color: #fff !important;
-  border-color: var(--accent) !important;
+  background: var(--accent-fill) !important;
+  color: var(--on-accent) !important;
+  border-color: var(--accent-fill) !important;
 }
 
 /* 分组视图切换 */
@@ -1365,7 +1597,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 1px 5px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   cursor: pointer;
   color: var(--text-muted);
   transition: all 0.15s;
@@ -1386,7 +1618,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   padding: 4px 8px;
   border-radius: 5px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   transition: background 0.12s;
   gap: 4px;
   margin-bottom: 1px;
@@ -1399,7 +1631,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
 .tree-toggle {
   width: 14px;
   flex-shrink: 0;
-  font-size: 9px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   text-align: center;
   cursor: pointer;
@@ -1409,7 +1641,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
 .tree-visibility {
   width: 16px;
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   cursor: pointer;
   text-align: center;
   opacity: 0.6;
@@ -1428,7 +1660,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   white-space: nowrap;
 }
 .tree-count {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   background: var(--bg-secondary);
   padding: 0 5px;
@@ -1436,11 +1668,11 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   flex-shrink: 0;
 }
 .tree-children-count {
-  font-size: 9px;
+  font-size: var(--fs-xs);
   color: var(--accent);
   flex-shrink: 0;
 }
-.tree-icon { font-size: 12px; }
+.tree-icon { font-size: var(--fs-sm); }
 
 /* 隐藏分组提示 */
 .hidden-groups-notice {
@@ -1449,7 +1681,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
   border-radius: 5px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--warning);
   display: flex;
   align-items: center;
@@ -1466,7 +1698,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   border-left: 2px solid var(--accent);
 }
 .group-desc-text {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   line-height: 1.4;
 }
@@ -1477,7 +1709,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
 }
 .edit-field label {
   display: block;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   margin-bottom: 4px;
   font-weight: 500;
@@ -1489,7 +1721,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   border: 1px solid var(--border);
   border-radius: 5px;
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   resize: vertical;
   font-family: var(--font-sans);
 }
@@ -1501,7 +1733,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   border: 1px solid var(--border);
   border-radius: 5px;
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .edit-input:focus { outline: none; border-color: var(--accent); }
 
@@ -1512,7 +1744,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   padding: 4px 6px;
   border-radius: 4px;
   margin-bottom: 2px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   gap: 6px;
   background: var(--bg-secondary);
 }
@@ -1534,7 +1766,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
 }
 .classify-score {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   background: var(--bg-tertiary);
   padding: 1px 5px;
@@ -1543,7 +1775,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
 
 /* 分组可见性图标 */
 .group-visibility-icon {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   cursor: pointer;
   flex-shrink: 0;
   opacity: 0.6;
@@ -1554,7 +1786,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
 
 /* 隔离管理 */
 .isolate-info {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   margin-bottom: 6px;
 }
@@ -1567,7 +1799,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   border: 1px solid var(--border-light);
   border-radius: 5px;
   margin-bottom: 4px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 .isolate-names {
   color: var(--text-secondary);
@@ -1591,7 +1823,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
 }
 .ctx-item {
   padding: 6px 12px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-primary);
   cursor: pointer;
   border-radius: 4px;
@@ -1613,11 +1845,11 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(248, 112, 134, 0.9);
-  color: #fff;
+  background: var(--danger);
+  color: var(--on-danger);
   padding: 8px 20px;
   border-radius: 20px;
-  font-size: 13px;
+  font-size: var(--fs-md);
   z-index: 901;
   pointer-events: none;
   animation: pulse 1.5s infinite;
@@ -1666,6 +1898,114 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
 /* 胶囊标签 */
 .el-tag { border-radius: var(--radius-full); font-weight: 500; }
 
+/* ------------------------------------------------------------
+   Element Plus 选中态 / 危险态的对比度修正
+   ------------------------------------------------------------
+   为什么必须显式覆盖，而不能只靠 --el-color-primary：
+   EP 的 .el-radio-button__inner 选中后是「primary 底色 + 写死的白字」，
+   而深色主题下 primary 是亮青 #22D3EE —— 白字压上去只有 1.81:1，
+   远低于 AA。EP 没有提供「选中态前景色」变量，只能覆盖样式。
+   同理，danger 的 plain 按钮文字用的是 EP 自己算的深红，
+   在我们自定义的深色底上只有 2.17:1。
+   ------------------------------------------------------------ */
+.el-radio-button__original-radio:checked + .el-radio-button__inner {
+  background-color: var(--accent-fill) !important;
+  border-color: var(--accent-fill) !important;
+  color: var(--on-accent) !important;
+  box-shadow: -1px 0 0 0 var(--accent-fill) !important;
+}
+.el-radio-button__inner:hover { color: var(--accent); }
+
+/* 实心按钮（含 EP 自动生成的 hover/active 变体）统一走填充面 + 对应前景色 */
+.el-button--primary:not(.is-plain):not(.is-text):not(.is-link) {
+  --el-button-bg-color: var(--accent-fill);
+  --el-button-border-color: var(--accent-fill);
+  --el-button-text-color: var(--on-accent);
+  --el-button-hover-bg-color: var(--accent);
+  --el-button-hover-border-color: var(--accent);
+  --el-button-hover-text-color: var(--on-accent);
+  --el-button-active-bg-color: var(--accent-strong);
+  --el-button-active-border-color: var(--accent-strong);
+  --el-button-active-text-color: var(--on-accent);
+}
+/* EP 的语义按钮（danger/warning/success/info）默认是「语义色底 + 白字」。
+   深色主题下这些色都是高明度霓虹色，白字对比度只有 1.7~2.5:1。
+   这里统一改成「填充面 + 配套前景色」。 */
+.el-button--danger:not(.is-plain):not(.is-text):not(.is-link) {
+  --el-button-bg-color: var(--danger-fill);
+  --el-button-border-color: var(--danger-fill);
+  --el-button-text-color: var(--on-danger);
+  --el-button-hover-text-color: var(--on-danger);
+  --el-button-active-text-color: var(--on-danger);
+}
+.el-button--warning:not(.is-plain):not(.is-text):not(.is-link) {
+  --el-button-bg-color: var(--warning-fill);
+  --el-button-border-color: var(--warning-fill);
+  --el-button-text-color: var(--on-warning);
+  --el-button-hover-text-color: var(--on-warning);
+  --el-button-active-text-color: var(--on-warning);
+}
+.el-button--success:not(.is-plain):not(.is-text):not(.is-link) {
+  --el-button-bg-color: var(--success-fill);
+  --el-button-border-color: var(--success-fill);
+  --el-button-text-color: var(--on-success);
+  --el-button-hover-text-color: var(--on-success);
+  --el-button-active-text-color: var(--on-success);
+}
+.el-button--info:not(.is-plain):not(.is-text):not(.is-link) {
+  --el-button-bg-color: var(--info-fill);
+  --el-button-border-color: var(--info-fill);
+  --el-button-text-color: var(--on-info);
+  --el-button-hover-text-color: var(--on-info);
+  --el-button-active-text-color: var(--on-info);
+}
+/* plain（描边）形态：底色是极浅的同色，文字必须用深/亮同色，不能用 EP 默认的中间调 */
+.el-button--danger.is-plain {
+  color: var(--danger) !important;
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent) !important;
+  background: var(--danger-soft) !important;
+}
+.el-button--danger.is-plain:hover {
+  background: color-mix(in srgb, var(--danger) 18%, transparent) !important;
+  border-color: var(--danger) !important;
+  color: var(--danger) !important;
+}
+
+/* 危险态的「深色派生色」补齐。
+   EP 的 dark/css-vars.css 只给了 --el-color-danger 一个值，
+   -light-3/5/7/8/9 仍是它自带的默认红，跟我们的深色底对不上，
+   表现就是「移除」这类 plain 按钮文字发暗、看不清。 */
+html.dark {
+  --el-color-primary-light-3: color-mix(in srgb, var(--accent) 70%, transparent);
+  --el-color-primary-light-5: color-mix(in srgb, var(--accent) 50%, transparent);
+  --el-color-primary-light-7: color-mix(in srgb, var(--accent) 30%, transparent);
+  --el-color-primary-light-8: color-mix(in srgb, var(--accent) 20%, transparent);
+  --el-color-primary-light-9: color-mix(in srgb, var(--accent) 12%, transparent);
+  --el-color-success-light-9: color-mix(in srgb, var(--success) 14%, transparent);
+  --el-color-warning-light-9: color-mix(in srgb, var(--warning) 14%, transparent);
+  --el-color-danger-light-3: color-mix(in srgb, var(--danger) 70%, transparent);
+  --el-color-danger-light-5: color-mix(in srgb, var(--danger) 50%, transparent);
+  --el-color-danger-light-7: color-mix(in srgb, var(--danger) 30%, transparent);
+  --el-color-danger-light-8: color-mix(in srgb, var(--danger) 20%, transparent);
+  --el-color-danger-light-9: color-mix(in srgb, var(--danger) 14%, transparent);
+  --el-color-info-light-9: color-mix(in srgb, var(--info) 14%, transparent);
+}
+
+/* 徽章类：统一「同色低透明底 + 同色亮字」的 tonal 写法。
+   原来的写法是「实底 + 写死 #fff」，在亮色当底的主题下必然不可读
+   （亮青 #22D3EE 上白字 1.81:1、琥珀 #FBBF24 上白字 1.67:1）。
+   tonal 写法的好处：任何色相、任何主题下，前景与背景都同源，对比度天然够。 */
+.sh-badge,
+.kl-badge {
+  color: inherit;
+  background: color-mix(in srgb, currentColor 18%, transparent);
+  font-weight: 600;
+}
+.sh-badge.lv1 { color: var(--accent); }
+.sh-badge.lv2 { color: var(--violet-text); }
+.sh-badge.lv3 { color: var(--amber); }
+.sh-badge.lv4 { color: var(--magenta); }
+
 /* ---------- 弹窗统一（圆角 16 / 居中遮罩） ---------- */
 .el-overlay { background-color: rgba(0, 0, 0, 0.4); }
 .el-dialog {
@@ -1689,12 +2029,12 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   padding: 12px 18px;
   min-width: 240px;
 }
-.el-message .el-message__content { font-size: 13px; }
+.el-message .el-message__content { font-size: var(--fs-md); }
 
 /* ---------- 加载 / 骨架屏 ---------- */
 .el-loading-spinner .circular { animation: none; }
 .el-loading-spinner .path { stroke: var(--accent); }
-.el-loading-spinner .el-loading-text { color: var(--text-secondary); font-size: 12px; }
+.el-loading-spinner .el-loading-text { color: var(--text-secondary); font-size: var(--fs-sm); }
 .el-skeleton__item { border-radius: var(--radius-sm); }
 
 /* ---------- 空状态 ---------- */
@@ -1707,7 +2047,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
   color: var(--apricot);
 }
 .empty-overlay h2 { color: var(--text-secondary); font-size: 15px; font-weight: 600; }
-.empty-overlay p { color: var(--text-muted); font-size: 12.5px; line-height: 1.7; max-width: 420px; }
+.empty-overlay p { color: var(--text-muted); font-size: var(--fs-sm); line-height: 1.7; max-width: 420px; }
 .empty-overlay .empty-action { pointer-events: auto; margin-top: 10px; }
 
 /* ---------- 通用卡片 ---------- */
@@ -1756,7 +2096,7 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
 }
 @media (max-width: 768px) {
   .app-nav { padding: 0 10px; }
-  .app-nav-brand { font-size: 13px; margin-right: 12px; }
+  .app-nav-brand { font-size: var(--fs-md); margin-right: 12px; }
   .nav-tab { padding: 5px 10px; }
   .graph-view { flex-direction: column; }
   .control-panel {

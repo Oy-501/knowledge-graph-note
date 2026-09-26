@@ -1,0 +1,430 @@
+/* ============================================================
+   素材层（texture.css）
+   ------------------------------------------------------------
+   这一层解决的问题：此前全站的「视觉」= 颜色变量 + 线性渐变。
+   颜色能表达层级，但表达不了**材质**。大面积纯色/渐变在 8bit 色深下
+   必然出色带（banding），而「AI 知识图谱」这个主题需要的科技质感
+   （网格、电路、噪点、光影照片）靠调色是调不出来的。
+
+   所以本轮引入真实素材，来源见 ../assets/CREDITS.md：
+     · 24 个图案 SVG —— Hero Patterns (CC BY 4.0)
+     · 14 张摄影背景 —— Unsplash (Unsplash License)
+
+   ── 架构：素材「槽位」──
+   全站没有任何一处写死 background-image。所有表面都从 :root 上的
+   槽位变量取值：
+
+     --tex-photo / --tex-photo-opacity / --tex-photo-blur
+     --tex-pattern / --tex-pattern-color / --tex-pattern-size
+     --tex-pattern-opacity / --tex-grain-opacity
+
+   settingsStore 在运行时把这些变量写到 <html> 上，于是「换背景素材」
+   只改 3~8 个变量，不需要动任何组件。
+
+   ── 两个技术点（踩过才知道）──
+   ① 图案着色用 mask，不用 background-image。
+      Hero Patterns 的原图用 fill="currentColor" 画的，但 SVG 一旦作为
+      background-image 被加载就是一个独立文档，currentColor 会解析成
+      该文档的初始值（黑），根本无法跟着主题变色。
+      改用「纯色底 + mask-image:图案」：mask 取的是图案的 alpha 通道，
+      颜色由 background-color 给，于是同一个文件可以被染成任意颜色。
+   ② 颗粒噪声用内联 SVG feTurbulence 生成，不下载图片。
+      理由：噪声必须能无缝平铺且无色偏，位图噪声在缩放时会摩尔纹。
+      这一项在 CREDITS.md 里已如实标注为「程序化生成」而非下载素材。
+
+   回退方式：在 main.js 注释掉 import './styles/texture.css' 即可，
+   界面回到「纯令牌」状态，功能不受影响。
+   ============================================================ */
+
+:root {
+  /* 颗粒噪声（feTurbulence 无缝平铺，160×160）。
+     为什么必须有它：深色大面积渐变在 8bit 屏上一定出色带，
+     叠 3~6% 的颗粒是最便宜的解法，且不易察觉。 */
+  --tex-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ============================================================
+   ① 素材底三层：照片 / 图案 / 颗粒
+   ------------------------------------------------------------
+   三层分开而不是塞进一个 background 简写，原因：
+   三者的不透明度要各自可调（照片要淡、图案要更淡、颗粒几乎不可见），
+   合在一起就只能整体调，做不出「照片上浮一层网格」的效果。
+   ============================================================ */
+.app-tex {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.app-tex > * { position: absolute; inset: 0; }
+
+/* 摄影背景层 */
+.app-tex-photo {
+  background-image: var(--tex-photo);
+  background-size: cover;
+  background-position: var(--tex-photo-pos, center);
+  background-repeat: no-repeat;
+  opacity: var(--tex-photo-opacity, 0);
+  filter: blur(var(--tex-photo-blur, 0px)) saturate(1.1);
+  /* 缩放一点，避免 blur 之后边缘露出底色 */
+  transform: scale(1.06);
+  transition: opacity 0.5s var(--ease-out), filter 0.5s var(--ease-out);
+}
+
+/* 图案层（mask 着色，见文件头「技术点 ①」） */
+.app-tex-pattern {
+  background-color: var(--tex-pattern-color);
+  -webkit-mask-image: var(--tex-pattern);
+  mask-image: var(--tex-pattern);
+  -webkit-mask-size: var(--tex-pattern-size, 64px);
+  mask-size: var(--tex-pattern-size, 64px);
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  opacity: var(--tex-pattern-opacity, 0);
+  transition: opacity 0.4s var(--ease-out);
+}
+
+/* 颗粒层：混合模式用 overlay 而不是 normal ——
+   normal 会整体提亮/压暗，overlay 只在中灰附近起作用，
+   能在不改变整体明度的前提下打散色带。 */
+.app-tex-grain {
+  background-image: var(--tex-grain);
+  background-repeat: repeat;
+  opacity: var(--tex-grain-opacity, 0.35);
+  mix-blend-mode: overlay;
+}
+
+/* 照片层之上压一层同色遮罩，避免照片自身的明暗与 UI 打架 */
+.app-tex-photo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-deep) 55%, transparent) 0%,
+    color-mix(in srgb, var(--bg-deep) 78%, transparent) 60%,
+    color-mix(in srgb, var(--bg-deep) 92%, transparent) 100%
+  );
+}
+html:not(.dark) .app-tex-photo::after {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, #ffffff 62%, transparent) 0%,
+    color-mix(in srgb, #ffffff 82%, transparent) 60%,
+    color-mix(in srgb, #ffffff 94%, transparent) 100%
+  );
+}
+
+/* ============================================================
+   ② 玻璃表面：所有面板统一「半透明 + 高光边 + 顶部提亮」
+   ------------------------------------------------------------
+   层级表达方式的改变：
+   旧做法靠 --bg-primary / --bg-secondary 的明度差区分层级；
+   新做法让所有面板都半透明（透出底下的素材），层级改由
+   ① 不透明度 ② 1px 内高光边 ③ 辉光 三者共同表达。
+   这样素材才能真正「透上来」，而不是被面板盖成一堵墙。
+   ============================================================ */
+
+.app-nav {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-secondary) 82%, transparent) 0%,
+    color-mix(in srgb, var(--bg-primary) 70%, transparent) 100%
+  );
+  backdrop-filter: blur(22px) saturate(1.5);
+  -webkit-backdrop-filter: blur(22px) saturate(1.5);
+  border-bottom: 1px solid var(--border-light);
+  box-shadow:
+    inset 0 -1px 0 color-mix(in srgb, var(--accent) 12%, transparent),
+    0 4px 22px rgba(0, 0, 0, 0.28);
+}
+
+.control-panel {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-primary) 72%, transparent) 0%,
+    color-mix(in srgb, var(--bg-deep) 78%, transparent) 100%
+  );
+  backdrop-filter: blur(24px) saturate(1.45);
+  -webkit-backdrop-filter: blur(24px) saturate(1.45);
+  border-right: 1px solid var(--border-light);
+  box-shadow:
+    inset -1px 0 0 color-mix(in srgb, var(--accent) 10%, transparent),
+    2px 0 26px rgba(0, 0, 0, 0.34);
+}
+
+.panel-head {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-tertiary) 78%, transparent) 0%,
+    color-mix(in srgb, var(--bg-primary) 40%, transparent) 100%
+  );
+  border-bottom: 1px solid var(--border-light);
+  position: relative;
+}
+/* 面板头下沿的霓虹细线：把「品牌色」从按钮扩散到结构上 */
+.panel-head::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--accent) 22%,
+    var(--violet) 62%,
+    transparent 100%
+  );
+  opacity: 0.65;
+}
+
+.panel-foot {
+  background: color-mix(in srgb, var(--bg-deep) 72%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-top: 1px solid var(--border-light);
+}
+
+/* 通用卡片 / 弹窗：底部透一点素材，顶边一道高光 */
+.ui-card,
+.el-card,
+.el-dialog {
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--bg-secondary) 88%, transparent) 0%,
+    color-mix(in srgb, var(--bg-primary) 82%, transparent) 100%
+  );
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  border: 1px solid var(--border-light);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #ffffff 7%, transparent),
+    var(--shadow-card);
+}
+.el-dialog {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #ffffff 8%, transparent),
+    var(--shadow-lg);
+}
+
+/* 图谱画布：不再自己铺实色，改为透出素材层 + 一层径向氛围光 */
+.canvas-wrap {
+  background:
+    radial-gradient(1100px 720px at 14% 8%, var(--accent-soft) 0%, transparent 58%),
+    radial-gradient(980px 680px at 86% 84%, var(--violet-soft) 0%, transparent 56%),
+    radial-gradient(720px 520px at 74% 14%, var(--amber-soft) 0%, transparent 48%),
+    color-mix(in srgb, var(--bg-primary) 42%, transparent);
+}
+/* 画布自己的极光漂移：让「图谱不是贴在死背景上」 */
+.canvas-wrap::before {
+  content: '';
+  position: absolute;
+  inset: -25% -15%;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(620px 420px at 28% 32%, var(--accent-glow) 0%, transparent 62%),
+    radial-gradient(540px 400px at 72% 62%, var(--violet-glow) 0%, transparent 62%);
+  filter: blur(52px);
+  opacity: 0.42;
+  animation: tex-aurora 26s var(--ease-out) infinite alternate;
+}
+@keyframes tex-aurora {
+  0%   { transform: translate3d(-3%, -2%, 0) scale(1);    opacity: 0.32; }
+  50%  { transform: translate3d(2%, 3%, 0)   scale(1.06); opacity: 0.5; }
+  100% { transform: translate3d(-1%, 2%, 0)  scale(1.02); opacity: 0.36; }
+}
+.canvas-wrap > svg { position: relative; z-index: 1; }
+
+/* ============================================================
+   ③ 霓虹辉光：让「可交互」这件事有物理反馈
+   ============================================================ */
+
+/* 主按钮：填充面 + 同色辉光（不用 blur 滤镜，插值阴影几乎零成本） */
+.btn-primary,
+.el-button--primary:not(.is-text):not(.is-link) {
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  border-color: var(--accent-fill);
+  box-shadow: 0 0 0 0 var(--accent-glow);
+  transition: box-shadow var(--dur-base) var(--ease-out),
+              transform var(--dur-fast) var(--ease-out),
+              background var(--dur-fast) var(--ease-out);
+}
+.btn-primary:hover,
+.el-button--primary:not(.is-text):not(.is-link):hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+  box-shadow:
+    0 6px 22px var(--accent-glow),
+    0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.btn-primary:active { transform: translateY(0); }
+
+/* 导航激活页签：底部霓虹下划线 + 弥散光 */
+.nav-tab {
+  position: relative;
+  border-radius: 8px 8px 0 0;
+}
+.nav-tab.active {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 14%, transparent) 0%,
+    transparent 100%
+  );
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
+}
+.nav-tab.active::after {
+  content: '';
+  position: absolute;
+  left: 14%; right: 14%; bottom: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: linear-gradient(90deg, var(--accent), var(--violet));
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+
+/* 品牌字：从旧的三色渐变（蓝绿杏）改为霓虹双色（青→紫） */
+.app-nav-brand {
+  background: linear-gradient(96deg, var(--accent) 0%, var(--violet) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: 0.2px;
+}
+
+/* 面板头像：霓虹渐变方块 + 外辉光 */
+.ph-avatar {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #ffffff 26%, transparent),
+    0 6px 20px var(--accent-glow),
+    0 0 0 1px color-mix(in srgb, var(--accent) 34%, transparent);
+}
+
+/* 输入类控件：聚焦时给一圈霓虹环，比只变边框更容易看见 */
+.el-input__wrapper.is-focus,
+.el-textarea__inner:focus,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent-soft) !important;
+  border-color: var(--accent) !important;
+}
+
+/* 上传区：虚线换成霓虹虚线 + 悬停弥散光 */
+.dropzone {
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--bg-tertiary) 60%, transparent) 0%,
+    color-mix(in srgb, var(--bg-secondary) 40%, transparent) 100%
+  );
+  border: 1.5px dashed color-mix(in srgb, var(--accent) 34%, transparent);
+  border-radius: var(--radius);
+  transition: all var(--dur-base) var(--ease-out);
+}
+.dropzone:hover,
+.dropzone.dragover {
+  border-color: var(--accent);
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--accent) 12%, transparent) 0%,
+    color-mix(in srgb, var(--violet) 8%, transparent) 100%
+  );
+  box-shadow: 0 0 0 4px var(--accent-soft), 0 10px 30px var(--accent-glow);
+}
+
+/* 滚动条：细霓虹 */
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--accent), var(--violet));
+  opacity: 0.5;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background-clip: content-box; }
+
+/* 选中文字 */
+::selection {
+  background: color-mix(in srgb, var(--accent) 34%, transparent);
+  color: var(--text-primary);
+}
+
+/* ============================================================
+   ④ 业务视图的表面适配
+   ============================================================ */
+
+/* 各视图容器统一透出素材层（原来是各自的实色底） */
+.kb-view-wrap > *,
+.workbench-view > * {
+  background-color: transparent;
+}
+
+/* 关系类型徽章：改用「同色低透明底 + 同色字」的 tonal 徽章。
+   原来的实现是「后端给的颜色直接做背景 + 白字」，
+   后端色偏浅时白字只有 2~3:1，读不清。现在把后端色当色相用，
+   明度由 CSS 决定，任何色相都能保证可读。 */
+.lt-rel-badge {
+  background: color-mix(in srgb, var(--rel-color, var(--accent)) 20%, transparent) !important;
+  color: color-mix(in srgb, var(--rel-color, var(--accent)) 88%, var(--text-primary)) !important;
+  border: 1px solid color-mix(in srgb, var(--rel-color, var(--accent)) 42%, transparent);
+  font-weight: 600;
+}
+
+/* 知识校验/健康度等状态条：让语义色也能发光 */
+.health-indicator.healthy,
+.val-stat-value.val-passed { text-shadow: 0 0 14px color-mix(in srgb, var(--success) 45%, transparent); }
+.health-indicator.error,
+.val-stat-value.val-error { text-shadow: 0 0 14px color-mix(in srgb, var(--danger) 45%, transparent); }
+
+/* ============================================================
+   ⑤ 亮色主题下的素材收敛
+   ------------------------------------------------------------
+   深色科技风的那套「半透明面板 + 霓虹」放到亮底上会泛白发飘。
+   亮色下把面板的不透明度收回去（宁可实一点），
+   照片也压得更淡 —— 亮底上照片对比强，很容易把文字吃掉。
+   ============================================================ */
+html:not(.dark) .app-nav {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.82) 100%);
+  box-shadow: inset 0 -1px 0 rgba(8, 145, 178, 0.10), 0 2px 16px rgba(16, 23, 37, 0.06);
+}
+html:not(.dark) .control-panel {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.90) 0%, rgba(242, 244, 249, 0.92) 100%);
+  box-shadow: inset -1px 0 0 rgba(8, 145, 178, 0.08), 2px 0 18px rgba(16, 23, 37, 0.05);
+}
+html:not(.dark) .canvas-wrap::before { opacity: 0.22; }
+html:not(.dark) .app-tex-grain { opacity: calc(var(--tex-grain-opacity, 0.5) * 0.6); }
+html:not(.dark) .nav-tab.active::after { box-shadow: 0 0 8px rgba(8, 145, 178, 0.35); }
+
+/* ============================================================
+   ⑥ 尊重「减少动态效果」
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  .canvas-wrap::before { animation: none; opacity: 0.3; }
+  .app-tex-photo { transition: none; }
+}
+
+/* ============================================================
+   ⑦ 低端设备降级
+   ------------------------------------------------------------
+   backdrop-filter 在集显上是这页最贵的一项（每个模糊表面都要重采样）。
+   窗口宽度小不代表设备弱，但这是唯一可从 CSS 拿到的信号；
+   更准确的做法是运行时探测（见 utils/resilience.js 的思路），
+   这里只做一个保守兜底：命中时把玻璃退回实色，功能与层级不受影响。
+   ============================================================ */
+@media (max-width: 900px) {
+  .app-nav,
+  .control-panel,
+  .ui-card,
+  .el-card,
+  .el-dialog {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .app-nav { background: var(--bg-secondary); }
+  .control-panel { background: var(--bg-primary); }
+}

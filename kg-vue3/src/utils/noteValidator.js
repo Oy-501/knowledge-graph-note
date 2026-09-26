@@ -13,6 +13,7 @@
  */
 
 import { getOntologySnapshot, findEntitiesInText, getEntityByName } from './corpusMatcher'
+import { SEMANTIC } from './palette'
 
 // ==================== 严重度（4 级） ====================
 
@@ -737,13 +738,22 @@ export function textOverlap(a, b) {
  * 计算节点校验状态（validationReport 驱动）
  * @returns {Object} { status, color, label, accuracyScore }
  */
+/**
+ * 校验状态 → 颜色 / 文案
+ *
+ * 这里返回的是**十六进制**而不是 CSS 变量：status.color 会直接进 SVG 的
+ * stroke 属性，而 SVG 的属性值不认 var(--x)（只有 style 属性才认）。
+ * 因此这几个值必须与 utils/palette.js 的 SEMANTIC 保持一致，
+ * 由 DOM 渲染的那几处（ControlPanel / NodeDetailDrawer）另用 class + CSS 变量
+ * 覆盖，以保证文字对比度在两个主题下都达标。
+ */
 export function getNodeValidationStatus(node) {
   if (!node || node.status === 'discarded') {
-    return { status: 'discarded', color: '#888', label: '已丢弃', accuracyScore: 0 }
+    return { status: 'discarded', color: SEMANTIC.muted, label: '已丢弃', accuracyScore: 0 }
   }
   const report = node.validationReport
   if (!report) {
-    return { status: 'pending', color: '#8a93b0', label: '待校验', accuracyScore: 0 }
+    return { status: 'pending', color: SEMANTIC.muted, label: '待校验', accuracyScore: 0 }
   }
   const total = report.totalAssertions || report.total || 1
   const passed = report.passedAssertions != null
@@ -754,21 +764,21 @@ export function getNodeValidationStatus(node) {
   const worst = errs.reduce((w, e) => Math.max(w, _sevWeight(normalizeSeverity(e.severity))), 0)
 
   if (worst >= 4) {
-    return { status: 'error', color: '#e84c4c', label: '存在严重错误', accuracyScore: accuracy }
+    return { status: 'error', color: SEMANTIC.danger, label: '存在严重错误', accuracyScore: accuracy }
   }
   if (worst === 3) {
-    return { status: 'warning', color: '#ff8c1a', label: '存在主要问题', accuracyScore: accuracy }
+    return { status: 'warning', color: SEMANTIC.warning, label: '存在主要问题', accuracyScore: accuracy }
   }
   if (worst >= 2) {
-    return { status: 'warning', color: '#e8a020', label: '需优化', accuracyScore: accuracy }
+    return { status: 'warning', color: SEMANTIC.warning, label: '需优化', accuracyScore: accuracy }
   }
   if (accuracy >= 100) {
-    return { status: 'passed', color: '#4caf50', label: '已验证', accuracyScore: 100 }
+    return { status: 'passed', color: SEMANTIC.success, label: '已验证', accuracyScore: 100 }
   }
   if (accuracy >= 60) {
-    return { status: 'warning', color: '#e8a020', label: '待审查', accuracyScore: accuracy }
+    return { status: 'warning', color: SEMANTIC.warning, label: '待审查', accuracyScore: accuracy }
   }
-  return { status: 'warning', color: '#e8a020', label: '需修正', accuracyScore: accuracy }
+  return { status: 'warning', color: SEMANTIC.warning, label: '需修正', accuracyScore: accuracy }
 }
 
 /** 获取知识可信度（L0-L4，语义不变） */

@@ -25,7 +25,27 @@
     <el-tabs v-model="activeTab" class="kb-tabs">
       <!-- ==================== 概览 ==================== -->
       <el-tab-pane label="概览" name="overview">
-        <div class="kb-stat-grid">
+        <!--
+          加载失败必须显式说明，不能照常渲染一整套 0。
+          「知识点 0 / 关系 0」与「加载失败」在视觉上完全一样，
+          用户会把「后端没连上」误读成「我的知识库空了」—— 这比报错更糟。
+        -->
+        <div v-if="kbStore.loadErrors.stats" class="kb-load-error">
+          <div class="kle-icon">!</div>
+          <div class="kle-body">
+            <div class="kle-title">概览数据加载失败，下方数字不可信</div>
+            <div class="kle-reason">{{ kbStore.loadErrors.stats }}</div>
+            <div class="kle-hint">
+              常见原因：后端未启动（<code>启动服务.bat</code>），或前端 API 地址与后端端口不一致
+              （<code>kg-vue3/.env.development</code> 的 <code>VITE_API_BASE</code>，应为 http://127.0.0.1:8080/api）。
+            </div>
+          </div>
+          <el-button size="small" :loading="kbStore.loadingStats" @click="kbStore.loadStats()">
+            重新加载
+          </el-button>
+        </div>
+
+        <div class="kb-stat-grid" :class="{ 'is-stale': !!kbStore.loadErrors.stats }">
           <div class="kb-stat" v-for="card in statCards" :key="card.label">
             <div class="ks-val">{{ card.value }}</div>
             <div class="ks-label">{{ card.label }}</div>
@@ -52,7 +72,7 @@
             <h3>知识层级分布</h3>
             <div class="kb-levels">
               <div v-for="lv in levelRows" :key="lv.key" class="kb-level-row">
-                <span class="kl-badge" :style="{ background: lv.color }">L{{ lv.key }}</span>
+                <span class="kl-badge" :style="{ '--rel-color': lv.color }">L{{ lv.key }}</span>
                 <span class="kl-label">{{ lv.label }}</span>
                 <span class="kl-val">{{ lv.value }}</span>
               </div>
@@ -454,21 +474,34 @@ const neighborVisible = ref(false)
 const neighborEntity = ref('')
 const neighbors = ref([])
 
+// 这四个色要同时当徽章的「文字色」用，所以在深色主题下必须选亮变体：
+// --mint 在深色下别名指向深紫 #8B5CF6，压在近黑底上只有 3.4:1，不达 AA。
 const LEVEL_META = {
   1: { label: '元概念', color: 'var(--accent)' },
-  2: { label: '核心理论', color: 'var(--mint)' },
-  3: { label: '应用实践', color: 'var(--apricot)' },
-  4: { label: '实现工具', color: '#9C7BB8' }
+  2: { label: '核心理论', color: 'var(--violet-text)' },
+  3: { label: '应用实践', color: 'var(--amber)' },
+  4: { label: '实现工具', color: 'var(--magenta)' }
 }
 
 const statCards = computed(() => {
-  const s = kbStore.stats || {}
+  const s = kbStore.stats
+  // 未加载成功时不编造 0 —— 「0 个别名可锚定」会被读成「真的没有」，
+  // 而实际只是没拿到数据。未知就明确写「尚未加载」。
+  if (!s) {
+    return [
+      { label: '知识点', value: '—', sub: '尚未加载' },
+      { label: '知识库关系', value: '—', sub: '尚未加载' },
+      { label: '已覆盖文件', value: '—', sub: '尚未加载' },
+      { label: '文件知识关联', value: '—', sub: '尚未加载' },
+      { label: '平均覆盖知识点', value: '—', sub: '尚未加载' }
+    ]
+  }
   return [
-    { label: '知识点', value: s.entries ?? '—', sub: `${s.aliases ?? 0} 个别名可锚定` },
-    { label: '知识库关系', value: s.relations ?? '—', sub: `推导边 ${s.sources?.['relation:derived'] ?? 0} 条` },
+    { label: '知识点', value: s.entries ?? 0, sub: `${s.aliases ?? 0} 个别名可锚定` },
+    { label: '知识库关系', value: s.relations ?? 0, sub: `推导边 ${s.sources?.['relation:derived'] ?? 0} 条` },
     { label: '已覆盖文件', value: `${s.files_covered ?? 0}/${s.files ?? 0}`, sub: `覆盖率 ${((s.coverage_rate || 0) * 100).toFixed(0)}%` },
-    { label: '文件知识关联', value: s.file_links ?? '—', sub: `节点级锚定连线 ${s.kb_node_links ?? 0} 条` },
-    { label: '平均覆盖知识点', value: s.avg_concepts_per_file ?? '—', sub: '每个文件锚定的知识点数' }
+    { label: '文件知识关联', value: s.file_links ?? 0, sub: `节点级锚定连线 ${s.kb_node_links ?? 0} 条` },
+    { label: '平均覆盖知识点', value: s.avg_concepts_per_file ?? 0, sub: '每个文件锚定的知识点数' }
   ]
 })
 
@@ -666,13 +699,13 @@ onMounted(async () => {
 }
 .kb-head-main h2 { margin: 0 0 6px; font-size: 18px; color: var(--text-primary); }
 .kb-head-main p {
-  margin: 0; max-width: 720px; font-size: 12.5px; line-height: 1.6;
+  margin: 0; max-width: 720px; font-size: var(--fs-sm); line-height: 1.6;
   color: var(--text-secondary);
 }
 .kb-head-actions { display: flex; align-items: center; gap: 14px; }
 .kb-threshold {
   display: flex; align-items: center; gap: 8px;
-  font-size: 12px; color: var(--text-secondary);
+  font-size: var(--fs-sm); color: var(--text-secondary);
 }
 .kb-tabs { margin-top: 6px; }
 
@@ -686,17 +719,17 @@ onMounted(async () => {
 }
 .kb-card h3 {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  margin: 0 0 12px; font-size: 13.5px; color: var(--text-primary);
+  margin: 0 0 12px; font-size: var(--fs-md); color: var(--text-primary);
 }
 .kb-count {
-  font-size: 11px; font-weight: 500; color: var(--text-muted);
+  font-size: var(--fs-xs); font-weight: 500; color: var(--text-muted);
   background: var(--bg-tertiary); border-radius: var(--radius-full);
   padding: 1px 8px;
 }
 .kb-inline-tools { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-.kb-hint { font-size: 11.5px; color: var(--text-muted); margin: 6px 0 0; line-height: 1.6; }
-.kb-empty { font-size: 12px; color: var(--text-muted); }
-.kb-summary { font-size: 12.5px; color: var(--text-primary); margin: 0 0 12px; }
+.kb-hint { font-size: var(--fs-sm); color: var(--text-muted); margin: 6px 0 0; line-height: 1.6; }
+.kb-empty { font-size: var(--fs-sm); color: var(--text-muted); }
+.kb-summary { font-size: var(--fs-sm); color: var(--text-primary); margin: 0 0 12px; }
 
 .kb-stat-grid {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -707,26 +740,34 @@ onMounted(async () => {
   border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow-sm);
 }
 .ks-val { font-size: 22px; font-weight: 700; color: var(--accent); line-height: 1.2; }
-.ks-label { font-size: 12px; color: var(--text-primary); margin-top: 2px; }
-.ks-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.ks-label { font-size: var(--fs-sm); color: var(--text-primary); margin-top: 2px; }
+.ks-sub { font-size: var(--fs-xs); color: var(--text-muted); margin-top: 2px; }
 
 .kb-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 @media (max-width: 900px) { .kb-two-col { grid-template-columns: 1fr; } }
 
 .kb-bars { display: flex; flex-direction: column; gap: 6px; }
-.kb-bar-row { display: flex; align-items: center; gap: 8px; font-size: 11.5px; }
+.kb-bar-row { display: flex; align-items: center; gap: 8px; font-size: var(--fs-sm); }
 .kb-bar-name { width: 110px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kb-bar-track { flex: 1; height: 8px; background: var(--bg-tertiary); border-radius: var(--radius-full); overflow: hidden; }
 .kb-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--mint)); border-radius: var(--radius-full); }
 .kb-bar-val { width: 34px; text-align: right; color: var(--text-muted); }
 
 .kb-levels { display: flex; flex-direction: column; gap: 6px; }
-.kb-level-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
-.kl-badge { color: #fff; font-size: 11px; border-radius: var(--radius-sm); padding: 1px 7px; }
+.kb-level-row { display: flex; align-items: center; gap: 8px; font-size: var(--fs-sm); }
+/* tonal 徽章：底与字同源，任何色相下对比度都够（原来的「实底 + 白字」不行） */
+.kl-badge {
+  font-size: var(--fs-xs);
+  border-radius: var(--radius-sm);
+  padding: 1px 7px;
+  background: color-mix(in srgb, var(--rel-color) 20%, transparent);
+  color: var(--rel-color);
+  font-weight: 600;
+}
 .kl-label { color: var(--text-secondary); }
 .kl-val { margin-left: auto; color: var(--text-primary); font-weight: 600; }
 .kb-sources { display: flex; flex-wrap: wrap; gap: 6px; }
-.kb-src-tag { font-size: 10.5px; }
+.kb-src-tag { font-size: var(--fs-xs); }
 
 .kb-dropzone {
   border: 1.5px dashed var(--border); border-radius: var(--radius);
@@ -735,14 +776,14 @@ onMounted(async () => {
 }
 .kb-dropzone:hover, .kb-dropzone.dragover { border-color: var(--accent); background: var(--accent-soft); }
 .dz-icon { font-size: 24px; }
-.dz-text { font-size: 12.5px; color: var(--text-primary); margin-top: 6px; }
-.dz-sub { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+.dz-text { font-size: var(--fs-sm); color: var(--text-primary); margin-top: 6px; }
+.dz-sub { font-size: var(--fs-xs); color: var(--text-muted); margin-top: 3px; }
 .kb-formats { margin: 12px 0 10px; }
-.kb-fmt-title { font-size: 12px; color: var(--text-primary); margin-bottom: 4px; }
+.kb-fmt-title { font-size: var(--fs-sm); color: var(--text-primary); margin-bottom: 4px; }
 .kb-formats ul { margin: 0; padding-left: 18px; }
-.kb-formats li { font-size: 11.5px; color: var(--text-secondary); line-height: 1.7; }
+.kb-formats li { font-size: var(--fs-sm); color: var(--text-secondary); line-height: 1.7; }
 .kb-formats code {
-  font-family: var(--font-mono); font-size: 11px;
+  font-family: var(--font-mono); font-size: var(--fs-xs);
   background: var(--bg-tertiary); border-radius: 4px; padding: 0 4px;
 }
 .kb-paste-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
@@ -751,42 +792,42 @@ onMounted(async () => {
   margin-top: 12px; padding: 8px 10px;
   background: var(--info-soft); border-radius: var(--radius-sm);
 }
-.kp-pending-text { font-size: 11.5px; color: var(--text-primary); flex: 1; }
+.kp-pending-text { font-size: var(--fs-sm); color: var(--text-primary); flex: 1; }
 
 .kb-report-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 900px) { .kb-report-grid { grid-template-columns: 1fr; } }
 .kb-report-block { background: var(--bg-tertiary); border-radius: var(--radius-sm); padding: 10px 12px; }
-.krb-title { font-size: 12px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
+.krb-title { font-size: var(--fs-sm); font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
 .krb-title.ok { color: var(--success); }
 .krb-title.info { color: var(--info); }
 .krb-title.warn { color: var(--warning); }
 .krb-body { display: flex; flex-wrap: wrap; gap: 5px; }
 .kb-chip {
-  font-size: 11px; border-radius: var(--radius-full); padding: 1px 8px;
+  font-size: var(--fs-xs); border-radius: var(--radius-full); padding: 1px 8px;
   background: var(--bg-secondary); border: 1px solid var(--border-light);
   color: var(--text-secondary); cursor: default;
 }
 .kb-chip.ok { border-color: var(--success); color: var(--success); background: var(--success-soft); }
 .kb-chip.info { border-color: var(--info); color: var(--info); background: var(--info-soft); }
 .kb-chip.muted { color: var(--text-muted); }
-.kb-conflict { width: 100%; font-size: 11px; color: var(--text-secondary); line-height: 1.6; }
+.kb-conflict { width: 100%; font-size: var(--fs-xs); color: var(--text-secondary); line-height: 1.6; }
 .kc-entity { font-weight: 600; color: var(--text-primary); }
 .kc-res { font-weight: 400; color: var(--warning); margin-left: 6px; }
 .kc-line { color: var(--text-muted); }
-.kb-report-tail { margin-top: 10px; font-size: 11.5px; color: var(--text-muted); }
+.kb-report-tail { margin-top: 10px; font-size: var(--fs-sm); color: var(--text-muted); }
 .kb-relations-note { margin-left: 8px; font-weight: 400; color: var(--text-muted); }
 
 .kb-entity { color: var(--accent); cursor: pointer; text-decoration: underline dotted; }
 .kb-pager { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
-.kb-page-info { font-size: 11.5px; color: var(--text-muted); }
+.kb-page-info { font-size: var(--fs-sm); color: var(--text-muted); }
 
-.kb-match-meta { font-size: 11.5px; color: var(--text-muted); }
+.kb-match-meta { font-size: var(--fs-sm); color: var(--text-muted); }
 .kb-match-list { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
 .kb-match-item { background: var(--bg-tertiary); border-radius: var(--radius-sm); padding: 8px 10px; }
-.km-name { font-size: 12.5px; font-weight: 600; color: var(--accent); }
-.km-meta { font-size: 11px; color: var(--text-muted); margin-left: 8px; }
-.km-alias { font-size: 11px; color: var(--apricot-strong); margin-left: 8px; }
-.km-def { font-size: 11.5px; color: var(--text-secondary); margin-top: 3px; line-height: 1.55; }
+.km-name { font-size: var(--fs-sm); font-weight: 600; color: var(--accent); }
+.km-meta { font-size: var(--fs-xs); color: var(--text-muted); margin-left: 8px; }
+.km-alias { font-size: var(--fs-xs); color: var(--apricot-strong); margin-left: 8px; }
+.km-def { font-size: var(--fs-sm); color: var(--text-secondary); margin-top: 3px; line-height: 1.55; }
 
 .kb-profile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .kb-profile {
@@ -795,8 +836,8 @@ onMounted(async () => {
 }
 .kb-profile.uncovered { opacity: 0.72; border-style: dashed; }
 .kp-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.kp-name { font-size: 12.5px; font-weight: 600; color: var(--text-primary); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.kp-coverage { font-size: 11px; color: var(--text-muted); margin: 6px 0; }
+.kp-name { font-size: var(--fs-sm); font-weight: 600; color: var(--text-primary); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kp-coverage { font-size: var(--fs-xs); color: var(--text-muted); margin: 6px 0; }
 .kp-concepts { display: flex; flex-wrap: wrap; gap: 4px; }
 
 .kb-link-item {
@@ -804,24 +845,61 @@ onMounted(async () => {
   border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 10px;
 }
 .kl-head { display: flex; align-items: center; justify-content: space-between; }
-.kl-files { font-size: 12.5px; color: var(--text-primary); }
-.kl-score { font-size: 14px; font-weight: 700; color: var(--accent); }
-.kl-scores { font-size: 11px; color: var(--text-muted); margin: 3px 0 7px; }
+.kl-files { font-size: var(--fs-sm); color: var(--text-primary); }
+.kl-score { font-size: var(--fs-base); font-weight: 700; color: var(--accent); }
+.kl-scores { font-size: var(--fs-xs); color: var(--text-muted); margin: 3px 0 7px; }
 .kl-block { margin-top: 6px; }
-.kl-label { font-size: 11px; color: var(--text-muted); margin-right: 6px; }
-.kl-bridge { display: flex; align-items: baseline; gap: 8px; font-size: 11px; color: var(--text-secondary); line-height: 1.6; }
+.kl-label { font-size: var(--fs-xs); color: var(--text-muted); margin-right: 6px; }
+.kl-bridge { display: flex; align-items: baseline; gap: 8px; font-size: var(--fs-xs); color: var(--text-secondary); line-height: 1.6; }
 .klb-path { color: var(--text-primary); white-space: nowrap; }
-.klb-path i { color: var(--mint-strong); font-style: normal; }
+.klb-path i { color: var(--violet-text); font-style: normal; }
 .klb-hops { color: var(--text-muted); white-space: nowrap; }
 .klb-evidence { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; }
 .kb-uncovered {
-  margin-top: 10px; font-size: 11.5px; color: var(--warning);
+  margin-top: 10px; font-size: var(--fs-sm); color: var(--warning);
   background: var(--warning-soft); border-radius: var(--radius-sm); padding: 8px 10px;
 }
 .kb-neighbor { border-bottom: 1px dashed var(--border-light); padding: 7px 0; }
 .kb-neighbor:last-child { border-bottom: none; }
 .kn-head { display: flex; align-items: center; gap: 8px; }
-.kn-name { font-size: 12.5px; font-weight: 600; color: var(--text-primary); }
-.kn-weight { font-size: 11px; color: var(--text-muted); margin-left: auto; }
-.kn-evidence { font-size: 11.5px; color: var(--text-secondary); margin-top: 3px; line-height: 1.55; }
+.kn-name { font-size: var(--fs-sm); font-weight: 600; color: var(--text-primary); }
+.kn-weight { font-size: var(--fs-xs); color: var(--text-muted); margin-left: auto; }
+.kn-evidence { font-size: var(--fs-sm); color: var(--text-secondary); margin-top: 3px; line-height: 1.55; }
+
+/* ===== 加载失败态 =====
+   设计意图：让「没拿到数据」在视觉上一眼区别于「真的没有数据」。
+   用左侧色条 + 图标 + 原因 + 可执行建议 + 重试按钮，
+   而不是只弹一个会自动消失的 toast（用户很容易错过）。 */
+.kb-load-error {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 14px 16px; margin-bottom: 14px;
+  background: var(--danger-soft);
+  border: 1px solid var(--danger);
+  border-left-width: 4px;
+  border-radius: var(--radius);
+}
+.kle-icon {
+  flex-shrink: 0;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--danger); color: #fff;
+  font-weight: 700; font-size: var(--fs-base); line-height: 22px; text-align: center;
+}
+.kle-body { flex: 1; min-width: 0; }
+.kle-title { font-size: var(--fs-md); font-weight: 600; color: var(--danger); margin-bottom: 4px; }
+.kle-reason {
+  font-size: var(--fs-sm); color: var(--text-primary); line-height: 1.6;
+  font-family: var(--font-mono); word-break: break-word;
+}
+.kle-hint {
+  font-size: var(--fs-sm); color: var(--text-secondary); line-height: 1.7; margin-top: 6px;
+}
+.kle-hint code {
+  font-family: var(--font-mono); font-size: var(--fs-sm);
+  background: var(--bg-tertiary); padding: 1px 5px; border-radius: 4px;
+  color: var(--text-primary);
+}
+
+/* 数据不可信时整体降噪：不作为视觉重点，避免用户误读数字 */
+.kb-stat-grid.is-stale { opacity: 0.45; }
+.kb-stat-grid.is-stale .ks-val { color: var(--text-muted); }
 </style>

@@ -144,7 +144,7 @@
       <button type="button" class="btn btn-sm" @click="onPreviewClassify" style="margin-left:4px" :disabled="graphStore.isBusy">
         预览
       </button>
-      <p style="font-size:10px;color:var(--text-muted);margin-top:2px">
+      <p style="font-size: var(--fs-xs);color:var(--text-muted);margin-top:2px">
         基于分组关键词自动匹配未归类节点
       </p>
     </div>
@@ -455,13 +455,13 @@
             <button type="button" class="btn btn-sm" @click="onMarkResolved(item.id)">标记已解决</button>
           </div>
           <div class="qi-actions" v-else>
-            <span style="font-size:10px;color:var(--success)">✓ 已解决</span>
+            <span style="font-size: var(--fs-xs);color:var(--success)">✓ 已解决</span>
             <button type="button" class="btn btn-sm" @click="onMarkUnresolved(item.id)">撤销</button>
           </div>
         </div>
       </div>
     </div>
-    <div class="questions-stats" style="margin-top:4px;font-size:10px;color:var(--text-muted)">
+    <div class="questions-stats" style="margin-top:4px;font-size: var(--fs-xs);color:var(--text-muted)">
       共 {{ questionsStore.questions.length }} 问题 / {{ questionsStore.thoughts.length }} 思考
       / {{ questionsStore.examples.length }} 示例
     </div>
@@ -490,7 +490,7 @@
         @click="onSetAssociationMode('loose')"
       >宽松模式</button>
     </div>
-    <div class="aq-stats" style="margin-top:6px;font-size:11px;color:var(--text-secondary)">
+    <div class="aq-stats" style="margin-top:6px;font-size: var(--fs-xs);color:var(--text-secondary)">
       <div class="aq-stat-row">
         <span>总节点: {{ graphStore.nodeCount }}</span>
         <span>总连线: {{ graphStore.linkCount }}</span>
@@ -519,7 +519,7 @@
       <div v-for="(w, i) in graphStore.adoptionWarnings.slice(0, 3)" :key="i" class="aq-warn-item" :title="w">
         {{ w.slice(0, 60) }}{{ w.length > 60 ? '...' : '' }}
       </div>
-      <div v-if="graphStore.adoptionWarnings.length > 3" style="font-size:10px;color:var(--text-muted);margin-top:2px">
+      <div v-if="graphStore.adoptionWarnings.length > 3" style="font-size: var(--fs-xs);color:var(--text-muted);margin-top:2px">
         还有 {{ graphStore.adoptionWarnings.length - 3 }} 条警告...
       </div>
     </div>
@@ -541,7 +541,7 @@
       </div>
       <el-switch v-model="cfg.showSystemNodes" @change="onSystemNodesToggle" />
     </div>
-    <p style="font-size:11px;color:var(--text-muted);margin-top:4px">
+    <p style="font-size: var(--fs-xs);color:var(--text-muted);margin-top:4px">
       关闭后仅保留 α+β 文本/语义关联，不参与知识库桥接
     </p>
   </div>
@@ -551,7 +551,7 @@
     <button type="button" class="btn btn-primary btn-block" @click="onRebuildAll" :disabled="graphStore.isBusy">
       🌍 立即重排全量图谱
     </button>
-    <p style="font-size:11px;color:var(--text-muted);margin-top:4px">
+    <p style="font-size: var(--fs-xs);color:var(--text-muted);margin-top:4px">
       触发全节点重算 + 关系重新分类 + 力导向重绘 + 全量知识点校验
     </p>
   </div>
@@ -682,7 +682,10 @@
       </div>
       <div class="val-unverified-items">
         <div v-for="n in graphStore.unverifiedNodes.slice(0, 5)" :key="n.id" class="val-unverified-item">
-          <span class="val-unverified-status" :style="{ color: getNodeValidationStatus(n).color }">
+          <!-- 用 class 而不是内联 color：内联的是调色板里的十六进制值，
+               那个值是按 SVG 描边挑的，拿来当浅底上的小字会不达标。
+               颜色交给下面的 CSS 规则按主题取令牌。 -->
+          <span class="val-unverified-status" :class="'is-' + getNodeValidationStatus(n).status">
             {{ getNodeValidationStatus(n).label }}
           </span>
           <span class="val-unverified-title">{{ n.title }}</span>
@@ -1274,7 +1277,7 @@ onUnmounted(() => {
   padding: 1px 8px;
   border-radius: var(--radius-full);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 600;
 }
 .aq-ev-strong { background: var(--success-soft); color: var(--success); }
@@ -1342,7 +1345,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-secondary);
   padding: 4px 9px;
@@ -1372,7 +1375,7 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-primary);
 }
 .qi-type {
@@ -1382,7 +1385,7 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   border-radius: var(--radius-sm);
 }
@@ -1393,12 +1396,18 @@ onUnmounted(() => {
 /* 9) 校验总览 / 隔离管理 */
 .validation-overview { padding: 8px 10px; }
 .val-stat-row { padding: 3px 0; }
-.val-stat-value { font-family: var(--font-mono); font-size: 12px; }
+.val-stat-value { font-family: var(--font-mono); font-size: var(--fs-sm); }
 
 .val-unverified-list { border: none; border-radius: var(--radius); overflow: hidden; }
 .val-unverified-item { padding: 4px 10px; transition: background-color var(--dur-fast); }
 .val-unverified-item:hover { background: var(--bg-hover); }
 .val-unverified-status { font-family: var(--font-mono); }
+/* 状态文字色走令牌（内联色是给 SVG 用的十六进制，当浅底小字不达标） */
+.val-unverified-status.is-pending,
+.val-unverified-status.is-discarded { color: var(--text-muted); }
+.val-unverified-status.is-passed { color: var(--success); }
+.val-unverified-status.is-warning { color: var(--warning); }
+.val-unverified-status.is-error { color: var(--danger); }
 .val-unverified-title { color: var(--text-primary); }
 
 .isolate-info { color: var(--text-muted); }
@@ -1460,12 +1469,12 @@ onUnmounted(() => {
   min-width: 0;
 }
 .plugin-name {
-  font-size: 13px;
+  font-size: var(--fs-md);
   font-weight: 600;
   color: var(--text-primary);
 }
 .plugin-desc {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   line-height: 1.4;
 }
@@ -1478,7 +1487,7 @@ onUnmounted(() => {
   gap: 6px;
 }
 .plugin-group-label {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -1490,7 +1499,7 @@ onUnmounted(() => {
   margin-top: 3px;
 }
 .plugin-empty {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-muted);
   text-align: center;
   padding: 12px;

@@ -37,8 +37,9 @@ def _ensure_dir() -> str:
         files.sort(key=os.path.getmtime, reverse=True)
         for old in files[30:]:
             os.remove(old)
-    except OSError:
-        pass
+    except OSError as exc:
+        # 清理旧产物失败（如文件被打开占用）不应影响导出本身
+        logger.debug(f"清理旧导出产物失败：{type(exc).__name__}: {exc}")
     return EXPORT_DIR
 
 
@@ -319,8 +320,9 @@ def to_pptx(summary: Dict, mermaid: Optional[str] = None,
         if shape == MSO_SHAPE.ROUNDED_RECTANGLE:
             try:
                 shp.adjustments[0] = radius
-            except (IndexError, KeyError):
-                pass
+            except (IndexError, KeyError) as exc:
+                # 某些形状不支持圆角调整值，退化为直角即可（不影响内容）
+                logger.debug(f"圆角调整值设置失败（{type(exc).__name__}），按直角绘制")
         return shp
 
     def add_text(slide, x, y, w, h, text, size=14, color=C_TEXT, bold=False,

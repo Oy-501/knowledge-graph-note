@@ -97,7 +97,7 @@ const events = computed(() => {
   padding: 4px 0;
 }
 .kt-empty {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   text-align: center;
   padding: 12px 0;
@@ -127,7 +127,7 @@ const events = computed(() => {
 .kt-dot-create { background: var(--accent); }
 .kt-dot-link { background: var(--mint); }
 .kt-dot-validate { background: var(--warning); }
-.kt-dot-review { background: var(--apricot, #D4A574); }
+.kt-dot-review { background: var(--apricot); }
 .kt-line {
   flex: 1;
   width: 1px;
@@ -146,7 +146,7 @@ const events = computed(() => {
   gap: 8px;
 }
 .kt-label {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--text-primary);
   overflow: hidden;
@@ -155,13 +155,13 @@ const events = computed(() => {
 }
 .kt-time {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   font-family: var(--font-mono);
 }
 .kt-desc {
   margin-top: 2px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   line-height: 1.5;
   word-break: break-all;

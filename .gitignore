@@ -13,6 +13,11 @@ venv/
 node_modules/
 dist/
 dist-old*/
+.dist-old*/
+
+# 备份文件
+*.bak
+*.bak-*
 
 # 本地数据库
 *.db
@@ -30,11 +35,7 @@ backend/.env
 .tmp-verify/
 .userdata/
 .workbuddy/
-
-# 临时/工具目录
-.tmp-verify/
-.userdata/
-.workbuddy/
+.tmp-assets/
 
 # 系统
 .DS_Store

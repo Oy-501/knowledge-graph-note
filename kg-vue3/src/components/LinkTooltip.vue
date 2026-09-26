@@ -15,8 +15,15 @@
     </div>
 
     <!-- 关系类型 -->
+    <!--
+      后端下发的 relation_color 只当「色相」用，不当背景色用。
+      原因：后端给的是饱和中色调，直接铺成背景配白字时，
+      遇到偏浅的色相（如 #8a93b0）对比度只有 2.9:1，根本读不清。
+      改为把色值写进 --rel-color，由 texture.css 用 color-mix 生成
+      「低透明同色底 + 高明度同色字」的 tonal 徽章 —— 任何色相都能保证可读。
+    -->
     <div class="lt-relation" v-if="data.relation_type">
-      <span class="lt-rel-badge" :style="{ background: data.relation_color || '#8a93b0' }">
+      <span class="lt-rel-badge" :style="{ '--rel-color': data.relation_color || 'var(--accent)' }">
         {{ data.relation_icon || '~' }} {{ data.relation_label || '关联' }}
       </span>
       <span class="lt-rel-code" v-if="data.relation_type">({{ data.relation_type }})</span>
@@ -115,13 +122,13 @@
     <!-- 判定方法 -->
     <div class="lt-section" v-if="data.relation_method">
       <div class="lt-section-title">判定方法</div>
-      <div class="lt-source" style="border-left-color:var(--text-muted); font-size:10px">{{ data.relation_method }}</div>
+      <div class="lt-source" style="border-left-color:var(--text-muted); font-size: var(--fs-xs)">{{ data.relation_method }}</div>
     </div>
 
     <!-- 桥接类型说明 -->
     <div class="lt-section" v-if="data.bridge_type">
       <div class="lt-section-title">桥接类型</div>
-      <div class="lt-source" style="border-left-color:var(--text-muted); font-size:10px">{{ bridgeTypeLabel }}</div>
+      <div class="lt-source" style="border-left-color:var(--text-muted); font-size: var(--fs-xs)">{{ bridgeTypeLabel }}</div>
     </div>
 
     <!-- 语义桥接说明 -->
@@ -213,11 +220,11 @@ const contextTypeLabel = computed(() => {
   max-width: 380px;
   box-shadow: var(--shadow-card);
   pointer-events: none;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.5;
 }
 .link-tooltip h4 {
-  font-size: 13px;
+  font-size: var(--fs-md);
   font-weight: 600;
   margin: 0 0 8px 0;
   padding-left: 8px;
@@ -241,21 +248,22 @@ const contextTypeLabel = computed(() => {
   border-radius: var(--radius-full);
 }
 .lt-evi-icon {
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .lt-evi-label {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
 }
 .lt-rel-badge {
-  font-size: 11px;
-  color: #fff;
+  font-size: var(--fs-xs);
   padding: 2px 10px;
   border-radius: var(--radius-full);
-  font-weight: 500;
+  font-weight: 600;
+  /* 配色由 texture.css 依据 --rel-color 生成 tonal 徽章（见模板里的注释）。
+     这里只保留尺寸与排布，不再写死颜色 —— 写死会盖掉全局的 tonal 规则。 */
 }
 .lt-rel-code {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   font-family: var(--font-mono);
 }
@@ -266,11 +274,11 @@ const contextTypeLabel = computed(() => {
 }
 .lt-k {
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 .lt-v {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 500;
 }
 .lt-section {
@@ -279,7 +287,7 @@ const contextTypeLabel = computed(() => {
   border-top: 1px solid var(--border-light);
 }
 .lt-section-title {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -287,7 +295,7 @@ const contextTypeLabel = computed(() => {
   margin-bottom: 4px;
 }
 .lt-source {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   background: var(--bg-tertiary);
   border-left: 3px solid var(--accent);
@@ -302,7 +310,7 @@ const contextTypeLabel = computed(() => {
   gap: 3px;
 }
 .lt-badge {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   background: var(--bg-tertiary);
   color: var(--accent-light);
   padding: 1px 8px;

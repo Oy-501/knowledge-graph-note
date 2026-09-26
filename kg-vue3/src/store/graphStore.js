@@ -256,7 +256,7 @@ export const useGraphStore = defineStore('graph', {
       this.setBusy('加载图谱数据')
       this.setProgress(10)
       try {
-        const data = await graphAPI.build({ groupId: 'all' })
+        const data = await graphAPI.load({ groupId: 'all' })
         this._applyGraphData(data)
         this._backendReady = true
         this.setBusy('')
@@ -515,7 +515,7 @@ export const useGraphStore = defineStore('graph', {
       this.setBusy('全局重排：从后端获取图谱数据')
       this.setProgress(10)
       try {
-        const data = await graphAPI.build({ groupId: 'all' })
+        const data = await graphAPI.load({ groupId: 'all' })
         this._applyGraphData(data)
         this.setBusy('')
         this.setProgress(100)

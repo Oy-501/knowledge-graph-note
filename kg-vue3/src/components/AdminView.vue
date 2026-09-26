@@ -64,7 +64,7 @@
                   <span class="ab-val">{{ v }}</span>
                 </div>
               </div>
-              <el-empty v-else description="暂无操作记录" :image-size="60" />
+              <AppEmpty v-else text="暂无操作记录" hint="筛选条件调整后再试" compact />
               <p class="ad-hint">异常/警告记录：{{ activity.abnormal || 0 }} 条</p>
             </section>
           </div>
@@ -248,6 +248,47 @@
             </el-table>
           </section>
         </el-tab-pane>
+
+        <!-- 系统自检：把「容易出错的角落」显性化，出问题先看这里再排查 -->
+        <el-tab-pane label="系统自检" name="doctor">
+          <section class="ad-card">
+            <div class="ad-doctor-head">
+              <h3>系统自检</h3>
+              <div class="ad-doctor-actions">
+                <span v-if="doctor" class="ad-doctor-time">检查于 {{ doctor.checked_at }}</span>
+                <el-button size="small" :loading="doctorLoading" @click="loadDoctor">
+                  重新体检
+                </el-button>
+              </div>
+            </div>
+            <p class="ad-doctor-note">
+              逐项确认配置、数据库、表结构漂移、知识库索引、依赖与磁盘。
+              标红项按提示处理后重新体检即可；黄项不影响使用，属于优化建议。
+            </p>
+
+            <div v-if="doctor" class="ad-doctor-summary" :class="doctor.ok ? 'is-ok' : 'is-bad'">
+              <span class="ad-doctor-badge">{{ doctor.ok ? '✓' : '✕' }}</span>
+              <strong>{{ doctor.summary.headline }}</strong>
+              <span class="ad-doctor-counts">
+                共 {{ doctor.summary.total }} 项 · 通过 {{ doctor.summary.passed }}
+                · 警告 {{ doctor.summary.warnings }} · 错误 {{ doctor.summary.errors }}
+              </span>
+            </div>
+
+            <div v-if="doctor" class="ad-doctor-list">
+              <div v-for="c in doctor.checks" :key="c.name" class="ad-doctor-row" :class="'is-' + c.status">
+                <span class="ad-doctor-ico">{{ c.icon }}</span>
+                <span class="ad-doctor-title">{{ c.title }}</span>
+                <span class="ad-doctor-detail">
+                  {{ c.detail }}
+                  <em v-if="c.hint && c.status !== 'ok'" class="ad-doctor-advice">→ {{ c.hint }}</em>
+                </span>
+                <span class="ad-doctor-ms">{{ c.ms }}ms</span>
+              </div>
+            </div>
+            <AppEmpty v-else-if="!doctorLoading" text="尚未体检" hint="点右上角「重新体检」，会检查环境、数据库、表结构与知识库索引" compact />
+          </section>
+        </el-tab-pane>
       </el-tabs>
 
       <!-- 候选详情抽屉：完整证据链 -->
@@ -327,7 +368,8 @@
  */
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { adminAPI } from '@/api/index'
+import { adminAPI, systemAPI } from '@/api/index'
+import AppEmpty from '@/components/AppEmpty.vue'
 
 const TOKEN_KEY = 'kg-admin-token'
 const token = ref('')
@@ -337,6 +379,10 @@ const checking = ref(false)
 const tab = ref('overview')
 const loading = ref(false)
 const busy = ref('')
+
+// 系统自检
+const doctor = ref(null)
+const doctorLoading = ref(false)
 
 const overview = ref(null)
 const verdictStats = ref(null)
@@ -447,11 +493,25 @@ async function refreshAll() {
     users.value = us.users || []
     adminFiles.value = fs.files || []
     await Promise.all([loadCandidates(), loadAudit()])
+    // 体检不阻塞主流程：失败也只提示，不影响概览展示
+    loadDoctor().catch(() => {})
   } catch (e) {
     ElMessage.error(e.message || '加载失败（口令可能已失效）')
     if (String(e.message || '').includes('口令')) logout()
   } finally {
     loading.value = false
+  }
+}
+
+/** 系统自检：把「容易出错的角落」一次性查清 */
+async function loadDoctor() {
+  doctorLoading.value = true
+  try {
+    doctor.value = await systemAPI.doctor()
+  } catch (e) {
+    ElMessage.warning(e.fullMessage || e.message || '体检失败')
+  } finally {
+    doctorLoading.value = false
   }
 }
 
@@ -610,13 +670,13 @@ onMounted(() => {
   border-radius: var(--radius-lg); box-shadow: var(--shadow-md);
 }
 .ad-gate-card h2 { margin: 0 0 8px; font-size: 18px; color: var(--text-primary); }
-.ad-gate-card p { font-size: 12.5px; color: var(--text-secondary); line-height: 1.7; margin: 0 0 16px; }
-.ad-gate-tip { font-size: 11px; color: var(--text-muted); margin-top: 14px !important; }
+.ad-gate-card p { font-size: var(--fs-sm); color: var(--text-secondary); line-height: 1.7; margin: 0 0 16px; }
+.ad-gate-tip { font-size: var(--fs-xs); color: var(--text-muted); margin-top: 14px !important; }
 .ad-gate-tip code { background: var(--bg-tertiary); padding: 1px 5px; border-radius: 4px; font-family: var(--font-mono); }
 
 .ad-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .ad-head h2 { margin: 0 0 6px; font-size: 18px; color: var(--text-primary); }
-.ad-head p { margin: 0; max-width: 680px; font-size: 12.5px; color: var(--text-secondary); line-height: 1.6; }
+.ad-head p { margin: 0; max-width: 680px; font-size: var(--fs-sm); color: var(--text-secondary); line-height: 1.6; }
 .ad-head-actions { display: flex; gap: 8px; }
 .ad-tabs { margin-top: 8px; }
 
@@ -624,23 +684,23 @@ onMounted(() => {
   background: var(--bg-secondary); border: 1px solid var(--border-light);
   border-radius: var(--radius); padding: 14px 16px; margin-bottom: 14px; box-shadow: var(--shadow-sm);
 }
-.ad-card h3 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 12px; font-size: 13.5px; color: var(--text-primary); }
-.ad-card h4 { margin: 16px 0 8px; font-size: 12.5px; color: var(--text-primary); }
-.ad-count { font-size: 11px; color: var(--text-muted); background: var(--bg-tertiary); border-radius: var(--radius-full); padding: 1px 8px; }
+.ad-card h3 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 12px; font-size: var(--fs-md); color: var(--text-primary); }
+.ad-card h4 { margin: 16px 0 8px; font-size: var(--fs-sm); color: var(--text-primary); }
+.ad-count { font-size: var(--fs-xs); color: var(--text-muted); background: var(--bg-tertiary); border-radius: var(--radius-full); padding: 1px 8px; }
 .ad-tools { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.ad-hint { font-size: 11.5px; color: var(--text-muted); line-height: 1.6; margin: 10px 0 0; }
+.ad-hint { font-size: var(--fs-sm); color: var(--text-muted); line-height: 1.6; margin: 10px 0 0; }
 
 .ad-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 14px; }
 .ad-stat { background: var(--bg-secondary); border: 1px solid var(--border-light); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow-sm); }
 .as-val { font-size: 22px; font-weight: 700; line-height: 1.15; }
-.as-label { font-size: 12px; color: var(--text-primary); margin-top: 2px; }
-.as-sub { font-size: 11px; color: var(--text-muted); }
+.as-label { font-size: var(--fs-sm); color: var(--text-primary); margin-top: 2px; }
+.as-sub { font-size: var(--fs-xs); color: var(--text-muted); }
 
 .ad-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 @media (max-width: 1000px) { .ad-two-col { grid-template-columns: 1fr; } }
 
 .ad-meter, .ad-bars { display: flex; flex-direction: column; gap: 7px; }
-.ad-meter-row, .ad-bar-row { display: flex; align-items: center; gap: 8px; font-size: 11.5px; }
+.ad-meter-row, .ad-bar-row { display: flex; align-items: center; gap: 8px; font-size: var(--fs-sm); }
 .am-label, .ab-name { width: 96px; color: var(--text-secondary); }
 .am-track, .ab-track { flex: 1; height: 8px; background: var(--bg-tertiary); border-radius: var(--radius-full); overflow: hidden; }
 .am-fill, .ab-fill { height: 100%; border-radius: var(--radius-full); }
@@ -649,44 +709,107 @@ onMounted(() => {
 .ad-thresholds { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
 
 .ad-bulk { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
-.ad-pager { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 11.5px; color: var(--text-muted); }
+.ad-pager { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: var(--fs-sm); color: var(--text-muted); }
 
-.ad-web { font-size: 11px; }
+.ad-web { font-size: var(--fs-xs); }
 .ad-web.ok { color: var(--success); }
 .ad-web.unavailable { color: var(--warning); }
 .ad-web.skipped { color: var(--text-muted); }
-.ad-chunk { font-size: 10px; color: var(--text-muted); margin-left: 4px; }
-.ad-stage { font-size: 11px; }
+.ad-chunk { font-size: var(--fs-xs); color: var(--text-muted); margin-left: 4px; }
+.ad-stage { font-size: var(--fs-xs); }
 .ad-stage.human { color: var(--apricot-strong); }
 .ad-stage.auto { color: var(--text-muted); }
-.ad-user { font-size: 12.5px; color: var(--text-primary); }
-.ad-user-id { font-size: 11px; color: var(--text-muted); margin-left: 6px; }
+.ad-user { font-size: var(--fs-sm); color: var(--text-primary); }
+.ad-user-id { font-size: var(--fs-xs); color: var(--text-muted); margin-left: 6px; }
 
 .ad-detail :deep(.el-descriptions) { margin-bottom: 8px; }
 .ad-score { margin-left: 8px; font-weight: 700; color: var(--accent); }
 .ad-evidence { display: flex; flex-direction: column; gap: 6px; }
 .ad-ev {
-  display: flex; align-items: baseline; gap: 8px; font-size: 11.5px;
+  display: flex; align-items: baseline; gap: 8px; font-size: var(--fs-sm);
   padding: 6px 9px; border-radius: var(--radius-sm); background: var(--bg-tertiary);
   border-left: 3px solid var(--mint);
 }
 .ad-ev.neg { border-left-color: var(--danger); }
 .ad-ev.zero { border-left-color: var(--border); color: var(--text-muted); }
-.aev-type { font-size: 10.5px; color: var(--text-muted); min-width: 54px; }
-.aev-weight { font-family: var(--font-mono); font-size: 11px; min-width: 38px; }
+.aev-type { font-size: var(--fs-xs); color: var(--text-muted); min-width: 54px; }
+.aev-weight { font-family: var(--font-mono); font-size: var(--fs-xs); min-width: 38px; }
 .aev-weight.pos { color: var(--success); }
 .aev-weight.neg { color: var(--danger); }
 .aev-detail { flex: 1; color: var(--text-secondary); line-height: 1.55; }
-.aev-link { font-size: 10.5px; color: var(--accent); }
+.aev-link { font-size: var(--fs-xs); color: var(--accent); }
 .ad-source {
-  max-height: 160px; overflow-y: auto; font-size: 11.5px; line-height: 1.7;
+  max-height: 160px; overflow-y: auto; font-size: var(--fs-sm); line-height: 1.7;
   color: var(--text-secondary); background: var(--bg-tertiary);
   border-radius: var(--radius-sm); padding: 8px 10px; white-space: pre-wrap;
 }
 .ad-review-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .ad-json {
-  max-height: 420px; overflow: auto; font-family: var(--font-mono); font-size: 11px;
+  max-height: 420px; overflow: auto; font-family: var(--font-mono); font-size: var(--fs-xs);
   line-height: 1.55; color: var(--text-secondary); background: var(--bg-tertiary);
   border-radius: var(--radius-sm); padding: 10px; white-space: pre-wrap; word-break: break-all;
+}
+
+/* ===== 系统自检 ===== */
+.ad-doctor-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 4px;
+}
+.ad-doctor-head h3 { margin: 0; }
+.ad-doctor-actions { display: flex; align-items: center; gap: 10px; }
+.ad-doctor-time { font-size: var(--fs-xs); color: var(--text-muted); }
+.ad-doctor-note {
+  font-size: var(--fs-sm); color: var(--text-secondary); line-height: 1.7;
+  margin: 6px 0 12px;
+}
+.ad-doctor-summary {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 12px; border-radius: var(--radius-sm); margin-bottom: 12px;
+  font-size: var(--fs-md);
+}
+/* 通过用品牌绿、异常用警示红，同时给左侧色条：不单靠颜色传达状态 */
+.ad-doctor-summary.is-ok {
+  background: var(--success-soft); color: var(--success);
+  border-left: 3px solid var(--success);
+}
+.ad-doctor-summary.is-bad {
+  background: var(--danger-soft); color: var(--danger);
+  border-left: 3px solid var(--danger);
+}
+.ad-doctor-badge { font-size: 15px; font-weight: 700; }
+.ad-doctor-counts { font-size: var(--fs-xs); opacity: 0.85; margin-left: auto; }
+
+.ad-doctor-list { display: flex; flex-direction: column; }
+.ad-doctor-row {
+  display: grid;
+  grid-template-columns: 20px 116px 1fr 62px;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-light);
+  border-left: 3px solid transparent;
+  font-size: var(--fs-sm);
+  border-radius: 2px;
+}
+.ad-doctor-row:last-child { border-bottom: none; }
+.ad-doctor-row:hover { background: var(--bg-hover); }
+.ad-doctor-row.is-error {
+  border-left-color: var(--danger); background: var(--danger-soft);
+}
+.ad-doctor-row.is-warn { border-left-color: var(--warning); }
+.ad-doctor-row.is-ok .ad-doctor-ico { color: var(--success); }
+.ad-doctor-row.is-warn .ad-doctor-ico { color: var(--warning); }
+.ad-doctor-row.is-error .ad-doctor-ico { color: var(--danger); }
+.ad-doctor-ico { font-weight: 700; text-align: center; }
+.ad-doctor-title { color: var(--text-primary); font-weight: 500; }
+.ad-doctor-detail { color: var(--text-secondary); line-height: 1.6; word-break: break-word; }
+/* 建议单独成行、用品牌色，确保「下一步怎么做」不会被忽略 */
+.ad-doctor-advice {
+  display: block; margin-top: 3px; font-style: normal;
+  color: var(--accent); font-size: var(--fs-xs);
+}
+.ad-doctor-ms {
+  color: var(--text-muted); font-size: var(--fs-xs);
+  font-family: var(--font-mono); text-align: right;
 }
 </style>

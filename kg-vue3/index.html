@@ -2,9 +2,33 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='28'%3E%F0%9F%A7%A0%3C/text%3E%3C/svg%3E" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M6 22 L13 10 M13 10 L21 17 M21 17 L27 9' stroke='%2322D3EE' stroke-width='2.4' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='6' cy='22' r='3.4' fill='%2322D3EE'/%3E%3Ccircle cx='13' cy='10' r='2.8' fill='%238B5CF6'/%3E%3Ccircle cx='21' cy='17' r='2.8' fill='%238B5CF6'/%3E%3Ccircle cx='27' cy='9' r='3.4' fill='%2322D3EE'/%3E%3C/svg%3E" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark light" />
+  <meta name="theme-color" content="#0A0C13" />
   <title>知识关联图谱 · 毕设交付版</title>
+
+  <!--
+    主题首帧预置（防闪白）
+    ------------------------------------------------------------
+    settingsStore 在 Vue 挂载后才给 <html> 加 .dark 类。
+    在那之前浏览器会先按 :root（亮色）渲染一帧 ——
+    对深色为主的产品来说就是一次明显的「白闪」。
+    这里在样式表之前同步读一次 localStorage，把主题类先打上。
+    读不到（首次访问 / 清过缓存）时按深色处理，与本产品的默认主题一致。
+  -->
+  <script>
+    (function () {
+      try {
+        var raw = localStorage.getItem('kg-settings')
+        var theme = raw ? (JSON.parse(raw).theme || 'dark') : 'dark'
+        if (theme === 'dark') document.documentElement.classList.add('dark')
+      } catch (e) {
+        document.documentElement.classList.add('dark')
+      }
+    })()
+  </script>
+
   <!-- Transformers.js 通过 CDN 全局加载，避免 Vite 打包时 onnxruntime-web 静态初始化失败 -->
   <script src="https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js"></script>
 </head>

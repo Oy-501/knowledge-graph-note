@@ -39,14 +39,36 @@
                       maxlength="200" show-word-limit placeholder="一句话介绍自己或这个知识库" />
           </el-form-item>
           <el-form-item>
-            <el-button type="primary" :loading="saving" @click="saveProfile">保存资料</el-button>
+            <!-- 按钮层级统一：每张卡片的「保存」是该卡片的主操作 → primary（实心）；
+                 其余（上传、应用、移除）为次级操作 → 默认描边。
+                 尺寸也统一为 small —— 此前「保存资料」是默认尺寸，与同卡片其它
+                 按钮（small）混在一起，大小不一致。 -->
+            <el-button type="primary" size="small" :loading="saving" @click="saveProfile">保存资料</el-button>
           </el-form-item>
         </el-form>
       </section>
 
-      <!-- 背景 -->
+      <!-- 背景与素材 -->
       <section class="pf-card">
-        <h3>自定义背景</h3>
+        <h3>背景与素材</h3>
+
+        <!-- 素材库入口：本轮视觉改版的主入口。
+             素材（14 张摄影 + 24 个纹理图案）从 assets/catalog.js 读取，
+             全部本地内嵌，离线可用。 -->
+        <div class="pf-asset-current">
+          <span class="pf-asset-swatch" :style="assetSwatchStyle"></span>
+          <div class="pf-asset-meta">
+            <b>{{ assetSummary.name }}</b>
+            <small>{{ assetSummary.detail }}</small>
+          </div>
+          <el-button type="primary" size="small" @click="showBgSelector = true">
+            打开素材库
+          </el-button>
+        </div>
+
+        <el-divider style="margin:12px 0" />
+
+        <h4 class="pf-sub-h">自定义图片背景</h4>
         <div class="pf-bg-preview" :style="previewStyle">
           <span v-if="!bgUrl" class="pf-bg-empty">尚未上传背景图</span>
           <div v-else class="pf-bg-overlay">
@@ -72,17 +94,33 @@
             <el-slider v-model="bgConfig.blur" :min="0" :max="20" :step="1" size="small" />
             <span class="pf-slider-val">{{ bgConfig.blur }}px</span>
           </div>
-          <div class="pf-slider-row">
-            <span class="pf-slider-label">范围</span>
-            <el-radio-group v-model="bgConfig.scope" size="small">
-              <el-radio-button label="global">全局</el-radio-button>
-              <el-radio-button label="editor">仅工作台</el-radio-button>
-            </el-radio-group>
-          </div>
-          <el-button size="small" :loading="saving" @click="saveBackgroundConfig">保存背景设置</el-button>
+          <!-- 与「保存资料」同为卡片主操作 → 同样用 primary，保持一致 -->
+          <el-button type="primary" size="small" :loading="saving" @click="saveBackgroundConfig">保存背景设置</el-button>
         </div>
       </section>
     </div>
+
+    <!-- 素材署名：Hero Patterns 是 CC BY 4.0，许可证要求署名可见，
+         所以不能只写在源码注释里。 -->
+    <section v-if="!loading" class="pf-card pf-credits-card">
+      <h3>素材署名</h3>
+      <ul class="pf-credits">
+        <li>
+          <b>纹理图案</b>（{{ counts.patterns }} 个）——
+          <a href="https://heropatterns.com/" target="_blank" rel="noopener noreferrer">Hero Patterns</a>
+          作者 Steve Schoger，许可 <code>CC BY 4.0</code>
+        </li>
+        <li>
+          <b>摄影背景</b>（{{ counts.backdrops }} 张）——
+          <a href="https://unsplash.com/" target="_blank" rel="noopener noreferrer">Unsplash</a>，
+          许可 <code>Unsplash License</code>（免费商用，不要求署名，此处仍列出以尊重作者）
+        </li>
+      </ul>
+      <p class="pf-hint">
+        全部素材已下载到本地并内嵌（不依赖 CDN，断网可用）；
+        完整清单与逐张作者信息见 <code>src/assets/CREDITS.md</code>。
+      </p>
+    </section>
 
     <!-- 我的数据 -->
     <section v-if="!loading" class="pf-card">
@@ -99,19 +137,24 @@
         所有操作都会记录依据，方便回溯。
       </p>
     </section>
+
+    <!-- 素材库（背景与素材选择器） -->
+    <BackgroundSelector :visible="showBgSelector" @close="showBgSelector = false" />
   </div>
 </template>
 
 <script setup>
 /**
  * ProfileView.vue
- * 个人主页：头像 / 背景图上传（存服务端）、资料编辑、我的数据概览、后台入口。
+ * 个人主页：头像 / 背景与素材 / 资料编辑、我的数据概览、素材署名、后台入口。
  */
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Setting } from '@element-plus/icons-vue'
 import { profileAPI } from '@/api/index'
 import { useSettingsStore } from '@/store/settingsStore'
+import BackgroundSelector from './BackgroundSelector.vue'
+import { COUNTS } from '@/assets/catalog'
 
 defineEmits(['open-admin'])
 
@@ -121,6 +164,28 @@ const saving = ref(false)
 const uploadingAvatar = ref(false)
 const uploadingBg = ref(false)
 const maxImageMB = ref(5)
+const showBgSelector = ref(false)
+const counts = COUNTS
+
+/* 当前素材背景摘要（用于卡片右侧的即时反馈） */
+const assetSummary = computed(() => {
+  const preset = settingsStore.assetPreset
+  const parts = settingsStore.assetParts
+  if (!preset || !parts) {
+    return { name: '未使用素材背景', detail: '当前使用自定义图片或纯色' }
+  }
+  const bits = []
+  if (parts.photo) bits.push('摄影背景')
+  if (parts.pattern) bits.push('纹理图案')
+  return { name: preset.name, detail: bits.join(' + ') || '纯色底' }
+})
+
+/* 缩略色块：用预设色板画一条渐变，和选择器里的卡片视觉一致 */
+const assetSwatchStyle = computed(() => {
+  const s = settingsStore.assetPreset?.swatch
+  if (!s) return { background: 'var(--bg-tertiary)' }
+  return { background: `linear-gradient(135deg, ${s[0]} 0%, ${s[1]} 100%)` }
+})
 
 const form = ref({ display_name: '', bio: '' })
 const bgConfig = ref({ opacity: 0.8, blur: 0, scope: 'global', fit: 'cover' })
@@ -148,9 +213,11 @@ const statCards = computed(() => {
   const s = stats.value || {}
   return [
     { label: '上传文件', value: s.files ?? 0, sub: '个', color: 'var(--accent)' },
-    { label: '知识点', value: s.nodes ?? 0, sub: '个', color: 'var(--mint-strong)' },
+    // --mint-strong 在深色下别名指向深紫 #7C3AED，只有 3.0:1；大字也需要亮紫
+    { label: '知识点', value: s.nodes ?? 0, sub: '个', color: 'var(--violet-text)' },
     { label: '候选知识点', value: s.candidates ?? 0, sub: `已采纳 ${s.accepted ?? 0}`, color: 'var(--apricot-strong)' },
-    { label: '待审', value: s.pending_review ?? 0, sub: '需人工确认', color: '#8E7BA8' },
+    // 数值是大字，用亮紫才能在深色底上站得住（深紫只有 3.0:1）
+    { label: '待审', value: s.pending_review ?? 0, sub: '需人工确认', color: 'var(--violet-light)' },
     { label: '知识库条目', value: s.kb_entries ?? 0, sub: '全局共享', color: 'var(--info)' },
     { label: '操作记录', value: s.audit_rows ?? 0, sub: '条审计', color: 'var(--text-muted)' }
   ]
@@ -280,7 +347,7 @@ onMounted(load)
 .pf-view { flex: 1; min-width: 0; padding: 16px 20px 40px; height: 100%; overflow-y: auto; background: var(--bg-primary); }
 .pf-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
 .pf-head h2 { margin: 0 0 6px; font-size: 18px; color: var(--text-primary); }
-.pf-head p { margin: 0; max-width: 620px; font-size: 12.5px; color: var(--text-secondary); line-height: 1.6; }
+.pf-head p { margin: 0; max-width: 620px; font-size: var(--fs-sm); color: var(--text-secondary); line-height: 1.6; }
 
 .pf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 @media (max-width: 980px) { .pf-grid { grid-template-columns: 1fr; } }
@@ -288,7 +355,7 @@ onMounted(load)
   background: var(--bg-secondary); border: 1px solid var(--border-light);
   border-radius: var(--radius); padding: 14px 16px; margin-bottom: 14px; box-shadow: var(--shadow-sm);
 }
-.pf-card h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 13.5px; color: var(--text-primary); }
+.pf-card h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: var(--fs-md); color: var(--text-primary); }
 
 .pf-avatar-row { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
 .pf-avatar {
@@ -302,11 +369,11 @@ onMounted(load)
 .pf-avatar-ph { font-size: 24px; font-weight: 700; color: var(--accent); }
 .pf-avatar-mask {
   position: absolute; inset: auto 0 0 0; background: rgba(0,0,0,0.45);
-  color: #fff; font-size: 11px; text-align: center; padding: 2px 0; opacity: 0; transition: opacity .15s;
+  color: #fff; font-size: var(--fs-xs); text-align: center; padding: 2px 0; opacity: 0; transition: opacity .15s;
 }
 .pf-avatar:hover .pf-avatar-mask { opacity: 1; }
-.pf-tip-title { font-size: 12.5px; color: var(--text-primary); }
-.pf-tip-sub { font-size: 11px; color: var(--text-muted); margin: 2px 0 6px; }
+.pf-tip-title { font-size: var(--fs-sm); color: var(--text-primary); }
+.pf-tip-sub { font-size: var(--fs-xs); color: var(--text-muted); margin: 2px 0 6px; }
 .pf-form { margin-top: 4px; }
 
 .pf-bg-preview {
@@ -315,22 +382,58 @@ onMounted(load)
   display: flex; align-items: center; justify-content: center;
   background-size: cover; background-position: center;
 }
-.pf-bg-empty { font-size: 12px; color: var(--text-muted); }
+.pf-bg-empty { font-size: var(--fs-sm); color: var(--text-muted); }
 .pf-bg-overlay {
-  position: absolute; right: 8px; bottom: 8px; font-size: 11px; color: #fff;
+  position: absolute; right: 8px; bottom: 8px; font-size: var(--fs-xs); color: #fff;
   background: rgba(0,0,0,0.4); border-radius: var(--radius-full); padding: 2px 8px;
 }
 .pf-bg-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
 .pf-sliders { display: flex; flex-direction: column; gap: 6px; }
 .pf-slider-row { display: flex; align-items: center; gap: 10px; }
-.pf-slider-label { width: 62px; font-size: 12px; color: var(--text-secondary); flex-shrink: 0; }
+.pf-slider-label { width: 62px; font-size: var(--fs-sm); color: var(--text-secondary); flex-shrink: 0; }
 .pf-slider-row :deep(.el-slider) { flex: 1; }
-.pf-slider-val { width: 44px; font-size: 11.5px; color: var(--text-muted); text-align: right; }
+.pf-slider-val { width: 44px; font-size: var(--fs-sm); color: var(--text-muted); text-align: right; }
 
 .pf-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
 .pf-stat { background: var(--bg-tertiary); border-radius: var(--radius-sm); padding: 10px 12px; }
 .pfs-val { font-size: 22px; font-weight: 700; line-height: 1.15; }
-.pfs-label { font-size: 12px; color: var(--text-primary); margin-top: 2px; }
-.pfs-sub { font-size: 11px; color: var(--text-muted); }
-.pf-hint { font-size: 11.5px; color: var(--text-muted); margin: 12px 0 0; line-height: 1.6; }
+.pfs-label { font-size: var(--fs-sm); color: var(--text-primary); margin-top: 2px; }
+.pfs-sub { font-size: var(--fs-xs); color: var(--text-muted); }
+.pf-hint { font-size: var(--fs-sm); color: var(--text-muted); margin: 12px 0 0; line-height: 1.6; }
+
+/* —— 素材库入口 —— */
+.pf-asset-current {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+  background: color-mix(in srgb, var(--bg-tertiary) 60%, transparent);
+}
+.pf-asset-swatch {
+  width: 38px; height: 38px; border-radius: 9px; flex-shrink: 0;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 22%, transparent),
+              0 3px 12px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+.pf-asset-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.pf-asset-meta b { font-size: var(--fs-md); color: var(--text-primary); font-weight: 600; }
+.pf-asset-meta small { font-size: var(--fs-xs); color: var(--text-muted); }
+.pf-sub-h {
+  font-size: var(--fs-sm); font-weight: 600; color: var(--text-secondary);
+  margin: 0 0 8px;
+}
+
+/* —— 素材署名 —— */
+.pf-credits-card { margin-top: 14px; }
+.pf-credits { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.pf-credits li { font-size: var(--fs-sm); color: var(--text-secondary); line-height: 1.6; }
+.pf-credits b { color: var(--text-primary); font-weight: 600; }
+.pf-credits a { color: var(--accent); text-decoration: none; }
+.pf-credits a:hover { text-decoration: underline; }
+.pf-credits code {
+  font-family: var(--font-mono); font-size: var(--fs-xs);
+  background: var(--bg-tertiary); padding: 1px 5px; border-radius: 4px;
+  color: var(--text-primary);
+}
 </style>

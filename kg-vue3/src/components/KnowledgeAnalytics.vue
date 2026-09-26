@@ -387,7 +387,7 @@ const report = computed(() => {
   margin-bottom: 10px;
 }
 .ka-empty p {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.6;
 }
 
@@ -417,7 +417,7 @@ const report = computed(() => {
   line-height: 1.2;
 }
 .ka-label {
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   margin-top: 3px;
 }
@@ -429,7 +429,7 @@ const report = computed(() => {
   gap: 4px;
 }
 .ka-section-title {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--text-secondary);
   letter-spacing: 0.5px;
@@ -437,7 +437,7 @@ const report = computed(() => {
   margin-bottom: 2px;
 }
 .ka-subtitle {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   margin-top: 4px;
 }
@@ -449,7 +449,7 @@ const report = computed(() => {
   background: var(--bg-secondary);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   transition: background var(--dur-fast);
 }
 .ka-rank:hover {
@@ -462,7 +462,7 @@ const report = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--accent);
   background: var(--accent-soft);
@@ -478,11 +478,12 @@ const report = computed(() => {
 .ka-rank-val {
   flex-shrink: 0;
   font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--mint-strong);
+  font-size: var(--fs-xs);
+  /* 深色下 --mint-strong 别名指向深紫，只有 3.2:1，文字场景改用浅紫 */
+  color: var(--violet-text);
 }
 .ka-skip {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   padding: 4px 2px;
 }
@@ -496,9 +497,9 @@ const report = computed(() => {
   padding: 8px 14px;
   border: none;
   border-radius: var(--radius-full);
-  background: var(--accent);
-  color: #fff;
-  font-size: 12.5px;
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  font-size: var(--fs-sm);
   font-weight: 600;
   cursor: pointer;
   transition: background var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out),
@@ -518,7 +519,7 @@ const report = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--fs-md);
   line-height: 1.7;
   color: var(--text-primary);
 }
@@ -537,7 +538,7 @@ const report = computed(() => {
   border-top: 1px solid var(--border-light);
 }
 .ka-report-sugg-title {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--text-secondary);
   margin-bottom: 6px;
@@ -553,7 +554,7 @@ const report = computed(() => {
   padding: 7px 10px 7px 16px;
   background: var(--bg-tertiary);
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
 }
 .ka-report-suggestions li::before {

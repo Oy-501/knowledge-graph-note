@@ -67,13 +67,40 @@ export const useKbStore = defineStore('kb', () => {
     return sum / fileProfiles.value.length
   })
 
+  // ---- 加载状态与失败记录 ----
+  // 为什么要单独记失败：原来加载失败只弹一个 toast，页面照常渲染出一整套「0」，
+  // 用户看到「知识点 0 / 关系 0」会以为知识库是空的 —— 把「加载失败」误读成
+  // 「没有数据」是很危险的误导（可能让人以为数据丢了）。
+  // 现在把失败留在 state 里，视图可以明确显示「加载失败 + 重试」而不是假的 0。
+  const loadErrors = ref({})          // { stats: '原因', entries: '原因', ... }
+  const LOAD_LABELS = {
+    stats: '概览统计', entries: '知识点', relations: '关系',
+    graph: '本体图', files: '文件知识画像', imports: '导入记录'
+  }
+
+  function _markOk(key) {
+    if (loadErrors.value[key]) {
+      const next = { ...loadErrors.value }
+      delete next[key]
+      loadErrors.value = next
+    }
+  }
+
+  function _markFail(key, e) {
+    loadErrors.value = { ...loadErrors.value, [key]: e?.message || String(e) }
+  }
+
+  const failedSections = computed(() => Object.keys(loadErrors.value))
+  const hasLoadError = computed(() => failedSections.value.length > 0)
+
   // ---- actions ----
   async function loadStats() {
     loadingStats.value = true
     try {
       stats.value = await kbAPI.stats()
+      _markOk('stats')
     } catch (e) {
-      ElMessage.error(`知识库统计加载失败：${e.message}`)
+      _markFail('stats', e)
     } finally {
       loadingStats.value = false
     }
@@ -86,8 +113,9 @@ export const useKbStore = defineStore('kb', () => {
       const data = await kbAPI.entries(params)
       entries.value = data.entries || []
       entryTotal.value = data.total || 0
+      _markOk('entries')
     } catch (e) {
-      ElMessage.error(`知识点加载失败：${e.message}`)
+      _markFail('entries', e)
     } finally {
       loadingEntries.value = false
     }
@@ -130,8 +158,9 @@ export const useKbStore = defineStore('kb', () => {
     try {
       const data = await kbAPI.relations({ entity, limit: 200 })
       relations.value = data.relations || []
+      _markOk('relations')
     } catch (e) {
-      ElMessage.error(`知识库关系加载失败：${e.message}`)
+      _markFail('relations', e)
     }
   }
 
@@ -139,8 +168,9 @@ export const useKbStore = defineStore('kb', () => {
     graphLoading.value = true
     try {
       graph.value = await kbAPI.graph(params)
+      _markOk('graph')
     } catch (e) {
-      ElMessage.error(`本体图加载失败：${e.message}`)
+      _markFail('graph', e)
     } finally {
       graphLoading.value = false
     }
@@ -192,8 +222,10 @@ export const useKbStore = defineStore('kb', () => {
     try {
       const data = await kbAPI.imports(limit)
       imports.value = data.imports || []
+      _markOk('imports')
     } catch (e) {
-      /* 历史加载失败不打断主流程 */
+      // 导入历史失败不打断主流程，但要留痕（否则「没有导入记录」和「加载失败」分不清）
+      _markFail('imports', e)
     }
   }
 
@@ -227,9 +259,10 @@ export const useKbStore = defineStore('kb', () => {
     try {
       const data = await kbAPI.files(threshold)
       fileProfiles.value = data.files || []
+      _markOk('files')
       fileLinks.value = data.links || []
     } catch (e) {
-      ElMessage.error(`文件知识画像加载失败：${e.message}`)
+      _markFail('files', e)
     } finally {
       loadingFiles.value = false
     }
@@ -269,16 +302,32 @@ export const useKbStore = defineStore('kb', () => {
     }
   }
 
+  /**
+   * 刷新全部数据。
+   *
+   * 用 allSettled 而不是 all：各 loader 内部已各自 catch，但逐个失败会各弹一个
+   * toast（一次刷新最多 6 个，刷屏且看不出主次）。这里汇总成一条提示，
+   * 并把失败项留在 loadErrors 里供视图渲染「加载失败 + 重试」。
+   */
   async function refreshAll() {
-    await Promise.all([
-      loadStats(), loadEntries(), loadRelations(), loadGraph(),
-      loadFiles(), loadImports()
-    ])
+    const tasks = [
+      ['stats', loadStats], ['entries', loadEntries], ['relations', loadRelations],
+      ['graph', loadGraph], ['files', loadFiles], ['imports', loadImports]
+    ]
+    await Promise.allSettled(tasks.map(([, fn]) => fn()))
+
+    const failed = failedSections.value
+    if (failed.length) {
+      const names = failed.map(k => LOAD_LABELS[k] || k).join('、')
+      const reason = loadErrors.value[failed[0]] || '未知原因'
+      ElMessage.error(`部分数据加载失败：${names}（${reason}）`)
+    }
   }
 
   return {
     // state
     stats, entries, entryTotal, entryFilter, relations, graph,
+    loadErrors, failedSections, hasLoadError,
     report, imports, matchResult, fileProfiles, fileLinks, fileDetail,
     rebuildThreshold,
     // loading flags

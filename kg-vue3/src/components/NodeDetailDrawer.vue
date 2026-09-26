@@ -44,7 +44,7 @@
             </div>
             <div class="info-row" v-if="levelInfo">
               <span class="info-label">说明</span>
-              <span class="info-value" style="font-size:11px;color:var(--text-secondary)">{{ levelInfo.desc }}</span>
+              <span class="info-value" style="font-size: var(--fs-xs);color:var(--text-secondary)">{{ levelInfo.desc }}</span>
             </div>
           </div>
 
@@ -72,7 +72,7 @@
                 <button type="button" class="btn btn-sm" @click="onRemoveIsolate(bid)">解除</button>
               </div>
             </div>
-            <div v-else style="font-size:11px;color:var(--text-muted)">暂无隔离</div>
+            <div v-else style="font-size: var(--fs-xs);color:var(--text-muted)">暂无隔离</div>
           </div>
 
           <!-- 校验状态 -->
@@ -188,8 +188,9 @@
                 class="info-value"
                 :style="{
                   color: node.accuracyScore >= 80
-                    ? '#4caf50'
-                    : node.accuracyScore >= 50 ? '#e8a020' : '#e84c4c'
+                    // 状态色统一走调色板，不再写死旧品牌的绿/橙/红
+                    ? SEMANTIC.success
+                    : node.accuracyScore >= 50 ? SEMANTIC.warning : SEMANTIC.danger
                 }"
               >
                 {{ node.accuracyScore }}%
@@ -227,6 +228,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { LEVEL_COLORS, SEMANTIC } from '@/utils/palette'
 import { ElMessage } from 'element-plus'
 import { useGraphStore } from '@/store/graphStore'
 import { useGroupStore } from '@/store/groupStore'
@@ -261,12 +263,14 @@ const levelLabel = computed(() => {
 
 const levelBadgeStyle = computed(() => {
   const lv = props.node?.level || 3
-  // 对齐图谱节点新渐变体系：L1/L2 雾霾蓝系、L3 薄荷、L4 暖杏
-  const colors = { 1: '#3D5A75', 2: '#4F6F8F', 3: '#7CB8A0', 4: '#D4A574' }
+  // 对齐图谱节点体系：L1 青 / L2 紫 / L3 琥珀 / L4 品红
+  // 色值来自 utils/palette.js —— 与图谱节点渐变同源，避免两处各调各的
+  const c = LEVEL_COLORS[lv] || LEVEL_COLORS[3]
   return {
-    background: colors[lv] || colors[3],
-    color: '#fff',
-    border: '1px solid ' + (colors[lv] || colors[3])
+    background: c,
+    // 这四个颜色都是中高明度的霓虹色，白字压上去对比度不足，用深色字
+    color: '#0B0E16',
+    border: '1px solid ' + c
   }
 })
 
@@ -429,7 +433,7 @@ function onExportLearningPath() {
   margin-bottom: 20px;
 }
 .drawer-section h4 {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--text-secondary);
   text-transform: uppercase;
@@ -441,7 +445,7 @@ function onExportLearningPath() {
 .info-row {
   display: flex;
   margin-bottom: 6px;
-  font-size: 13px;
+  font-size: var(--fs-md);
 }
 .info-label {
   color: var(--text-muted);
@@ -455,11 +459,11 @@ function onExportLearningPath() {
 }
 .mono {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 .tag {
   display: inline-block;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   background: var(--bg-tertiary);
   color: var(--accent-light);
   padding: 1px 8px;
@@ -472,7 +476,7 @@ function onExportLearningPath() {
 }
 .empty-hint {
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--fs-md);
   text-align: center;
   padding: 20px;
 }
@@ -500,14 +504,14 @@ function onExportLearningPath() {
   margin-bottom: 4px;
 }
 .rel-type-badge {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: #fff;
   padding: 2px 10px;
   border-radius: var(--radius-full);
   font-weight: 500;
 }
 .rel-score {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-family: var(--font-mono);
   color: var(--accent);
 }
@@ -515,7 +519,7 @@ function onExportLearningPath() {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
+  font-size: var(--fs-md);
 }
 .rel-arrow {
   color: var(--text-muted);
@@ -526,7 +530,7 @@ function onExportLearningPath() {
 }
 .rel-evidence {
   margin-top: 4px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   background: var(--bg-tertiary);
   padding: 6px 8px;
@@ -536,12 +540,12 @@ function onExportLearningPath() {
 }
 .rel-meta {
   margin-top: 3px;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   font-family: var(--font-mono);
 }
 .raw-text {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   background: var(--bg-secondary);
   border: 1px solid var(--border-light);
@@ -566,10 +570,10 @@ function onExportLearningPath() {
   border-left: 3px solid var(--accent);
   border-radius: 4px;
   padding: 6px 8px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 .vi-type {
-  font-size: 9px;
+  font-size: var(--fs-xs);
   color: #fff;
   padding: 1px 6px;
   border-radius: 8px;
@@ -591,7 +595,7 @@ function onExportLearningPath() {
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   padding: 3px 6px;
   outline: none;
   cursor: pointer;
@@ -614,7 +618,7 @@ function onExportLearningPath() {
   border: 1px solid var(--border-light);
   border-radius: 4px;
   padding: 4px 8px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 .ib-name {
   color: var(--text-secondary);
@@ -625,7 +629,7 @@ function onExportLearningPath() {
   margin-right: 6px;
 }
 .ib-item .btn {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   padding: 2px 6px;
 }
 
@@ -634,7 +638,7 @@ function onExportLearningPath() {
   margin-bottom: 8px;
 }
 .lp-level {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--accent);
   margin-bottom: 4px;
@@ -643,7 +647,7 @@ function onExportLearningPath() {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-primary);
   padding: 3px 0 3px 4px;
 }
@@ -661,11 +665,11 @@ function onExportLearningPath() {
   margin-top: 10px;
   padding: 7px 12px;
   border-radius: var(--radius-full);
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent);
   border: none;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   transition: background var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
 .lp-export:hover {

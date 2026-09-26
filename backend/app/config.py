@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     SQLITE_PATH: str = "./kg.db"
 
     # ---- Server ----
-    HOST: str = "0.0.0.0"
+    HOST: str = "127.0.0.1"   # 默认只绑本机回环，避免无意中暴露到局域网（需外部访问再显式改 0.0.0.0）
     PORT: int = 8000
     DEBUG: bool = False
 
@@ -82,6 +82,14 @@ class Settings(BaseSettings):
 
     # ---- 后台管理 ----
     ADMIN_TOKEN: str = "kg-admin"       # 后台口令（务必在 .env 改成自己的）
+
+    # ---- 安全开关（默认按「默认安全」原则取最严值）----
+    # 写操作（POST/PUT/PATCH/DELETE）是否必须带管理口令。
+    # 关闭后任意能访问端口的人都能删知识库条目、重建知识库 —— 仅在本机
+    # 单人调试且明确知情时才建议关闭。
+    PROTECT_WRITES: bool = True
+    ADMIN_FAIL_LIMIT: int = 20          # 口令失败尝试上限（次数 / 窗口）
+    ADMIN_FAIL_WINDOW_S: int = 300      # 失败计数窗口（秒）
     UPLOAD_DIR: str = "./uploads"       # 头像/背景图等用户上传文件目录
     MAX_IMAGE_MB: int = 5               # 图片上传上限
     AUDIT_KEEP_ROWS: int = 20000        # 审计日志保留条数（超出清理最旧的）
@@ -126,6 +134,21 @@ class Settings(BaseSettings):
     @property
     def db_is_sqlite(self) -> bool:
         return self.resolved_database_url.startswith("sqlite")
+
+    @property
+    def resolved_upload_dir(self) -> str:
+        """上传目录的**绝对路径**（单一事实来源）。
+
+        此前 main.py / profile.py / system.py 各自用 dirname(dirname(__file__))
+        推算相对路径，因文件所在层级不同（app/ 与 app/api/）算出了两个目录
+        （backend/uploads 与 backend/app/uploads），会出现「图片存到 A 处、
+        静态服务却挂在 B 处」→ 上传成功但访问 404。统一从这里取，base 固定 backend/。
+        """
+        root = self.UPLOAD_DIR
+        if os.path.isabs(root):
+            return root
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # backend/
+        return os.path.join(base, root.lstrip("./"))
 
     class Config:
         env_file = ".env"

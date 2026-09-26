@@ -80,8 +80,9 @@ def _parse_table_rows(rows: List[List[str]]) -> List[Dict]:
             elif field == "level":
                 try:
                     item["level"] = int(float(value))
-                except ValueError:
-                    pass
+                except ValueError as exc:
+                    # 层级无法解析时不阻断导入，但留痕：层级会影响分层与学习主线
+                    logger.debug(f"条目 {item.get('entity', '?')} 的 level={value!r} 无法解析：{exc}")
             else:
                 item[field] = value
         if item.get("entity"):
@@ -129,8 +130,8 @@ def _parse_json(text: str) -> List[Dict]:
             elif field == "level":
                 try:
                     mapped["level"] = int(float(v))
-                except (TypeError, ValueError):
-                    pass
+                except (TypeError, ValueError) as exc:
+                    logger.debug(f"条目 {mapped.get('entity', '?')} 的 level={v!r} 无法解析：{exc}")
             else:
                 mapped[field] = str(v).strip()
         if mapped.get("entity"):
@@ -167,8 +168,9 @@ def detect_format(name: str, text: str) -> str:
         try:
             json.loads(text)
             return "json"
-        except (ValueError, TypeError):
-            pass
+        except (ValueError, TypeError) as exc:
+            # 不是 JSON —— 正常分支（继续尝试表格/Markdown/纯文本判定）
+            logger.debug(f"JSON 探测未通过，继续其它格式判定：{exc}")
     if re.search(r"^\s*\|.*\|\s*$", head, re.MULTILINE):
         return "markdown_table"
     if re.search(r"^#{1,3}\s+\S+", head, re.MULTILINE):

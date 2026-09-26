@@ -789,7 +789,7 @@ defineExpose({ saveNote })
   align-items: center;
   justify-content: space-between;
   padding: 6px 16px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   cursor: pointer;
   background: var(--bg-secondary);
@@ -800,7 +800,7 @@ defineExpose({ saveNote })
   color: var(--text-primary);
 }
 .kw-minigraph-arrow {
-  font-size: 9px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
 }
 .kw-minigraph-body {

@@ -1,8 +1,8 @@
 # Knowledge Graph Notes · 知识图谱笔记系统
 
-> **English intro**: A local-first knowledge graph note-taking system built with Vue 3 + D3.js + FastAPI. Upload notes, auto-extract knowledge points, verify them with a 4-way evidence engine (KB consistency / graph / text rules / web search), build cross-file semantic links with a 4-dimensional scoring model, and export summaries to Markdown / Word / PPT. Includes an admin console, personal profile, Mermaid flowcharts and AI-readable digests.
+> **English intro**: A local-first knowledge graph note-taking system built with Vue 3 + D3.js + FastAPI. Upload notes, auto-extract knowledge points, verify them with a 4-way evidence engine (KB consistency / graph / text rules / web search), build cross-file semantic links with a 4-dimensional scoring model, and export summaries to Markdown / Word / PPT. Includes an admin console, personal profile, Mermaid flowcharts and AI-readable digests. Also ships an AI-native visual layer (aurora canvas / glass panels / glow feedback), a 4-layer code defense system with a one-click health check, and a security-hardening audit (XSS / auth / rate-limit / least-privilege).
 >
-> **中文简介**: 本地优先的知识图谱笔记系统。上传笔记 → 智能切割 → 自动抽取知识点 → 四路证据智能判定（知识库/图谱/规则/联网）→ 四维融合打分建立跨文件语义关联 → 一键导出 Markdown/Word/PPT 学习总结。内置后台管理与个人主页。
+> **中文简介**: 本地优先的知识图谱笔记系统。上传笔记 → 智能切割 → 自动抽取知识点 → 四路证据智能判定（知识库/图谱/规则/联网）→ 四维融合打分建立跨文件语义关联 → 一键导出 Markdown/Word/PPT 学习总结。内置后台管理与个人主页。附带 AI 视觉增强层（极光画布/玻璃面板/发光反馈）、四层代码防御与一键体检、安全审计加固（XSS/鉴权/限流/最小权限）。
 
 ---
 
@@ -124,6 +124,9 @@ AGPL-style open source (adjust as needed). See source for details.
 - **图谱总结与导出** — 结构总结（层级/领域/枢纽/知识簇/**学习主线**）→ Mermaid 流程图（AI 可读，虚线=知识库桥接）→ AI 摘要 → 导出 **Markdown / Word / PPT / Mermaid / JSON**
 - **后台管理与个人主页** — 口令保护的后台（候选审阅含完整证据链、操作审计台账）、服务端头像/背景图上传
 - **学习增强套件** — 局部图谱（1-3 跳 BFS）、网络分析仪表盘（度中心度/介数/PageRank/连通分量）、智能连接推荐、`[[双向链接]]`、图谱筛选、插件系统、间隔重复回顾、知识问答、时间线
+- **AI 视觉增强层** — 极光漂移画布、玻璃拟态面板、品牌渐变、按钮高光扫过、节点悬停发光（`ai-ui.css`，亮暗自适应，可一行回退）
+- **四层代码防御** — 体检脚本（语法/导入/路由冲突/表结构漂移/静默吞异常/关键配置）+ 全局异常兜底 + 数据守卫 + 前端错误边界/请求重试/错误上报
+- **安全审计加固** — 修复存储型 XSS、Mermaid 注入、后台 fail-open、30+ 写端点零鉴权、无限口令尝试、日志注入等 16 项审计问题
 
 ## 快速开始
 
@@ -154,3 +157,6 @@ npm run dev
 | `图谱总结与导出说明.md` | 总结维度、Mermaid 流程图、AI 摘要、6 种导出格式 |
 | `大文件上传保护说明.md` | 四层防崩溃方案与配置 |
 | `知识库设计说明.md` | 知识库数据模型与关联算法 |
+| `UI设计优化说明.md` | P0/P1/P2 可读性、一致性、可达性修复实录 |
+| `代码防御与UI优化说明.md` | 四层防御机制、体检脚本、实测抓出的 4 个真实问题 |
+| `安全审计与加固说明.md` | 16 项安全问题审计与修复、遗留风险清单 |

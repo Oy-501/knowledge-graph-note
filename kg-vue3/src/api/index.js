@@ -4,31 +4,243 @@
  */
 
 import axios from 'axios'
+import { reportClientError } from '@/utils/errorReporter'
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api'
+// 默认与后端实际端口一致，且用 127.0.0.1 而非 localhost：
+// 浏览器可能把 localhost 解析成 IPv6 ::1，而后端只绑 IPv4 回环 → 全部请求失败。
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8080/api'
 
 const api = axios.create({
   baseURL: API_BASE,
   timeout: 120000 // 推理可能较慢，放宽超时
 })
 
-// 请求拦截器：注入 user_id
+// 幂等重试的默认开关：只重试 GET（无副作用），最多 1 次
+const RETRY_MAX = 1
+const RETRY_DELAY_MS = 600
+// 这些路径即便失败也不重试、不上报（避免错误处理自身形成风暴）
+const NO_RETRY_PATHS = ['/system/client-error']
+
+/**
+ * 统一的错误对象。
+ * 保留 status / hint / requestId，让调用方能区分「网络断了」和「参数错了」，
+ * 而不是所有失败都退化成一个无法判断的字符串。
+ */
+export class ApiError extends Error {
+  constructor(message, { status = 0, hint = '', requestId = '', code = '', url = '' } = {}) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.hint = hint
+    this.requestId = requestId
+    this.code = code
+    this.url = url
+    /** 面向用户的完整提示：原因 + 下一步怎么做 */
+    this.fullMessage = hint ? `${message}（${hint}）` : message
+  }
+  get isNetwork() { return this.status === 0 }
+  get isServerError() { return this.status >= 500 }
+  get isGuard() { return this.status === 400 || this.status === 413 || this.status === 415 || this.status === 422 }
+}
+
+/** 把各种失败形态翻译成 ApiError */
+function toApiError(err) {
+  const cfgUrl = err.config?.url || ''
+  const res = err.response
+  const data = res?.data || {}
+
+  // 后端统一错误体：{ ok:false, error:{ code, message, hint, request_id } }
+  const backendErr = data.error || {}
+  // 兼容老格式 { detail: "..." }，以及 422 的 fields 明细
+  const detailText = typeof data.detail === 'string' ? data.detail : ''
+
+  if (!res) {
+    // 没有响应 → 网络层问题
+    if (err.code === 'ECONNABORTED' || /timeout/i.test(err.message || '')) {
+      return new ApiError('请求超时', {
+        status: 0, url: cfgUrl, code: 'timeout',
+        hint: '数据量可能较大或后端正在重建关联；可稍后重试，或先减少筛选范围。'
+      })
+    }
+    return new ApiError('无法连接后端服务', {
+      status: 0, url: cfgUrl, code: 'unreachable',
+      hint: '请确认后端已启动（启动服务.bat），且端口与前端 VITE_API_BASE 一致。'
+    })
+  }
+
+  const message = backendErr.message || detailText || `请求失败（HTTP ${res.status}）`
+  let hint = backendErr.hint || ''
+
+  // 后端没给建议时，按状态码补一条通用但可执行的
+  if (!hint) {
+    if (res.status === 401 || res.status === 403) {
+      hint = '管理口令不正确或已失效，请在「后台管理」重新输入。'
+    } else if (res.status === 404) {
+      hint = '目标不存在或已被删除，刷新列表后重试。'
+    } else if (res.status === 413) {
+      hint = '文件超出上限，请拆分后分批上传。'
+    } else if (res.status === 422) {
+      const fields = data.error?.detail?.fields
+      if (Array.isArray(fields) && fields.length) {
+        hint = '字段问题：' + fields.map(f => `${f.field} ${f.issue}`).join('；')
+      } else {
+        hint = '请求参数不合法，请检查输入内容。'
+      }
+    } else if (res.status >= 500) {
+      hint = '服务端异常，现场已记录；可带 request_id 到「后台管理 → 操作审计」查看详情。'
+    }
+  }
+
+  return new ApiError(message, {
+    status: res.status,
+    hint,
+    requestId: backendErr.request_id || res.headers?.['x-request-id'] || '',
+    code: backendErr.code || '',
+    url: cfgUrl
+  })
+}
+
+// 后台口令在本地的存储键（与 AdminView 共用同一个键）
+export const ADMIN_TOKEN_KEY = 'kg-admin-token'
+
+/** 读取本机保存的管理口令（没有则返回空串） */
+function readAdminToken() {
+  try {
+    return localStorage.getItem(ADMIN_TOKEN_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * 把管理口令写进请求头。
+ *
+ * 必须兼容 AxiosHeaders：axios v1 会把 config.headers 归一化成 AxiosHeaders 实例，
+ * 此时**直接赋值普通属性不会生效**（不会进入最终发送的头）。
+ * 重试路径复用的正是这种已被归一化的 config —— 之前就是因此导致
+ * 「用户输了口令、请求却依然 401」。有 set() 就用 set()。
+ */
+function attachAdminToken(config, token) {
+  if (!token) return
+  const h = config.headers
+  if (h && typeof h.set === 'function') {
+    if (!h.has?.('X-Admin-Token')) h.set('X-Admin-Token', token)
+  } else {
+    config.headers = config.headers || {}
+    if (!config.headers['X-Admin-Token']) config.headers['X-Admin-Token'] = token
+  }
+}
+
+// 请求拦截器：注入 user_id + 管理口令
 api.interceptors.request.use(config => {
   // 默认 user_id=1（单用户模式）
   if (!config.params) config.params = {}
   if (!config.params.user_id) config.params.user_id = 1
+
+  // 自动携带管理口令：后端对写操作强制校验（零信任），
+  // 若已在「后台管理」输入过则直接带上，用户无需关心。
+  attachAdminToken(config, readAdminToken())
   return config
 })
 
-// 响应拦截器：统一错误处理
+// 响应拦截器：统一错误处理 + 幂等重试
 api.interceptors.response.use(
   res => res,
-  err => {
-    const msg = err.response?.data?.detail || err.message || '网络请求失败'
-    console.error('[API]', err.config?.url, msg)
-    return Promise.reject(new Error(msg))
+  async err => {
+    const config = err.config || {}
+    const url = config.url || ''
+    const method = (config.method || 'get').toLowerCase()
+    const apiError = toApiError(err)
+
+    console.error('[API]', url, apiError.message, apiError.hint || '')
+
+    // ---- 幂等重试：只对 GET，且只针对「可能是偶发」的失败 ----
+    const retriable = method === 'get'
+      && (apiError.isNetwork || apiError.isServerError)
+      && !(config.__retried >= RETRY_MAX)
+      && !NO_RETRY_PATHS.some(p => url.includes(p))
+
+    if (retriable) {
+      config.__retried = (config.__retried || 0) + 1
+      await new Promise(r => setTimeout(r, RETRY_DELAY_MS * config.__retried))
+      console.warn(`[API] 网络/服务端异常，自动重试第 ${config.__retried} 次：${url}`)
+      try {
+        return await api.request(config)
+      } catch (again) {
+        return Promise.reject(again instanceof ApiError ? again : toApiError(again))
+      }
+    }
+
+    // 服务端异常上报（前端白屏/接口挂了都能在后台看到，不再只活在控制台）
+    if (apiError.isServerError && !NO_RETRY_PATHS.some(p => url.includes(p))) {
+      try {
+        reportClientError({
+          message: `接口 ${method.toUpperCase()} ${url} 返回 ${apiError.status}：${apiError.message}`,
+          source: 'api',
+          component: 'axios',
+          info: `request_id=${apiError.requestId} code=${apiError.code}`
+        })
+      } catch { /* 静默 */ }
+    }
+
+    // ---- 写操作需要口令：提示输入一次并自动重试 ----
+    // 后端对所有 POST/PUT/PATCH/DELETE 强制校验口令（零信任）。
+    // 这里做一次友好引导，避免用户第一次上传时困惑 —— 口令只存在本地，
+    // 之后所有写请求自动携带。
+    if (apiError.status === 401 && apiError.code === 'write_requires_token'
+        && !config.__authRetried && !_askingToken) {
+      config.__authRetried = true
+      const ok = await _promptAdminToken()
+      if (ok) {
+        // 显式把新口令写进这次重试的 config（不能只依赖拦截器：
+        // 这里的 config 已经是归一化过的 AxiosHeaders 对象）
+        attachAdminToken(config, readAdminToken())
+        try {
+          return await api.request(config)
+        } catch (again) {
+          return Promise.reject(again instanceof ApiError ? again : toApiError(again))
+        }
+      }
+    }
+
+    return Promise.reject(apiError)
   }
 )
+
+// 单飞标记：并发写请求同时 401 时，只弹一次口令输入框
+let _askingToken = false
+
+async function _promptAdminToken() {
+  _askingToken = true
+  try {
+    const { ElMessageBox } = await import('element-plus')
+    const { value } = await ElMessageBox.prompt(
+      '写操作（上传 / 删除 / 重建）已受管理口令保护。\n请输入后台管理口令，本机记住后无需重复输入。',
+      '需要管理口令',
+      {
+        confirmButtonText: '确认',
+        cancelButtonText: '取消',
+        inputType: 'password',
+        inputPlaceholder: '默认为 kg-admin，可在 backend/.env 修改',
+        inputValidator: v => (v && v.trim() ? true : '口令不能为空'),
+      }
+    ).catch(() => ({ value: null }))
+
+    if (!value) return false
+    try {
+      localStorage.setItem(ADMIN_TOKEN_KEY, value.trim())
+    } catch { /* 隐私模式等场景下存不了，本次仍继续尝试 */ }
+    // 密钥变更后要重建 api 实例上的默认头
+    api.defaults.headers.common['X-Admin-Token'] = value.trim()
+    const { ElMessage } = await import('element-plus')
+    ElMessage.success('口令已记住，正在重试')
+    return true
+  } catch {
+    return false
+  } finally {
+    _askingToken = false
+  }
+}
 
 // ==================== 文件 API ====================
 export const fileAPI = {
@@ -126,6 +338,25 @@ export const graphAPI = {
       group_id: options.groupId || 'all',
       user_id: options.userId || 1,
       include_discarded: options.includeDiscarded || false
+    })
+    return res.data
+  },
+
+  /**
+   * 读取图谱数据（只读，走 GET）。
+   *
+   * 与 build() 的差别只在 HTTP 动词：后端 `/api/graph/build` 实际上是纯查询，
+   * 但它是 POST，会被写操作守卫要求管理口令 —— 而启动时就要读图谱，
+   * 结果每次打开应用都弹口令框。
+   * 只读场景请用本方法；build() 仅保留给需要传复杂参数的调用方。
+   */
+  async load({ groupId = 'all', userId = 1, includeDiscarded = false } = {}) {
+    const res = await api.get('/graph', {
+      params: {
+        group_id: groupId,
+        user_id: userId,
+        include_discarded: includeDiscarded
+      }
     })
     return res.data
   },
@@ -458,6 +689,27 @@ export const adminAPI = {
 
   async adminFiles(token) {
     const res = await api.get('/admin/files', { headers: adminHeaders(token) })
+    return res.data
+  }
+}
+
+// ==================== 系统自检 API ====================
+export const systemAPI = {
+  /** 全量体检：环境/配置/数据库/表结构/知识库/依赖/磁盘 */
+  async doctor() {
+    const res = await api.get('/system/doctor')
+    return res.data
+  },
+
+  /** 精简探活（给状态指示灯用） */
+  async healthDeep() {
+    const res = await api.get('/system/health-deep')
+    return res.data
+  },
+
+  /** 主动上报一条前端错误（自动化/手工排查时可用） */
+  async reportError(payload) {
+    const res = await api.post('/system/client-error', payload)
     return res.data
   }
 }

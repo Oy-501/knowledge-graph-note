@@ -8,6 +8,8 @@
  * P3（优化）：预加载 + 健康监控 + 错误边界
  */
 
+import { reportClientError } from './errorReporter'
+
 // ==================== 支柱1：异步非阻塞 TaskQueue ====================
 
 const PRIORITY_MAP = { high: 0, normal: 1, low: 2 }
@@ -385,6 +387,21 @@ export function logError(source, context, error) {
   _errorLog.push(entry)
   if (_errorLog.length > 100) _errorLog.shift()
   console.error(`[Resilience] ${source}:`, error)
+
+  // 上报后端 → 落操作审计，后台可查。
+  // 上面那个 _errorLog 刷新即丢，仅靠它等于没有留档。
+  try {
+    reportClientError({
+      message: entry.message,
+      stack: entry.stack,
+      source: entry.source,
+      component: entry.source,
+      info: entry.context
+    })
+  } catch {
+    /* 上报失败不影响业务 */
+  }
+
   return entry
 }
 

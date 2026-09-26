@@ -50,8 +50,8 @@ def log_event(
         logger.warning(f"写审计失败（{action}）：{exc}")
         try:
             db.rollback()
-        except Exception:
-            pass
+        except Exception as rb_exc:  # noqa: BLE001
+            logger.debug(f"审计回滚失败（会话可能已失效）：{rb_exc}")
         return None
 
 

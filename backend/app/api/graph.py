@@ -16,12 +16,40 @@ class GraphOptions(BaseModel):
     weights: Optional[dict] = None
 
 
+@router.get("")
+def get_graph(
+    user_id: int = 1,
+    group_id: str = "all",
+    include_discarded: bool = False,
+    db: Session = Depends(get_db),
+):
+    """读取图谱数据（节点 + 连线）—— **只读操作**。
+
+    为什么额外提供一个 GET：
+    前端一直用 `POST /graph/build` 来「读取」图谱，而这个接口只是查库拼响应，
+    不写任何东西。写操作守卫对所有 POST 强制校验口令，于是
+    **每次打开应用都会弹口令框**（启动时 loadFromBackend 会调它）。
+    读操作本就该用 GET：语义正确，也不该要求写权限。
+
+    `POST /build` 保留（老调用方 + 传复杂 options 的场景），仍受写守卫保护；
+    新调用请用本 GET。
+    """
+    return _collect_graph(db, GraphOptions(
+        user_id=user_id, group_id=group_id, include_discarded=include_discarded))
+
+
 @router.post("/build")
 def build_graph(options: GraphOptions = None, db: Session = Depends(get_db)):
-    """构建图谱数据（节点+连线）"""
-    if options is None:
-        options = GraphOptions()
+    """构建图谱数据（节点+连线）
 
+    注：本接口为兼容保留。它其实是只读的，只读场景请改用 `GET /api/graph`，
+    以免因写操作守卫而要求管理口令。
+    """
+    return _collect_graph(db, options or GraphOptions())
+
+
+def _collect_graph(db: Session, options: GraphOptions) -> dict:
+    """查询节点与连线并组装返回结构（只读，无副作用）。"""
     user_id = options.user_id
     group_id = options.group_id
 

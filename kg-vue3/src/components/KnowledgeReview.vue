@@ -166,7 +166,7 @@ const recentNodes = computed(() => {
   padding: 20px 12px;
   text-align: center;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 
 /* 今日概览：3 列统计 */
@@ -190,7 +190,7 @@ const recentNodes = computed(() => {
   line-height: 1.2;
 }
 .kr-label {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   margin-top: 3px;
 }
@@ -202,7 +202,7 @@ const recentNodes = computed(() => {
   gap: 6px;
 }
 .kr-section-title {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--text-secondary);
   letter-spacing: 0.5px;
@@ -225,14 +225,14 @@ const recentNodes = computed(() => {
   flex: 1;
 }
 .kr-item-name {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .kr-item-meta {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
 }
 .kr-btn {
@@ -242,7 +242,7 @@ const recentNodes = computed(() => {
   border: 1px solid var(--border-light);
   background: var(--bg-tertiary);
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   cursor: pointer;
   transition: all var(--dur-fast) var(--ease-out);
 }
@@ -251,8 +251,8 @@ const recentNodes = computed(() => {
   color: var(--text-primary);
 }
 .kr-btn-primary {
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent);
   border-color: var(--accent);
 }
 .kr-btn-primary:hover {
@@ -263,6 +263,6 @@ const recentNodes = computed(() => {
   padding: 10px;
   text-align: center;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 </style>

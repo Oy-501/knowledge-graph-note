@@ -33,6 +33,7 @@ import { drag } from 'd3-drag'
 import { useGraphStore } from '@/store/graphStore'
 import { useNoteStore } from '@/store/noteStore'
 import { useFileStore } from '@/store/fileStore'
+import { NODE_COLORS, NODE_SOLID, SEMANTIC, hexAlpha } from '@/utils/palette'
 
 const props = defineProps({
   linkedNodeIds: { type: Array, default: () => [] },
@@ -114,7 +115,7 @@ const graphNodes = computed(() => {
       nodes.push({
         id: node.id,
         title: node.title,
-        _color: '#4caf50',
+        _color: SEMANTIC.success,
         _linked: true,
         _node: node
       })
@@ -130,7 +131,7 @@ const graphNodes = computed(() => {
       nodes.push({
         id: node.id,
         title: node.title,
-        _color: '#e8a020',
+        _color: SEMANTIC.warning,
         _pending: true,
         _node: node
       })
@@ -208,8 +209,8 @@ function render() {
     g.append('stop').attr('offset', '0%').attr('stop-color', c1)
     g.append('stop').attr('offset', '100%').attr('stop-color', c2)
   }
-  mkLinear('mgGradNote', '#D4A574', '#E8C9A0')
-  mkLinear('mgGradUser', '#4F6F8F', '#7CB8A0')
+  mkLinear('mgGradNote', NODE_COLORS.note[0], NODE_COLORS.note[1])
+  mkLinear('mgGradUser', NODE_COLORS.user[0], NODE_COLORS.user[1])
 
   const nodes = graphNodes.value
   const links = graphLinks.value
@@ -232,9 +233,10 @@ function render() {
     .data(links)
     .join('line')
     .attr('stroke', d => {
-      if (d._linked) return 'rgba(124, 184, 160, 0.8)'
-      if (d._neighbor) return 'rgba(138, 154, 168, 0.55)'
-      return 'rgba(212, 165, 116, 0.75)'
+      // 连线配色统一走调色板：已关联 = 用户色，邻居 = 中性，待定 = 琥珀
+      if (d._linked) return hexAlpha(NODE_SOLID.user, 0.8)
+      if (d._neighbor) return hexAlpha(SEMANTIC.muted, 0.55)
+      return hexAlpha(NODE_SOLID.note, 0.75)
     })
     .attr('stroke-width', d => d._linked ? 1.5 : 1)
     .attr('stroke-dasharray', d => d._pending || d._neighbor ? '4,3' : null)
@@ -273,8 +275,8 @@ function render() {
     .attr('fill', d => {
       if (d.isNote) return 'url(#mgGradNote)'
       if (d._linked) return 'url(#mgGradUser)'
-      if (d._neighbor) return '#8A9AA8'
-      return '#D4A574'
+      if (d._neighbor) return NODE_SOLID.doc
+      return NODE_SOLID.note
     })
     .attr('stroke', 'var(--bg-primary)')
     .attr('stroke-width', 1.5)
@@ -342,7 +344,7 @@ onUnmounted(() => {
   border-bottom: 1px solid var(--border-light);
 }
 .mg-title {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-secondary);
 }
@@ -350,7 +352,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 9px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
 }
 .mg-mode {
@@ -359,14 +361,14 @@ onUnmounted(() => {
   gap: 4px;
 }
 .mg-depth-label {
-  font-size: 9px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
 }
 .mg-mode-btn {
   border: 1px solid var(--border-light);
   background: var(--bg-tertiary);
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: var(--fs-xs);
   padding: 2px 8px;
   border-radius: var(--radius-full);
   cursor: pointer;
@@ -376,8 +378,8 @@ onUnmounted(() => {
   color: var(--text-primary);
 }
 .mg-mode-btn.active {
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent);
   border-color: var(--accent);
 }
 .mg-mode .mg-info {
@@ -408,7 +410,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 /* D3 生成节点：hover 光晕 */
 .mg-svg-container :deep(g.mini-node circle) {

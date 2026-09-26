@@ -45,14 +45,23 @@ def encode(text: str) -> List[float]:
 
 def encode_batch(texts: List[str]) -> List[List[float]]:
     """批量编码"""
+    global _encoder
     _init_encoder()
 
     if _encoder is not None:
         try:
             vecs = _encoder.encode(texts, convert_to_numpy=True)
             return [v.tolist() for v in vecs]
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001
+            # 这里原本是静默 pass —— 危险：编码器中途失败会让同一批节点出现
+            # 「一部分模型向量、一部分 TF-IDF 向量」，两者维度不同时
+            # cosine_similarity 直接返回 0（相似度静默失效）。
+            # 至少留下告警，并禁用坏掉的编码器避免后续继续踩。
+            logger.warning(
+                f"向量模型编码失败（{type(exc).__name__}: {exc}），本次降级为 TF-IDF。"
+                f"注意：降级向量与模型向量不可混用比较，修复后建议重建向量。"
+            )
+            _encoder = None
 
     return [_tfidf_encode(t) for t in texts]
 

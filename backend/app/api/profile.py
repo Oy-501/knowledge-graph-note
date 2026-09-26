@@ -10,6 +10,7 @@ import secrets
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, File as FastAPIFile, HTTPException, UploadFile
+from loguru import logger
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -31,10 +32,7 @@ _MAGIC = [
 
 
 def _upload_root() -> str:
-    root = settings.UPLOAD_DIR
-    if not os.path.isabs(root):
-        root = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
-            os.path.abspath(__file__)))), root.lstrip("./"))
+    root = settings.resolved_upload_dir
     os.makedirs(root, exist_ok=True)
     return root
 
@@ -222,13 +220,27 @@ def clear_background(user_id: int = 1, db: Session = Depends(get_db)):
 
 
 def _cleanup_old(old_url: str, new_url: str):
-    """删除被替换掉的旧图片文件（只删自己 uploads 目录里的）"""
+    """删除被替换掉的旧图片文件（只删 uploads 目录内的）。
+
+    路径归属判断改用 realpath + commonpath，而不是子串包含。
+    子串判断（`root in abspath(path)`）的破绽：同前缀的兄弟目录会被误判
+    为「在 root 内」（root=`…/uploads`，path=`…/uploads-backup/x` 也通过）。
+    先 realpath 归一后，符号链接指向外部时同样会被拒绝。
+    """
     if not old_url or old_url == new_url or not old_url.startswith("/uploads/"):
         return
     try:
+        root = os.path.realpath(_upload_root())
         rel = old_url[len("/uploads/"):]
-        path = os.path.join(_upload_root(), rel)
-        if os.path.isfile(path) and _upload_root() in os.path.abspath(path):
+        path = os.path.realpath(os.path.join(root, rel))
+        try:
+            inside = os.path.commonpath([root, path]) == root
+        except ValueError:      # 不同盘符等 → 判定为「不在目录内」
+            inside = False
+        if not inside:
+            logger.warning(f"拒绝删除 uploads 之外的路径（疑似路径穿越）：{old_url}")
+        elif os.path.isfile(path):
             os.remove(path)
-    except OSError:
-        pass
+    except OSError as exc:
+        # 删除失败不影响替换结果，但要留线索（常见原因：文件被其他程序占用）
+        logger.debug(f"清理旧图片失败（{type(exc).__name__}: {exc}）：{old_url}")

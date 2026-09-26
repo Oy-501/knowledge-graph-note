@@ -236,13 +236,13 @@ async function onDelete(f) {
 /* 上传上限提示：弱化但可见，让用户在投喂大文件前就知道边界 */
 .dz-limit {
   margin-top: 8px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   line-height: 1.5;
 }
 /* 解析备注（如：文件过大已截断） */
 .fi-note {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   padding: 1px 6px;
   border-radius: var(--radius-full);
   background: var(--warning-soft);

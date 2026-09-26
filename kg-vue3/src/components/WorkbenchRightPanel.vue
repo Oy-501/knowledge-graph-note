@@ -276,7 +276,7 @@ defineExpose({ openLinkDialog })
   border-bottom: 1px solid var(--border-light);
 }
 .wbr-section-header h4 {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   letter-spacing: 0.08em;
   color: var(--text-secondary);
@@ -288,12 +288,12 @@ defineExpose({ openLinkDialog })
 }
 .wbr-count {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   font-weight: 500;
 }
 .wbr-toggle {
-  font-size: 9px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   transition: color var(--dur-fast) var(--ease-out);
 }
@@ -308,11 +308,11 @@ defineExpose({ openLinkDialog })
   gap: 4px;
   padding: 18px 12px;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   text-align: center;
 }
 .wbr-empty-icon {
-  font-size: 14px;
+  font-size: var(--fs-base);
   color: var(--text-muted);
   opacity: 0.75;
 }
@@ -327,7 +327,7 @@ defineExpose({ openLinkDialog })
   color: var(--success);
   border: 1px solid color-mix(in srgb, var(--success) 25%, transparent);
   border-radius: var(--radius-full);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 500;
 }
 .wbr-item {
@@ -364,7 +364,7 @@ defineExpose({ openLinkDialog })
   margin-bottom: 3px;
 }
 .wbr-item-title {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--text-primary);
   overflow: hidden;
@@ -373,14 +373,14 @@ defineExpose({ openLinkDialog })
   flex: 1;
 }
 .wbr-item-score {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-family: var(--font-mono);
   color: var(--accent);
   flex-shrink: 0;
   margin-left: 6px;
 }
 .wbr-item-badge {
-  font-size: 9px;
+  font-size: var(--fs-xs);
   color: #fff;
   padding: 1px 7px;
   border-radius: var(--radius-full);
@@ -392,7 +392,7 @@ defineExpose({ openLinkDialog })
   color: #fff;
 }
 .wbr-item-meta {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   margin-bottom: 4px;
   display: flex;
@@ -406,7 +406,7 @@ defineExpose({ openLinkDialog })
   background: var(--accent-soft);
   color: var(--accent-strong);
   border-radius: var(--radius-full);
-  font-size: 9px;
+  font-size: var(--fs-xs);
   font-weight: 500;
   line-height: 1.5;
 }
@@ -425,7 +425,7 @@ defineExpose({ openLinkDialog })
   align-items: center;
 }
 .wbr-confirmed {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--success);
   font-weight: 500;
 }
@@ -434,7 +434,7 @@ defineExpose({ openLinkDialog })
   border: 1px solid var(--border-light);
   background: var(--bg-secondary);
   color: var(--text-secondary);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   border-radius: var(--radius-full);
   cursor: pointer;
   transition: all var(--dur-fast) var(--ease-out);
@@ -448,8 +448,8 @@ defineExpose({ openLinkDialog })
   transform: scale(0.95);
 }
 .wbr-btn-primary {
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent);
   border-color: var(--accent);
 }
 .wbr-btn-primary:hover {
@@ -484,7 +484,7 @@ defineExpose({ openLinkDialog })
   transform: translateY(-1px);
 }
 .wbr-recommend-text {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-primary);
   line-height: 1.5;
   margin-bottom: 5px;
@@ -494,7 +494,7 @@ defineExpose({ openLinkDialog })
 }
 .wbr-recommend-reason {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--fs-xs);
 }
 
 /* 校验问题 */
@@ -531,7 +531,7 @@ defineExpose({ openLinkDialog })
 }
 .wbr-issue-type {
   display: inline-block;
-  font-size: 9px;
+  font-size: var(--fs-xs);
   padding: 1px 8px;
   border-radius: var(--radius-full);
   margin-bottom: 3px;
@@ -546,16 +546,16 @@ defineExpose({ openLinkDialog })
   color: var(--warning);
 }
 .wbr-issue-text {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-primary);
   margin-bottom: 2px;
 }
 .wbr-issue-desc {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
 }
 .wbr-issue-fix {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--accent-light);
   margin: 3px 0;
 }
@@ -586,12 +586,12 @@ defineExpose({ openLinkDialog })
   box-shadow: var(--shadow-lg);
 }
 .wbr-dialog h4 {
-  font-size: 14px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   margin: 0 0 6px;
 }
 .wbr-dialog-hint {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   margin-bottom: 10px;
 }
@@ -608,7 +608,7 @@ defineExpose({ openLinkDialog })
   border-radius: var(--radius);
   border: 1px solid transparent;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-primary);
   margin-bottom: 3px;
   transition: all var(--dur-fast) var(--ease-out);
@@ -628,14 +628,14 @@ defineExpose({ openLinkDialog })
   border-bottom-color: var(--border-light);
 }
 .wbr-dialog-level {
-  font-size: 9px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
 }
 .wbr-dialog-rel {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   margin-bottom: 10px;
 }
@@ -644,7 +644,7 @@ defineExpose({ openLinkDialog })
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   padding: 3px 8px;
   outline: none;
   transition: border-color var(--dur-fast) var(--ease-out);

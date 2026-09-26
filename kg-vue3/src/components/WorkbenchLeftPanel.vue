@@ -81,7 +81,7 @@
           <span class="wbl-item-title">📄 {{ note.title }}</span>
           <span
             class="wbl-item-status"
-            :style="{ color: note.accuracyScore >= 80 ? '#4caf50' : note.accuracyScore >= 50 ? '#e8a020' : '#e84c4c' }"
+            :style="{ color: scoreColor(note.accuracyScore) }"
           >
             {{ note.accuracyScore || 0 }}%
           </span>
@@ -147,6 +147,7 @@
 </template>
 
 <script setup>
+import { scoreColor } from '@/utils/palette'
 import { ref, computed } from 'vue'
 import { useNoteStore } from '@/store/noteStore'
 import { useFileStore } from '@/store/fileStore'
@@ -226,7 +227,7 @@ function onDragStart(ev, data) {
   border: 1px solid var(--border-light);
   border-radius: var(--radius-full);
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   outline: none;
   transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
@@ -237,11 +238,11 @@ function onDragStart(ev, data) {
 .wbl-btn-new {
   margin: 0 10px 8px;
   padding: 7px 0;
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent);
   border: none;
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   cursor: pointer;
   box-shadow: var(--shadow-sm);
@@ -266,7 +267,7 @@ function onDragStart(ev, data) {
   color: var(--text-secondary);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   cursor: pointer;
   transition: all var(--dur-fast) var(--ease-out);
   flex-shrink: 0;
@@ -292,7 +293,7 @@ function onDragStart(ev, data) {
   border: none;
   background: transparent;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   cursor: pointer;
   border-radius: var(--radius-full);
   transition: all var(--dur-fast) var(--ease-out);
@@ -334,23 +335,23 @@ function onDragStart(ev, data) {
   margin-bottom: 8px;
 }
 .wbl-empty-text {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--text-secondary);
   margin: 0 0 2px;
 }
 .wbl-empty-hint {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   margin: 0 0 10px;
 }
 .wbl-empty-btn {
   padding: 5px 16px;
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent);
   border: none;
   border-radius: var(--radius-full);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 500;
   cursor: pointer;
   box-shadow: var(--shadow-sm);
@@ -393,7 +394,7 @@ function onDragStart(ev, data) {
   margin-bottom: 2px;
 }
 .wbl-item-title {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--text-primary);
   overflow: hidden;
@@ -403,13 +404,13 @@ function onDragStart(ev, data) {
   margin-right: 6px;
 }
 .wbl-item-status {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-family: var(--font-mono);
   font-weight: 600;
   flex-shrink: 0;
 }
 .wbl-item-tag {
-  font-size: 9px;
+  font-size: var(--fs-xs);
   background: var(--accent-soft);
   color: var(--text-secondary);
   padding: 1px 7px;
@@ -417,7 +418,7 @@ function onDragStart(ev, data) {
   flex-shrink: 0;
 }
 .wbl-item-level {
-  font-size: 9px;
+  font-size: var(--fs-xs);
   color: #fff;
   padding: 1px 7px;
   border-radius: var(--radius-full);
@@ -427,7 +428,7 @@ function onDragStart(ev, data) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
 }
 </style>

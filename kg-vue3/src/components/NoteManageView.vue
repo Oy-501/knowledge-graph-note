@@ -414,7 +414,7 @@ async function onRefresh() {
   margin: 0;
 }
 .nmv-count {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   background: var(--bg-tertiary);
   padding: 2px 10px;
@@ -430,7 +430,7 @@ async function onRefresh() {
   border: 1px solid var(--border-light);
   background: var(--bg-secondary);
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all var(--dur-fast) var(--ease-out);
@@ -447,8 +447,8 @@ async function onRefresh() {
   transform: scale(0.96);
 }
 .nmv-btn-new {
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent);
   border-color: var(--accent);
   font-weight: 500;
   box-shadow: var(--shadow-sm);
@@ -462,7 +462,7 @@ async function onRefresh() {
 }
 .nmv-btn-sm {
   padding: 3px 8px;
-  font-size: 10px;
+  font-size: var(--fs-xs);
 }
 .nmv-btn-danger {
   color: var(--danger);
@@ -489,7 +489,7 @@ async function onRefresh() {
   left: 10px;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-muted);
 }
 .nmv-search {
@@ -499,7 +499,7 @@ async function onRefresh() {
   border: 1px solid var(--border-light);
   border-radius: var(--radius-full);
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   outline: none;
   transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
@@ -516,7 +516,7 @@ async function onRefresh() {
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .nmv-filter-row {
   display: flex;
@@ -528,7 +528,7 @@ async function onRefresh() {
   border: 1px solid var(--border-light);
   background: var(--bg-secondary);
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   border-radius: var(--radius-full);
   cursor: pointer;
   transition: all var(--dur-fast) var(--ease-out);
@@ -538,8 +538,8 @@ async function onRefresh() {
   background: var(--bg-hover);
 }
 .nmv-filter-btn.active {
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent);
   border-color: var(--accent);
   font-weight: 500;
   box-shadow: var(--shadow-sm);
@@ -556,7 +556,7 @@ async function onRefresh() {
   flex-shrink: 0;
 }
 .nmv-batch-label {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--accent-light);
 }
@@ -593,11 +593,11 @@ async function onRefresh() {
   margin-bottom: 14px;
 }
 .nmv-empty p {
-  font-size: 13px;
+  font-size: var(--fs-md);
   margin: 0 0 4px;
 }
 .nmv-empty-hint {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   margin-bottom: 14px !important;
 }
@@ -648,7 +648,7 @@ async function onRefresh() {
   border-color: var(--accent);
 }
 .nmv-checked {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--accent);
   font-weight: 700;
 }
@@ -663,7 +663,7 @@ async function onRefresh() {
   margin-bottom: 4px;
 }
 .nmv-item-title {
-  font-size: 13px;
+  font-size: var(--fs-md);
   font-weight: 600;
   color: var(--text-primary);
   overflow: hidden;
@@ -672,7 +672,7 @@ async function onRefresh() {
   flex: 1;
 }
 .nmv-item-badge {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   padding: 1px 8px;
   border-radius: var(--radius-full);
   flex-shrink: 0;
@@ -700,7 +700,7 @@ async function onRefresh() {
   margin-bottom: 3px;
 }
 .nmv-item-links {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
 }
 .nmv-item-tags {
@@ -709,19 +709,19 @@ async function onRefresh() {
   flex-wrap: wrap;
 }
 .nmv-tag {
-  font-size: 9px;
+  font-size: var(--fs-xs);
   background: var(--apricot-soft);
   color: var(--apricot-strong);
   padding: 1px 8px;
   border-radius: var(--radius-full);
 }
 .nmv-item-time {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   margin-left: auto;
 }
 .nmv-item-preview {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   line-height: 1.4;
   overflow: hidden;
@@ -743,7 +743,7 @@ async function onRefresh() {
   justify-content: space-between;
   padding: 8px 16px;
   border-top: 1px solid var(--border-light);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   flex-shrink: 0;
 }
@@ -777,7 +777,7 @@ async function onRefresh() {
   border-bottom: 1px solid var(--border-light);
 }
 .nmv-dialog-header h4 {
-  font-size: 14px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   margin: 0;
 }
@@ -798,7 +798,7 @@ async function onRefresh() {
   margin-bottom: 14px;
 }
 .nmv-dialog-section h5 {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-muted);
   margin: 0 0 6px;
@@ -806,7 +806,7 @@ async function onRefresh() {
   letter-spacing: 0.08em;
 }
 .nmv-dialog-empty {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   padding: 10px;
   text-align: center;
@@ -816,7 +816,7 @@ async function onRefresh() {
   align-items: center;
   justify-content: space-between;
   padding: 6px 10px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-primary);
   background: var(--bg-secondary);
   border: 1px solid var(--border-light);
@@ -824,11 +824,11 @@ async function onRefresh() {
   margin-bottom: 4px;
 }
 .nmv-dialog-status {
-  font-size: 9px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
 }
 .nmv-dialog-level {
-  font-size: 9px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   background: var(--accent-soft);
   padding: 1px 7px;

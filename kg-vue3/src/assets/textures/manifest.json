@@ -1,0 +1,146 @@
+[
+  {
+    "name": "Circuit Board",
+    "slug": "circuit-board",
+    "tile": "304x304",
+    "purpose": "电路板 —— 科技感底纹，用于应用外框"
+  },
+  {
+    "name": "Topography",
+    "slug": "topography",
+    "tile": "600x600",
+    "purpose": "等高线 —— 数据/地形意象，用于大面积底纹"
+  },
+  {
+    "name": "Graph Paper",
+    "slug": "graph-paper",
+    "tile": "100x100",
+    "purpose": "方格纸 —— 网格底，画布/编辑器"
+  },
+  {
+    "name": "Bathroom Floor",
+    "slug": "bathroom-floor",
+    "tile": "80x80",
+    "purpose": "等距砖 —— 伪 3D 等距网格，卡片底"
+  },
+  {
+    "name": "Signal",
+    "slug": "signal",
+    "tile": "84x48",
+    "purpose": "信号波 —— 无线电/AI 感知意象"
+  },
+  {
+    "name": "Connections",
+    "slug": "connections",
+    "tile": "36x36",
+    "purpose": "连接节点 —— 直接呼应知识图谱"
+  },
+  {
+    "name": "Current",
+    "slug": "current",
+    "tile": "76x18",
+    "purpose": "电流 —— 流动线条"
+  },
+  {
+    "name": "Rails",
+    "slug": "rails",
+    "tile": "20x10",
+    "purpose": "轨道线 —— 结构感"
+  },
+  {
+    "name": "Boxes",
+    "slug": "boxes",
+    "tile": "20x20",
+    "purpose": "盒子 —— 模块化块面"
+  },
+  {
+    "name": "Plus",
+    "slug": "plus",
+    "tile": "60x60",
+    "purpose": "十字点阵 —— 极简点阵"
+  },
+  {
+    "name": "Rounded Plus Connected",
+    "slug": "rounded-plus-connected",
+    "tile": "84x84",
+    "purpose": "圆角十字连线 —— 图谱节点意象"
+  },
+  {
+    "name": "Pixel Dots",
+    "slug": "pixel-dots",
+    "tile": "16x16",
+    "purpose": "像素点 —— 数字感底纹"
+  },
+  {
+    "name": "Polka Dots",
+    "slug": "polka-dots",
+    "tile": "20x20",
+    "purpose": "圆点 —— 轻量点阵"
+  },
+  {
+    "name": "Death Star",
+    "slug": "death-star",
+    "tile": "80x105",
+    "purpose": "同心圆环 —— 雷达/扫描意象"
+  },
+  {
+    "name": "Heavy Rain",
+    "slug": "heavy-rain",
+    "tile": "12x24",
+    "purpose": "斜线雨幕 —— 速度感"
+  },
+  {
+    "name": "Diagonal Stripes",
+    "slug": "diagonal-stripes",
+    "tile": "40x40",
+    "purpose": "斜条纹 —— 扫描线"
+  },
+  {
+    "name": "Tiny Checkers",
+    "slug": "tiny-checkers",
+    "tile": "8x8",
+    "purpose": "细棋盘 —— 极细网格"
+  },
+  {
+    "name": "Steel Beams",
+    "slug": "steel-beams",
+    "tile": "42x58",
+    "purpose": "钢梁 —— 工业化结构"
+  },
+  {
+    "name": "Morphing Diamonds",
+    "slug": "morphing-diamonds",
+    "tile": "60x60",
+    "purpose": "菱形渐变 —— 装饰底"
+  },
+  {
+    "name": "Texture",
+    "slug": "texture",
+    "tile": "4x4",
+    "purpose": "颗粒纹理 —— 噪点/纸感"
+  },
+  {
+    "name": "Endless Clouds",
+    "slug": "endless-clouds",
+    "tile": "56x28",
+    "purpose": "云纹 —— 柔和底纹"
+  },
+  {
+    "name": "Bamboo",
+    "slug": "bamboo",
+    "tile": "16x32",
+    "purpose": "竹节 —— 竖向节奏"
+  },
+  {
+    "name": "Fancy Rectangles",
+    "slug": "fancy-rectangles",
+    "tile": "60x48",
+    "purpose": "花式矩形"
+  },
+  {
+    "name": "Overlapping Circles",
+    "slug": "overlapping-circles",
+    "tile": "80x80",
+    "purpose": "交叠圆 —— 集合/交集意象"
+  }
+]

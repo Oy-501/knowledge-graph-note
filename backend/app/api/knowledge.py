@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Optional, Any
 from app.database import get_db
+from app.services.errors import escape_like
 from app.services.validator import validate_content, summarize, split_sentence_ranges
 from app.services.inference import infer_links_batch
 
@@ -108,12 +109,12 @@ def search_knowledge(keyword: str, limit: int = 20, db: Session = Depends(get_db
 
     # 搜索知识库
     kb_results = db.query(KnowledgeBase).filter(
-        KnowledgeBase.entity.ilike(f"%{keyword}%")
+        KnowledgeBase.entity.ilike(f"%{escape_like(keyword)}%", escape='\\')
     ).limit(limit).all()
 
     # 搜索已有节点
     node_results = db.query(Node).filter(
-        Node.entity.ilike(f"%{keyword}%"),
+        Node.entity.ilike(f"%{escape_like(keyword)}%", escape='\\'),
         Node.status == "active"
     ).limit(limit).all()
 

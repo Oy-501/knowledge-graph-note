@@ -8,7 +8,8 @@
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from loguru import logger
 from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
@@ -19,6 +20,7 @@ from app.models.models import (
     AuditLog, File, KnowledgeBase, KnowledgeCandidate, Link, Node, User, UserProfile,
 )
 from app.services import audit as audit_svc
+from app.services.errors import clamp_paging, escape_like
 from app.services import knowledge_verifier
 
 router = APIRouter()
@@ -26,13 +28,49 @@ router = APIRouter()
 
 # ---------------------------------------------------------------- 口令校验
 
-def require_admin(x_admin_token: Optional[str] = Header(default=None, alias="X-Admin-Token")):
-    """后台口令校验：settings.ADMIN_TOKEN 为空时视为不启用保护"""
-    expected = (settings.ADMIN_TOKEN or "").strip()
-    if not expected:
-        return True
-    if (x_admin_token or "").strip() != expected:
+def require_admin(x_admin_token: Optional[str] = Header(default=None, alias="X-Admin-Token"),
+                  request: Request = None):
+    """后台口令校验（失效安全 + 失败限流 + 恒定时间比较）。
+
+    相对旧实现收紧了两点：
+
+    1. **失效安全（fail-closed）**：旧实现是
+       `if not expected: return True` —— 口令为空时**完全放开后台**，
+       批量驳回、删除候选、改判定全部对任意能访问端口的人开放。
+       配置缺失属于「加固未完成」，应当拒绝而不是放行。
+       现在未配置口令直接 503，并明确告知如何配置。
+
+    2. **失败限流**：旧实现允许无限次尝试，弱口令可被在线暴力破解。
+       按客户端 IP 记录失败次数，超限返回 429。
+
+    比较改用 hmac.compare_digest（恒定时间），避免 `!=` 逐字符比较
+    通过响应时间泄露口令长度与前缀。
+    """
+    from app.services.security import (admin_limiter, admin_token_configured,
+                                       client_key, verify_admin_token)
+
+    if not admin_token_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="后端未配置管理口令（ADMIN_TOKEN），后台已按失效安全策略关闭。"
+                   "请在 backend/.env 设置 ADMIN_TOKEN 后重启后端（默认值 kg-admin 建议改掉）。",
+        )
+
+    key = client_key(request) if request is not None else "unknown"
+    allowed, retry_after = admin_limiter.check(key)
+    if not allowed:
+        logger.warning(f"后台口令尝试过于频繁，已临时拒绝：client={key}")
+        raise HTTPException(
+            status_code=429,
+            detail=f"口令错误次数过多，请在 {retry_after} 秒后重试。",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+    if not verify_admin_token(x_admin_token):
+        admin_limiter.hit(key)
         raise HTTPException(status_code=401, detail="管理口令不正确，请在后台入口重新输入")
+
+    admin_limiter.reset(key)   # 校验成功 → 清空失败计数
     return True
 
 
@@ -115,14 +153,16 @@ def list_candidates(
     if web:
         q = q.filter(KnowledgeCandidate.verdict_web == web)
     if keyword:
-        like = f"%{keyword}%"
-        q = q.filter(or_(KnowledgeCandidate.entity.ilike(like),
-                         KnowledgeCandidate.description.ilike(like)))
+        like = f"%{escape_like(keyword)}%"   # 转义 % 与 _，避免通配符扩大匹配范围
+        q = q.filter(or_(KnowledgeCandidate.entity.ilike(like, escape='\\'),
+                         KnowledgeCandidate.description.ilike(like, escape='\\')))
 
     total = q.count()
+    # 分页守卫：min() 只防上限，防不住 limit=-1（SQLite 里等价于「不限制」→ 整表返回）
+    _lim, _off = clamp_paging(limit, offset, max_limit=200, default_limit=30)
     rows = (q.order_by(KnowledgeCandidate.verdict_score.asc().nullsfirst(),
                        KnowledgeCandidate.id.desc())
-            .offset(offset).limit(min(limit, 200)).all())
+            .offset(_off).limit(_lim).all())
     return {
         "ok": True, "total": total,
         "candidates": [_candidate_brief(c) for c in rows],
@@ -232,7 +272,8 @@ def bulk_review(payload: BulkReviewPayload, _: bool = Depends(require_admin),
             q = q.filter(KnowledgeCandidate.status == payload.status)
         if payload.decision:
             q = q.filter(KnowledgeCandidate.verdict_decision == payload.decision)
-    rows = q.limit(min(payload.limit, 500)).all()
+    _lim, _ = clamp_paging(payload.limit, max_limit=500, default_limit=200)
+    rows = q.limit(_lim).all()
     if not rows:
         return {"ok": False, "message": "没有匹配的候选"}
 
@@ -288,7 +329,8 @@ def verify_candidates(payload: VerifyPayload, _: bool = Depends(require_admin),
         q = q.filter(KnowledgeCandidate.id.in_(payload.ids))
     elif payload.status:
         q = q.filter(KnowledgeCandidate.status == payload.status)
-    rows = q.limit(min(payload.limit, 200)).all()
+    _lim, _ = clamp_paging(payload.limit, max_limit=200, default_limit=50)
+    rows = q.limit(_lim).all()
     if not rows:
         return {"ok": False, "message": "没有匹配的候选"}
 
@@ -341,13 +383,14 @@ def list_audit(
     if days:
         q = q.filter(AuditLog.created_at >= datetime.utcnow() - timedelta(days=days))
     if keyword:
-        like = f"%{keyword}%"
-        q = q.filter(or_(AuditLog.summary.ilike(like),
-                         AuditLog.target_name.ilike(like),
-                         AuditLog.action.ilike(like)))
+        like = f"%{escape_like(keyword)}%"   # 转义 % 与 _，避免通配符扩大匹配范围
+        q = q.filter(or_(AuditLog.summary.ilike(like, escape='\\'),
+                         AuditLog.target_name.ilike(like, escape='\\'),
+                         AuditLog.action.ilike(like, escape='\\')))
 
     total = q.count()
-    rows = q.order_by(AuditLog.id.desc()).offset(offset).limit(min(limit, 200)).all()
+    _lim, _off = clamp_paging(limit, offset, max_limit=200, default_limit=30)
+    rows = q.order_by(AuditLog.id.desc()).offset(_off).limit(_lim).all()
     actions = [a for (a,) in db.query(AuditLog.action).distinct().all()]
     return {
         "ok": True, "total": total,

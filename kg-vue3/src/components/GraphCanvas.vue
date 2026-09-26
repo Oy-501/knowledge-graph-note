@@ -113,9 +113,8 @@
     <svg ref="svgRef"></svg>
 
     <div class="empty-overlay" v-if="graphStore.nodes.length === 0">
-      <div class="icon">🧠</div>
-      <h2>知识关联图谱</h2>
-      <p>左侧拖拽上传 .md/.txt 文件，自动解析知识点并构建六种关系类型关联</p>
+      <AppEmpty text="知识关联图谱"
+                hint="左侧拖拽上传 .md/.txt 文件，自动解析知识点并构建六种关系类型关联" />
     </div>
 
     <LinkTooltip
@@ -169,6 +168,8 @@ import NodeDetailDrawer from './NodeDetailDrawer.vue'
 import { getRelationColor, getRelationLineStyle } from '@/utils/relationClassifier'
 import { getLevelBorderWidth } from '@/utils/mdParser'
 import { getNodeValidationStatus } from '@/utils/noteValidator'
+import { NODE_COLORS, NODE_SOLID, SEMANTIC, hexAlpha } from '@/utils/palette'
+import AppEmpty from '@/components/AppEmpty.vue'
 
 const graphStore = useGraphStore()
 const cfg = useConfigStore()
@@ -246,23 +247,23 @@ function initSvg() {
   grad.append('stop').attr('offset', '100%').attr('stop-color', '#5b9bf3')
 
   const gradGhost = defs.append('radialGradient').attr('id', 'nodeGhost')
-  gradGhost.append('stop').attr('offset', '0%').attr('stop-color', '#8a93b0')
+  gradGhost.append('stop').attr('offset', '0%').attr('stop-color', NODE_SOLID.doc)
   gradGhost.append('stop').attr('offset', '100%').attr('stop-color', '#5a6582')
 
   const gradCorpus = defs.append('radialGradient').attr('id', 'nodeCorpus')
   gradCorpus.append('stop').attr('offset', '0%').attr('stop-color', '#a0a8c0')
   gradCorpus.append('stop').attr('offset', '100%').attr('stop-color', '#6a7388')
 
-  // 节点类型渐变（用户蓝紫→薄荷 / 知识库灰 / 笔记暖杏）
+  // 节点类型渐变 —— 色值统一来自 utils/palette.js（不再在本文件硬编码）
   const mkLinear = (id, c1, c2) => {
     const g = defs.append('linearGradient').attr('id', id)
       .attr('x1', 0).attr('y1', 0).attr('x2', 1).attr('y2', 1)
     g.append('stop').attr('offset', '0%').attr('stop-color', c1)
     g.append('stop').attr('offset', '100%').attr('stop-color', c2)
   }
-  mkLinear('kgGradUser', '#4F6F8F', '#7CB8A0')
-  mkLinear('kgGradCorpus', '#8A9AA8', '#B8C4D0')
-  mkLinear('kgGradNote', '#D4A574', '#E8C9A0')
+  mkLinear('kgGradUser', NODE_COLORS.user[0], NODE_COLORS.user[1])
+  mkLinear('kgGradCorpus', NODE_COLORS.kb[0], NODE_COLORS.kb[1])
+  mkLinear('kgGradNote', NODE_COLORS.note[0], NODE_COLORS.note[1])
 
   // 极淡网格背景 pattern（中性色，明暗主题通用）
   const gridPat = defs.append('pattern')
@@ -572,7 +573,7 @@ function nodeFill(d) {
 }
 /* 文件夹维度着色：对 fileId 求稳定哈希取 hue */
 function folderColor(fileId) {
-  if (!fileId) return '#8A9AA8'
+  if (!fileId) return NODE_SOLID.doc
   let hash = 0
   const s = String(fileId)
   for (let i = 0; i < s.length; i++) {
@@ -965,7 +966,7 @@ watch(() => [cfg.w_alpha, cfg.w_beta, cfg.w_gamma, cfg.w_delta, cfg.threshold, c
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text-primary);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   cursor: pointer;
   outline: none;
   min-width: 160px;
@@ -1004,7 +1005,7 @@ watch(() => [cfg.w_alpha, cfg.w_beta, cfg.w_gamma, cfg.w_delta, cfg.threshold, c
 .csp-label {
   flex: 0 0 auto;
   min-width: 36px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   white-space: nowrap;
 }
@@ -1028,7 +1029,7 @@ watch(() => [cfg.w_alpha, cfg.w_beta, cfg.w_gamma, cfg.w_delta, cfg.threshold, c
   align-items: center;
   gap: 4px;
   padding: 3px 8px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   border: 1px solid var(--border-light);
   border-radius: 12px;
@@ -1079,7 +1080,7 @@ watch(() => [cfg.w_alpha, cfg.w_beta, cfg.w_gamma, cfg.w_delta, cfg.threshold, c
 }
 /* 收养节点：灰虚线描边 */
 .canvas-wrap :deep(g.node-group.is-adopted path.node-shape) {
-  stroke: #8a93b0;
+  stroke: var(--text-muted);
   stroke-dasharray: 5 3;
   stroke-width: 2;
 }

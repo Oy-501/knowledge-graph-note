@@ -20,6 +20,7 @@
  * 与图谱视图的区别：这里画的是「知识库」，不是用户笔记。
  */
 import { ref, watch, onMounted, onBeforeUnmount, computed } from 'vue'
+import { DOMAIN_COLORS, LEVEL_COLORS, SEMANTIC } from '@/utils/palette'
 import * as d3Force from 'd3-force'
 import { select } from 'd3-selection'
 
@@ -41,8 +42,9 @@ const tipStyle = computed(() => ({
   top: `${tipPos.value.y + 8}px`
 }))
 
-const DOMAIN_COLORS = ['#4F6F8F', '#7CB8A0', '#D4A574', '#9C7BB8', '#5E9CB8', '#B87B7B', '#7BA85E', '#8F7B4F']
-const LEVEL_COLORS = { 1: '#4F6F8F', 2: '#7CB8A0', 3: '#D4A574', 4: '#9C7BB8' }
+// 领域/层级配色统一来自 utils/palette.js（本文件不再硬编码色值）
+// 这里只保留本文件特有的"按名字哈希稳定取色"逻辑，
+// 色板本身在 palette.js 里，改色不用动本文件。
 
 const domainOf = (node) => node.domain || 'general'
 const domainColor = (node) => {
@@ -53,7 +55,7 @@ const domainColor = (node) => {
 }
 
 function nodeColor(node) {
-  if (props.colorMode === 'level') return LEVEL_COLORS[node.level] || '#9AA7B5'
+  if (props.colorMode === 'level') return LEVEL_COLORS[node.level] || SEMANTIC.muted
   return domainColor(node)
 }
 
@@ -195,7 +197,7 @@ watch(() => [props.nodes, props.links, props.colorMode], render, { deep: true })
   align-items: center;
   justify-content: center;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--fs-md);
 }
 .kb-onto-tip {
   position: absolute;
@@ -208,7 +210,7 @@ watch(() => [props.nodes, props.links, props.colorMode], render, { deep: true })
   box-shadow: var(--shadow-md);
   pointer-events: none;
 }
-.kt-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
-.kt-meta { font-size: 11px; color: var(--text-muted); margin: 2px 0 4px; }
-.kt-def { font-size: 11.5px; color: var(--text-secondary); line-height: 1.5; }
+.kt-title { font-size: var(--fs-md); font-weight: 600; color: var(--text-primary); }
+.kt-meta { font-size: var(--fs-xs); color: var(--text-muted); margin: 2px 0 4px; }
+.kt-def { font-size: var(--fs-sm); color: var(--text-secondary); line-height: 1.5; }
 </style>

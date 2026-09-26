@@ -127,7 +127,7 @@
       <div v-if="discardedNodes.length" class="vp-group vp-discarded">
         <div class="vp-group-title" @click="showDiscarded = !showDiscarded">
           🗑 已丢弃节点 ({{ discardedNodes.length }})
-          <span style="margin-left:auto;font-size:10px">{{ showDiscarded ? '收起' : '展开' }}</span>
+          <span style="margin-left:auto;font-size: var(--fs-xs)">{{ showDiscarded ? '收起' : '展开' }}</span>
         </div>
         <div v-if="showDiscarded">
           <div v-for="dn in discardedNodes" :key="dn.id" class="vp-issue vp-discarded-item">
@@ -177,7 +177,7 @@
               <span class="nfg-stats">
                 <span class="nfg-err" v-if="fileInfo.errors > 0">🔴 {{ fileInfo.errors }}</span>
                 <span class="nfg-warn" v-if="fileInfo.warnings > 0">🟡 {{ fileInfo.warnings }}</span>
-                <span class="nfg-acc" :style="{ color: fileInfo.accuracy >= 80 ? '#4caf50' : fileInfo.accuracy >= 50 ? '#e8a020' : '#e84c4c' }">
+                <span class="nfg-acc" :style="{ color: scoreColor(fileInfo.accuracy) }">
                   {{ fileInfo.accuracy }}%
                 </span>
                 <span class="vp-toggle-sm">{{ fileInfo.expanded ? '▼' : '▶' }}</span>
@@ -234,6 +234,7 @@
 </template>
 
 <script setup>
+import { scoreColor } from '@/utils/palette'
 import { ref, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useGraphStore } from '@/store/graphStore'
@@ -572,7 +573,7 @@ function onRestore(node) {
 }
 .vp-toggle {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--fs-xs);
 }
 .vp-badge-high {
   background: var(--danger-soft) !important;
@@ -594,7 +595,7 @@ function onRestore(node) {
   gap: 6px;
   padding: 14px 12px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .vp-empty-pass {
   background: var(--success-soft);
@@ -604,13 +605,13 @@ function onRestore(node) {
   font-weight: 500;
 }
 .vp-empty-icon {
-  font-size: 14px;
+  font-size: var(--fs-base);
 }
 .vp-group {
   margin-bottom: 10px;
 }
 .vp-group-title {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   letter-spacing: 0.08em;
   color: var(--text-muted);
@@ -621,7 +622,7 @@ function onRestore(node) {
 }
 .vp-group-count {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 500;
 }
 .vp-issue {
@@ -666,7 +667,7 @@ function onRestore(node) {
   margin-bottom: 4px;
 }
 .vp-issue-type {
-  font-size: 9px;
+  font-size: var(--fs-xs);
   padding: 1px 8px;
   border-radius: var(--radius-full);
   white-space: nowrap;
@@ -685,7 +686,7 @@ function onRestore(node) {
   color: var(--success);
 }
 .vp-issue-node {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--text-primary);
   overflow: hidden;
@@ -693,13 +694,13 @@ function onRestore(node) {
   white-space: nowrap;
 }
 .vp-issue-reason {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   margin-bottom: 3px;
   line-height: 1.4;
 }
 .vp-issue-suggestion {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--accent-light);
   margin-bottom: 6px;
 }
@@ -708,7 +709,7 @@ function onRestore(node) {
   gap: 4px;
 }
 .vp-issue-actions .btn {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   padding: 2px 8px;
 }
 .vp-batch {
@@ -720,7 +721,7 @@ function onRestore(node) {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   cursor: pointer;
 }
@@ -734,11 +735,11 @@ function onRestore(node) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
 }
 .vp-discarded-item .btn {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   padding: 2px 8px;
 }
 
@@ -763,12 +764,12 @@ function onRestore(node) {
   box-shadow: var(--shadow-lg);
 }
 .vp-edit-dialog h4 {
-  font-size: 14px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   margin-bottom: 8px;
 }
 .vp-edit-hint {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   margin-bottom: 4px;
 }
@@ -779,7 +780,7 @@ function onRestore(node) {
   border: 1px solid var(--border-light);
   border-radius: var(--radius);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--fs-md);
   margin: 8px 0;
   outline: none;
   transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
@@ -810,7 +811,7 @@ function onRestore(node) {
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 500;
   border-radius: 6px;
   cursor: pointer;
@@ -825,20 +826,20 @@ function onRestore(node) {
   background: var(--bg-hover);
 }
 .vp-tab.active {
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent);
 }
 .vp-tab-badge {
   background: rgba(248, 112, 134, 0.9);
   color: #fff;
-  font-size: 9px;
+  font-size: var(--fs-xs);
   padding: 1px 5px;
   border-radius: 8px;
   min-width: 16px;
   text-align: center;
 }
 .vp-toggle-sm {
-  font-size: 9px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   margin-left: 4px;
 }
@@ -859,13 +860,13 @@ function onRestore(node) {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
 }
 .nvs-val {
   font-weight: 600;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-primary);
 }
 .nvs-pass { color: var(--success); }
@@ -895,7 +896,7 @@ function onRestore(node) {
   background: var(--bg-hover);
 }
 .nfg-name {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--text-primary);
   overflow: hidden;
@@ -908,7 +909,7 @@ function onRestore(node) {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   flex-shrink: 0;
 }
 .nfg-err, .nfg-warn {
@@ -920,12 +921,12 @@ function onRestore(node) {
 .nfg-acc {
   font-family: var(--font-mono);
   font-weight: 600;
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 
 /* 笔记问题源 */
 .vp-issue-source {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   margin-top: 2px;
   font-style: italic;

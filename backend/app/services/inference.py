@@ -272,8 +272,10 @@ def calculate_score(
         vec_b = json.loads(node_b.get("embedding", "[]")) if isinstance(node_b.get("embedding"), str) else node_b.get("embedding", [])
         if vec_a and vec_b:
             sim_vector = cosine_similarity(vec_a, vec_b)
-    except (json.JSONDecodeError, TypeError):
-        pass
+    except (json.JSONDecodeError, TypeError) as exc:
+        # 原本静默 pass：向量字段损坏会让 β 维恒为 0（关联质量下降却查不出原因）
+        logger.debug(f"向量解析失败（{type(exc).__name__}），β 维按 0 计："
+                     f"{node_a.get('id')} vs {node_b.get('id')}")
     detail["sim_vector"] = sim_vector
 
     # γ: 知识库推理
