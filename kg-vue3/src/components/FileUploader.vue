@@ -1,3 +1,7 @@
+<!--
+  文件上传区（图谱页左侧）：拖拽/点选文本文件与文件夹，调 fileStore 上传。
+  大文件/二进制的限额校验在后端 api/files.py，这里只负责交互与进度展示。
+-->
 <template>
   <div class="panel-section">
     <h3>文件上传 <span class="count">{{ fileStore.uploadedFiles.length }}</span></h3>

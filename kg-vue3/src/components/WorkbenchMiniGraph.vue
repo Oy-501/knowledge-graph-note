@@ -1,3 +1,7 @@
+<!--
+  工作台迷你图谱：围绕当前笔记的关联小图（D3 力导向，比主图轻）。
+  节点/连线色走 @/utils/palette.js；深度变浅时用半径与透明度衰减表达。
+-->
 <template>
   <div class="mini-graph-panel">
     <div class="mg-header">

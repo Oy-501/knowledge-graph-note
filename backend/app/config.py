@@ -80,19 +80,26 @@ class Settings(BaseSettings):
     VERDICT_WEB_CACHE_TTL: int = 900    # 搜索结果缓存（秒）
     VERDICT_MAX_WEB_CALLS: int = 30     # 单批判定最多联网几次（避免整批卡住）
 
-    # ---- 后台管理 ----
-    ADMIN_TOKEN: str = "kg-admin"       # 后台口令（务必在 .env 改成自己的）
+    # ---- 认证与会话 ----
+    SESSION_TTL_DAYS: int = 7           # 会话有效期（天）；每次鉴权命中滑动续期
+    REGISTRATION_OPEN: bool = True      # 是否开放注册（本期仅配置项，无后台开关 UI）
 
     # ---- 安全开关（默认按「默认安全」原则取最严值）----
-    # 写操作（POST/PUT/PATCH/DELETE）是否必须带管理口令。
+    # 写操作（POST/PUT/PATCH/DELETE）是否必须携带有效登录会话。
     # 关闭后任意能访问端口的人都能删知识库条目、重建知识库 —— 仅在本机
     # 单人调试且明确知情时才建议关闭。
     PROTECT_WRITES: bool = True
-    ADMIN_FAIL_LIMIT: int = 20          # 口令失败尝试上限（次数 / 窗口）
-    ADMIN_FAIL_WINDOW_S: int = 300      # 失败计数窗口（秒）
+    # 后台管理口令（写操作守卫使用，务必改成你自己的强口令）
+    ADMIN_TOKEN: str = "kg-admin"
     UPLOAD_DIR: str = "./uploads"       # 头像/背景图等用户上传文件目录
     MAX_IMAGE_MB: int = 5               # 图片上传上限
     AUDIT_KEEP_ROWS: int = 20000        # 审计日志保留条数（超出清理最旧的）
+
+    # ---- 相册与媒体 ----
+    MAX_MEDIA_MB: int = 500             # 单个媒体文件上限（流式限额读取）
+    MEDIA_QUOTA_MB: int = 2048          # 每用户媒体总配额
+    VIDEO_TRANSCODE_MB: int = 50        # 超过该大小的视频触发 720p 转码
+    FFMPEG_PATH: str = ""               # ffmpeg 可执行文件路径；留空按 PATH 与常见目录自动探测
 
     # ---- Scoring defaults ----
     DEFAULT_ALPHA: float = 0.15

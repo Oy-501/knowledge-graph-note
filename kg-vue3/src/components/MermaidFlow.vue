@@ -1,3 +1,8 @@
+<!--
+  Mermaid 流程图：把图谱总结的 mermaid 源码渲染成图。
+  安全等级必须是 'strict'（图源来自用户上传的文档标题，属不可信输入，
+  否则会经 innerHTML 形成存储型 XSS）。主题跟随应用亮/暗。
+-->
 <template>
   <div class="mflow">
     <div v-if="error" class="mflow-error">

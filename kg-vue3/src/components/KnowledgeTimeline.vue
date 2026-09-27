@@ -1,3 +1,7 @@
+<!--
+  知识时间线：按时间展示知识点的创建/校验/复习事件。
+  数据来源是 noteStore / fileStore 的时间字段，纯展示组件。
+-->
 <template>
   <div class="kt">
     <div v-if="events.length === 0" class="kt-empty">

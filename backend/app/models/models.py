@@ -12,11 +12,82 @@ class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String(100), unique=True, nullable=False)
+    # ---- 认证（补列，走 database._COLUMN_MIGRATIONS）----
+    password_hash = Column(String(255))        # bcrypt；NULL=未初始化（旧 default 行）
+    role = Column(String(20), default="user")  # user | admin
+    is_disabled = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     files = relationship("File", back_populates="user", cascade="all, delete-orphan")
     nodes = relationship("Node", back_populates="user", cascade="all, delete-orphan")
     notes = relationship("Note", back_populates="user", cascade="all, delete-orphan")
+
+
+class AuthSession(Base):
+    """登录会话：不透明令牌的服务端记录（库中只存令牌的 SHA-256 哈希）。
+
+    滑动续期：每次鉴权命中时 expires_at 顺延 SESSION_TTL_DAYS 天；
+    登出/禁用用户时把 revoked 置 True，立即失效。
+    """
+    __tablename__ = "auth_sessions"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    token_hash = Column(String(64), unique=True, nullable=False)  # sha256 十六进制
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)
+    last_seen_at = Column(DateTime, default=datetime.utcnow)
+    revoked = Column(Boolean, default=False)
+
+    __table_args__ = (
+        Index("idx_session_user", "user_id"),
+    )
+
+
+class Diary(Base):
+    """日记（Markdown，仅本人可见）"""
+    __tablename__ = "diaries"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    title = Column(String(200))
+    content_md = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_diary_user_time", "user_id", "created_at"),
+    )
+
+
+class Favorite(Base):
+    """公共知识库条目收藏；group_name 本期落库，UI 分组筛选属后续预留"""
+    __tablename__ = "favorites"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    kb_entry_id = Column(Integer, ForeignKey("knowledge_base.id"), nullable=False)
+    group_name = Column(String(50), default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "kb_entry_id", name="uq_fav_pair"),
+    )
+
+
+class MediaAsset(Base):
+    """相册媒体（图片/视频）；大视频异步转码，状态机写回本表"""
+    __tablename__ = "media_assets"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    kind = Column(String(10))                            # image | video
+    url = Column(String(500))                            # /uploads/... 相对路径
+    size_bytes = Column(Integer)
+    duration_s = Column(Float)                           # 视频时长（ffprobe）
+    transcode_status = Column(String(15), default="none")  # none|pending|processing|done|failed
+    transcode_error = Column(String(300))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_media_user", "user_id"),
+    )
 
 
 class File(Base):
@@ -272,6 +343,10 @@ class KnowledgeBase(Base):
     bridge_sentences = Column(JSON)  # JSON array
     opposite_terms = Column(JSON)  # JSON array
     related_terms = Column(JSON)  # JSON array
+    # ---- 公共知识库（补列，走 database._COLUMN_MIGRATIONS）----
+    shared_by_user_id = Column(Integer)          # 署名用户；NULL=系统/种子条目（恒可见）
+    is_published = Column(Boolean, default=True) # 下架/取消分享=FALSE（条目保留）
+    shared_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     __table_args__ = (

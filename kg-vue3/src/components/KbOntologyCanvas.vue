@@ -1,3 +1,8 @@
+<!--
+  知识库本体图：把知识库本身当一张图渲染（知识点 + 知识库关系边），
+  区别于主图谱：这里画的是「知识库」，不是用户笔记。
+  配色走 @/utils/palette.js 的 DOMAIN_COLORS / LEVEL_COLORS。
+-->
 <template>
   <div ref="wrapRef" class="kb-onto" :style="{ height: height + 'px' }">
     <svg ref="svgRef" class="kb-onto-svg"></svg>

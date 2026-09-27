@@ -1,4 +1,4 @@
-"""安全原语：口令校验、失败限流、不可信请求头净化。
+"""安全原语：会话令牌生成/哈希/恒定时间比较、失败限流、不可信请求头净化。
 
 集中放在这里，避免各接口各写一遍校验逻辑 —— 分散实现必然出现遗漏，
 而「某一个端点忘了加校验」正是零信任最怕的情形。
@@ -6,19 +6,19 @@
 对应原则：
 - **失效安全**：任何配置缺失/异常一律**拒绝**，绝不放行（fail-closed）
 - **输入永不信任**：所有来自请求头的值都当作不可信，先净化再使用
-- **零信任**：不因请求来自本机就信任，写操作一律校验口令
-- **纵深防御**：口令比较用恒定时间算法，避免逐字符时序侧信道
+- **零信任**：不因请求来自本机就信任，写操作一律校验登录会话
+- **纵深防御**：令牌哈希比较用恒定时间算法，避免逐字符时序侧信道
 """
 from __future__ import annotations
 
+import hashlib
 import hmac
 import re
+import secrets
 import threading
 import time
 from collections import defaultdict, deque
 from typing import Dict, Optional, Tuple
-
-from app.config import settings
 
 # 请求头净化：只允许这些字符，长度截断
 _RID_SAFE = re.compile(r"[^A-Za-z0-9._:\-]")
@@ -38,27 +38,27 @@ def sanitize_request_id(raw: Optional[str]) -> str:
     return cleaned
 
 
-def admin_token_configured() -> bool:
-    return bool((settings.ADMIN_TOKEN or "").strip())
+# ---------------------------------------------------------------- 会话令牌
+
+# 令牌格式：kgt_ + urlsafe 随机串（43 字符）；请求头 X-Session-Token
+TOKEN_PREFIX = "kgt_"
 
 
-def verify_admin_token(provided: Optional[str]) -> bool:
-    """恒定时间校验后台口令。
+def new_session_token() -> str:
+    """签发一个新的不透明会话令牌（明文只出现在本次响应里，不落库）"""
+    return TOKEN_PREFIX + secrets.token_urlsafe(32)
 
-    失效安全语义：
-      - 未配置口令 → **拒绝**（不是放行）。配置缺失属于「加固未完成」，
-        此时放开后台会让所有高危操作（批量驳回、删除、改判定）对任意
-        能访问端口的人开放 —— 正是「失效时错误地开放权限」。
-      - 口令不正确 → 拒绝
-    比较用 hmac.compare_digest，避免 `!=` 逐字符比较泄露口令长度与前缀。
-    """
-    expected = (settings.ADMIN_TOKEN or "").strip()
-    if not expected:
-        return False
+
+def hash_token(token: Optional[str]) -> str:
+    """令牌的 SHA-256 哈希（库中只存哈希，泄库不等于泄令牌）"""
+    return hashlib.sha256(str(token or "").encode("utf-8")).hexdigest()
+
+
+def token_hashes_equal(a: str, b: str) -> bool:
+    """恒定时间比较两个令牌哈希；任何异常一律拒绝（fail-closed）"""
     try:
-        return hmac.compare_digest(str(provided or "").strip().encode("utf-8"),
-                                   expected.encode("utf-8"))
-    except Exception:  # noqa: BLE001 — 校验出错也必须拒绝
+        return hmac.compare_digest(str(a or ""), str(b or ""))
+    except Exception:  # noqa: BLE001 — 比较出错也必须拒绝
         return False
 
 
@@ -111,11 +111,11 @@ class _SlidingLimiter:
             return {k: len(self._prune(k, now)) for k in list(self._hits) if self._hits[k]}
 
 
-# 管理口令失败尝试限流：5 分钟内最多 20 次（默认）
-admin_limiter = _SlidingLimiter(
-    max_events=int(getattr(settings, "ADMIN_FAIL_LIMIT", 20) or 20),
-    window_s=float(getattr(settings, "ADMIN_FAIL_WINDOW_S", 300) or 300),
-)
+# 登录失败限流：同一「用户名|客户端IP」5 分钟内最多 10 次（防在线暴力破解）
+login_limiter = _SlidingLimiter(max_events=10, window_s=300.0)
+
+# 后台管理口令失败限流：同一来源 5 分钟内最多 20 次（防在线暴力破解）
+admin_limiter = _SlidingLimiter(max_events=20, window_s=300.0)
 
 # 前端错误上报限流：同一来源 1 分钟最多 30 条（防止刷爆审计表）
 client_error_limiter = _SlidingLimiter(max_events=30, window_s=60.0)
@@ -133,3 +133,36 @@ def client_key(request) -> str:
     except Exception:  # noqa: BLE001
         host = "unknown"
     return host or "unknown"
+
+
+# ---------------------------------------------------------------- 后台管理口令
+
+def admin_token_configured() -> bool:
+    """是否已配置后台管理口令（非空即视为已配置；默认值 kg-admin 也算已配置，
+    用户实际可访问后台但需要带口令）。
+
+    失效安全：配置缺失（空字符串/None）一律视为未配置，拒绝后台访问。
+    """
+    try:
+        from app.config import settings
+        return bool((settings.ADMIN_TOKEN or "").strip())
+    except Exception:  # noqa: BLE001 — 配置读取失败必须拒绝
+        return False
+
+
+def verify_admin_token(token: Optional[str]) -> bool:
+    """恒定时间比较 X-Admin-Token 与 settings.ADMIN_TOKEN。
+
+    - 失效安全：未配置口令或令牌两端任一为空 → 拒绝
+    - 不泄露口令长度/前缀（先哈希再 hmac.compare_digest）
+    """
+    try:
+        from app.config import settings
+        expected_raw = (settings.ADMIN_TOKEN or "").strip()
+        if not expected_raw:
+            return False
+        if not (token or "").strip():
+            return False
+        return token_hashes_equal(hash_token(expected_raw), hash_token(token))
+    except Exception:  # noqa: BLE001 — 比较过程任何异常都拒绝
+        return False

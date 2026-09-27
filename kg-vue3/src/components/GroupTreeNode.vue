@@ -1,3 +1,7 @@
+<!--
+  分组树的单个节点：递归渲染（自身再嵌套子节点）。
+  分组的增删改走 groupStore；拖拽排序的逻辑也在父组件/ store 里。
+-->
 <template>
   <div class="tree-branch">
     <div

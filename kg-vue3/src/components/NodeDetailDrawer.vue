@@ -1,3 +1,7 @@
+<!--
+  节点详情抽屉：点图谱节点后从右侧滑出，展示详情/关联/校验状态/学习路径。
+  层级徽章配色来自 @/utils/palette.js 的 LEVEL_COLORS；状态色用 scoreColor()。
+-->
 <template>
   <Transition name="drawer-slide">
     <div v-if="visible" class="node-drawer-overlay" @click.self="$emit('close')">

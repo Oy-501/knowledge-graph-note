@@ -13,3 +13,5 @@ pydantic-settings==2.1.0
 # 图谱总结导出（文档/PPT）
 python-pptx==1.0.2
 python-docx==1.2.0
+# 密码哈希（Windows 有预编译 wheel，直接用 hashpw/checkpw，不引入 passlib）
+bcrypt==4.1.2

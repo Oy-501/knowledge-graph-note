@@ -1,3 +1,9 @@
+<!--
+  背景与素材选择器：整套预设 / 摄影背景 / 纹理图案 / 自定义四个页签。
+  素材声明在 @/assets/catalog.js，写入的是 settingsStore 的背景设置，
+  最终由 styles/texture.css 的 --tex-* 槽位渲染，这里不写任何素材路径。
+  改素材：先去改 catalog.js，不要在本文件里拼 URL。
+-->
 <template>
   <Transition name="fade">
     <div v-if="visible" class="bg-selector-overlay" @click.self="$emit('close')">

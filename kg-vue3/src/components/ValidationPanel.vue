@@ -1,3 +1,7 @@
+<!--
+  校验面板：文档/知识点的校验结果总览与逐条明细（待校验/警告/错误）。
+  准确率配色统一用 @/utils/palette.js 的 scoreColor()，不要写死绿/橙/红。
+-->
 <template>
   <div class="panel-section validation-panel">
     <div class="vp-header" @click="collapsed = !collapsed">
