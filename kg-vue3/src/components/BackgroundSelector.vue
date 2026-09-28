@@ -421,7 +421,7 @@ function resetDefault() {
 
 /* —— 整套预设 —— */
 .bg-preset-grid {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 10px;
 }
 .bg-preset {
   position: relative; padding: 0; border: 1px solid var(--border);
@@ -471,7 +471,7 @@ function resetDefault() {
 }
 
 /* —— 摄影背景 —— */
-.bg-photo-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.bg-photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
 .bg-photo {
   position: relative; padding: 0; border: 2px solid transparent;
   border-radius: 8px; overflow: hidden; cursor: pointer; background: var(--bg-tertiary);
@@ -499,7 +499,7 @@ function resetDefault() {
 }
 
 /* —— 纹理图案 —— */
-.bg-pattern-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.bg-pattern-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
 .bg-pattern {
   padding: 0; border: 2px solid var(--border); border-radius: 8px;
   background: var(--bg-secondary); cursor: pointer; overflow: hidden;
@@ -558,7 +558,7 @@ function resetDefault() {
   background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 .bg-upload-preview { max-width: 100%; max-height: 110px; border-radius: 6px; }
-.bg-legend { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.bg-legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
 .bg-legend-item {
   height: 46px; border: 1px solid var(--border); border-radius: 8px;
   cursor: pointer; position: relative; overflow: hidden;

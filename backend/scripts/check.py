@@ -19,6 +19,7 @@
 """
 from __future__ import annotations
 
+import re
 import argparse
 import ast
 import json
@@ -521,7 +522,90 @@ def check_frontend_build() -> None:
         add("frontend_build", "前端构建", WARN, f"跳过（{exc}）")
 
 
-# ------------------------------------------------------------------ 8. 安全不变量
+# ------------------------------------------------------------------ 8. 背景层不变量
+
+
+def _strip_css_comments(src: str) -> str:
+    """去掉 CSS 注释再做判断。
+
+    为什么必须先去掉：这类检查曾两次被「注释里提到的字样」骗到
+    （fail-open 检查误报、外键清理检查漏报）。注释里出现目标字符串
+    既可能造成误报、也可能让人以为检查过了。
+    """
+    return re.sub(r"/\*.*?\*/", "", src, flags=re.S)
+
+
+def _strip_js_comments(src: str) -> str:
+    """去块注释 + 去「整行就是注释」的行注释（行首锚定，不会误伤字符串里的 //）。"""
+    src = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
+    return re.sub(r"(?m)^\s*//.*$", "", src)
+
+
+def check_background_layers() -> None:
+    """背景层不变量：素材层之上不该再压着「会把它盖住的不透明底」。
+
+    背景有两套体系并存：
+      ① 素材槽位（--tex-*，由 .app-tex 三层渲染）—— 现行方案
+      ② 旧版单层（--editor-bg / --app-bg / --workbench-bg）——
+         只在用户选了渐变 / 纯色 / 自定义图时才有意义
+
+    踩过的坑：没有单层背景时，代码用 `css || 'var(--bg-primary)'` 给
+    --editor-bg 兜了个不透明色并写到 <html> 上。内联变量优先级最高，
+    于是样式表里 `var(--editor-bg, transparent)` 的 transparent 兜底
+    **永远不生效**（var() 只在变量「未定义」时才用兜底）——
+    工作台因此多出一块铺满的不透明底，把素材层挡住。
+    实测：修复前后工作台 49.6% 的像素（29.4 万个）颜色发生变化。
+
+    所以把三条钉住：变量不得有不透明默认值、不得用 `||` 兜不透明值、
+    旧版整页背景层在素材类背景下不得渲染。
+    """
+    fe = PROJECT / "kg-vue3"
+    if not fe.is_dir():
+        add("bg_layers", "背景层不变量", WARN, "未找到 kg-vue3 目录")
+        return
+
+    LEGACY_VARS = ("--editor-bg", "--app-bg", "--workbench-bg")
+    problems: List[str] = []
+
+    # ① 样式表不得给旧版背景变量不透明默认值（有默认值 = 兜底失效）
+    css_path = fe / "src" / "styles" / "main.css"
+    if css_path.exists():
+        css = _strip_css_comments(css_path.read_text(encoding="utf-8"))
+        for var in LEGACY_VARS:
+            m = re.search(re.escape(var) + r"\s*:\s*([^;{}]+);", css)
+            if m and m.group(1).strip().lower() != "transparent":
+                problems.append(f"main.css 给 {var} 定义了不透明默认值「{m.group(1).strip()}」")
+
+    # ② store 不得用 `||` 给这些变量兜不透明值
+    store = fe / "src" / "store" / "settingsStore.js"
+    if store.exists():
+        js = _strip_js_comments(store.read_text(encoding="utf-8"))
+        for var in LEGACY_VARS:
+            if re.search(r"setProperty\(\s*['\"]" + re.escape(var) + r"['\"]\s*,\s*[^;]{0,120}\|\|", js):
+                problems.append(f"settingsStore 用 `||` 给 {var} 兜底（空串会被兜成不透明色）")
+
+    # ③ 旧版整页背景层必须排除素材类背景
+    app_vue = fe / "src" / "App.vue"
+    if app_vue.exists():
+        src = _strip_js_comments(app_vue.read_text(encoding="utf-8"))
+        m = re.search(r"const globalBg\s*=\s*computed\(", src)
+        if not m:
+            problems.append("App.vue 里找不到 globalBg 判定，这项检查无法生效")
+        else:
+            body = src[m.end(): m.end() + 320].replace('"', "'")
+            if "type !== 'asset'" not in body:
+                problems.append("App.vue 的 globalBg 没排除素材类背景（会多渲染一层铺满视口的纯色）")
+
+    if problems:
+        add("bg_layers", "背景层不变量", FAIL, "；".join(problems),
+            "素材层之上不能压不透明底：旧版背景变量只在「确实配置了单层背景」时才写，"
+            "其余时候必须移除，让 var(--x, transparent) 的兜底接管。")
+    else:
+        add("bg_layers", "背景层不变量", OK,
+            "旧版背景变量无默认值、无兜底写入；整页背景层已排除素材类背景")
+
+
+# ------------------------------------------------------------------ 9. 安全不变量
 
 
 def check_security() -> None:
@@ -654,6 +738,7 @@ def main() -> int:
     check_silent_swallow()
     check_undefined_names()
     check_config()
+    check_background_layers()
     check_security()
     check_frontend()
     if args.build:

@@ -36,6 +36,20 @@
   --bg-glass-strong: rgba(255, 255, 255, 0.88);
   --bg-glass-light: rgba(255, 255, 255, 0.55); /* 玻璃高光面 */
 
+  /* —— 表面透明度（让「页面背景」真的透上来）——
+     问题背景：texture.css 早已把素材层做成「槽位变量 + 半透明表面」的架构，
+     但各视图的根容器写了 `background: var(--bg-primary)`（不透明），
+     整块盖在素材层之上 —— 于是「换背景」只改了变量，屏幕上没有任何变化。
+     现在统一：视图根容器**透明**，卡片/面板用下面的半透明表面令牌。
+
+     透明度选 0.90 / 0.82 而不是更低：文字颜色是按**不透明**底色校准过对比度的
+     （见上面 --text-muted 的说明），半透明会削弱对比；0.90 在保住可读性的前提下
+     已经能让背景明显可感知。别为了效果把这几个数调得更低。
+     令牌只引用 --bg-secondary / --bg-primary，深色主题自动跟随。 */
+  --surface-1: color-mix(in srgb, var(--bg-secondary) 90%, transparent);
+  --surface-2: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+  --surface-3: color-mix(in srgb, var(--bg-primary) 88%, transparent);
+
   /* —— 文字层级 —— */
   /* 这几个值不是随手挑的：--text-muted 的对比度按最差底色（--bg-hover）实测，
      #7C879E 只有 2.83:1，远低于 WCAG AA 的 4.5:1 —— 此前整站的次级文字
@@ -158,9 +172,11 @@
   --dur-base: 0.25s;
 
   /* 背景自定义 CSS 变量 */
-  --app-bg: var(--bg-deep);
-  --editor-bg: var(--bg-secondary);
-  --workbench-bg: var(--bg-primary);
+  /* 旧版单层背景的变量（渐变/纯色/自定义图）**刻意不给默认值**：
+     - --editor-bg 由 settingsStore 在「确实配置了单层背景」时才写到 <html> 上，
+       没配置时保持未定义，消费者的 `var(--editor-bg, transparent)` 兜底才会生效。
+       给它一个不透明的默认值，等于让那个兜底永远失效（踩过，见 settingsStore 的说明）。
+     - --app-bg / --workbench-bg 全项目没有读取点，已删除以免误导。 */
 
   /* ============================================================
      纹理 / 素材槽位（由 texture.css 消费，由 settingsStore 在运行时写入）

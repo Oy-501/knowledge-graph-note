@@ -1127,7 +1127,7 @@ defineExpose({ focus })
   height: 100%;
   padding: 16px;
   border: none;
-  background: var(--bg-primary);
+  background: var(--surface-1);
   color: var(--text-primary);
   font-size: var(--fs-base);
   line-height: 1.7;

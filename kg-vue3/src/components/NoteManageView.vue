@@ -383,7 +383,7 @@ async function onRefresh() {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  background: var(--bg-primary);
+  background: var(--surface-3);
 }
 
 .nmv-fullscreen {

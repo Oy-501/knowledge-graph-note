@@ -661,7 +661,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.ad-view { flex: 1; min-width: 0; padding: 16px 20px 40px; height: 100%; overflow-y: auto; background: var(--bg-primary); }
+.ad-view { flex: 1; min-width: 0; padding: 16px 20px 40px; height: 100%; overflow-y: auto; }
 
 .ad-gate { display: flex; align-items: center; justify-content: center; height: 100%; }
 .ad-gate-card {
@@ -681,7 +681,7 @@ onMounted(() => {
 .ad-tabs { margin-top: 8px; }
 
 .ad-card {
-  background: var(--bg-secondary); border: 1px solid var(--border-light);
+  background: var(--surface-1); border: 1px solid var(--border-light);
   border-radius: var(--radius); padding: 14px 16px; margin-bottom: 14px; box-shadow: var(--shadow-sm);
 }
 .ad-card h3 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 12px; font-size: var(--fs-md); color: var(--text-primary); }
@@ -691,7 +691,7 @@ onMounted(() => {
 .ad-hint { font-size: var(--fs-sm); color: var(--text-muted); line-height: 1.6; margin: 10px 0 0; }
 
 .ad-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 14px; }
-.ad-stat { background: var(--bg-secondary); border: 1px solid var(--border-light); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow-sm); }
+.ad-stat { background: var(--surface-1); border: 1px solid var(--border-light); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow-sm); }
 .as-val { font-size: 22px; font-weight: 700; line-height: 1.15; }
 .as-label { font-size: var(--fs-sm); color: var(--text-primary); margin-top: 2px; }
 .as-sub { font-size: var(--fs-xs); color: var(--text-muted); }
@@ -782,7 +782,8 @@ onMounted(() => {
 .ad-doctor-list { display: flex; flex-direction: column; }
 .ad-doctor-row {
   display: grid;
-  grid-template-columns: 20px 116px 1fr 62px;
+  /* 第 3 列用 minmax(0, 1fr)：详情文字很长，不封下限会把整行撑宽导致横向溢出 */
+  grid-template-columns: 20px minmax(78px, 116px) minmax(0, 1fr) 62px;
   align-items: baseline;
   gap: 8px;
   padding: 8px 10px;

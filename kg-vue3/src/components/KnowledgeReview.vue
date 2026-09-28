@@ -169,10 +169,10 @@ const recentNodes = computed(() => {
   font-size: var(--fs-sm);
 }
 
-/* 今日概览：3 列统计 */
+/* 今日概览：3 列统计（窄栏自动减列，不要死守 3 列） */
 .kr-overview {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
   gap: 8px;
 }
 .kr-stat {

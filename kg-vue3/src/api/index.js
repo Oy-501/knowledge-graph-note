@@ -41,6 +41,16 @@ export class ApiError extends Error {
   get isNetwork() { return this.status === 0 }
   get isServerError() { return this.status >= 500 }
   get isGuard() { return this.status === 400 || this.status === 413 || this.status === 415 || this.status === 422 }
+  /**
+   * 是否是「需要（重新）登录」。
+   *
+   * 只认这两个码，不看状态码本身 —— 401 也可能是「密码错」这类业务失败，
+   * 那种情况把人踢回登录页会把用户刚输入的内容清掉。
+   * 后端在写守卫里明确回 session_required，在这里才意味着会话没了。
+   */
+  get isSessionExpired() { return this.status === 401 && this.code === 'session_required' }
+  /** 是否存在但权限不够（普通用户做了管理员操作）—— 这种情况**不要**踢回登录页 */
+  get isForbidden() { return this.status === 403 && this.code === 'admin_required' }
 }
 
 /** 把各种失败形态翻译成 ApiError */
@@ -73,8 +83,10 @@ function toApiError(err) {
 
   // 后端没给建议时，按状态码补一条通用但可执行的
   if (!hint) {
-    if (res.status === 401 || res.status === 403) {
-      hint = '管理口令不正确或已失效，请在「后台管理」重新输入。'
+    if (res.status === 401) {
+      hint = '登录状态已失效，请重新登录。'
+    } else if (res.status === 403) {
+      hint = '当前账号没有这个权限；写操作需要管理员账号。'
     } else if (res.status === 404) {
       hint = '目标不存在或已被删除，刷新列表后重试。'
     } else if (res.status === 413) {
@@ -100,46 +112,66 @@ function toApiError(err) {
   })
 }
 
-// 后台口令在本地的存储键（与 AdminView 共用同一个键）
-export const ADMIN_TOKEN_KEY = 'kg-admin-token'
+// ============================================================ 会话令牌
+//
+// 写操作的身份凭证现在是**登录会话**（X-Session-Token），不再是配置文件里的
+// 明文管理口令。这么做之后前端只需要记住一件事：把当前令牌挂到每个请求上。
+//
+// 这里刻意用「模块级变量 + 读写函数」而不是直接 import authStore：
+// authStore 要 import 本文件的 authAPI，直接反向 import 会形成循环依赖，
+// 循环依赖在打包器里表现为「某个模块拿到的是半初始化的对象」，
+// 症状是难查的 undefined。用回调注册把依赖方向掰直。
+//
+// 另外必须兼容 AxiosHeaders：axios v1 会把 config.headers 归一化成
+// AxiosHeaders 实例，此时**直接赋值普通属性不会生效**。
+// 之前踩过这个坑（用户输了口令、重试请求却依然 401），有 set() 就用 set()。
 
-/** 读取本机保存的管理口令（没有则返回空串） */
-function readAdminToken() {
-  try {
-    return localStorage.getItem(ADMIN_TOKEN_KEY) || ''
-  } catch {
-    return ''
-  }
+let _sessionToken = ''
+
+/** 由 authStore 调用：设置/清空当前会话令牌 */
+export function setSessionToken(token) {
+  _sessionToken = token || ''
 }
 
 /**
- * 把管理口令写进请求头。
- *
- * 必须兼容 AxiosHeaders：axios v1 会把 config.headers 归一化成 AxiosHeaders 实例，
- * 此时**直接赋值普通属性不会生效**（不会进入最终发送的头）。
- * 重试路径复用的正是这种已被归一化的 config —— 之前就是因此导致
- * 「用户输了口令、请求却依然 401」。有 set() 就用 set()。
+ * 注册「会话失效」回调（由 authStore 注册）。
+ * 任意请求收到 401 session_required 时触发一次，让 store 清理本地状态并回登录页。
  */
-function attachAdminToken(config, token) {
-  if (!token) return
+let _onSessionExpired = null
+export function onSessionExpired(fn) {
+  _onSessionExpired = typeof fn === 'function' ? fn : null
+}
+
+function attachSessionToken(config) {
+  if (!_sessionToken) return
   const h = config.headers
   if (h && typeof h.set === 'function') {
-    if (!h.has?.('X-Admin-Token')) h.set('X-Admin-Token', token)
+    if (!h.has?.('X-Session-Token')) h.set('X-Session-Token', _sessionToken)
   } else {
     config.headers = config.headers || {}
-    if (!config.headers['X-Admin-Token']) config.headers['X-Admin-Token'] = token
+    if (!config.headers['X-Session-Token']) config.headers['X-Session-Token'] = _sessionToken
   }
 }
 
-// 请求拦截器：注入 user_id + 管理口令
+// 旧版管理口令的存储键：仅用于**登录成功后清理**它。
+// 它已经不再参与鉴权（前端不再弹口令框），但老用户的浏览器里可能还留着，
+// 留着会让人误以为「这里还存着一个密钥」。登录成功时顺手删掉。
+export const ADMIN_TOKEN_KEY = 'kg-admin-token'
+
+function dropLegacyAdminToken() {
+  try {
+    localStorage.removeItem(ADMIN_TOKEN_KEY)
+  } catch { /* 读不到 localStorage 也无所谓 */ }
+}
+
+// 请求拦截器：注入 user_id + 会话令牌
 api.interceptors.request.use(config => {
   // 默认 user_id=1（单用户模式）
   if (!config.params) config.params = {}
   if (!config.params.user_id) config.params.user_id = 1
 
-  // 自动携带管理口令：后端对写操作强制校验（零信任），
-  // 若已在「后台管理」输入过则直接带上，用户无需关心。
-  attachAdminToken(config, readAdminToken())
+  // 自动携带会话令牌：后端对写操作强制校验（零信任），登录一次后无需再管
+  attachSessionToken(config)
   return config
 })
 
@@ -183,64 +215,22 @@ api.interceptors.response.use(
       } catch { /* 静默 */ }
     }
 
-    // ---- 写操作需要口令：提示输入一次并自动重试 ----
-    // 后端对所有 POST/PUT/PATCH/DELETE 强制校验口令（零信任）。
-    // 这里做一次友好引导，避免用户第一次上传时困惑 —— 口令只存在本地，
-    // 之后所有写请求自动携带。
-    if (apiError.status === 401 && apiError.code === 'write_requires_token'
-        && !config.__authRetried && !_askingToken) {
-      config.__authRetried = true
-      const ok = await _promptAdminToken()
-      if (ok) {
-        // 显式把新口令写进这次重试的 config（不能只依赖拦截器：
-        // 这里的 config 已经是归一化过的 AxiosHeaders 对象）
-        attachAdminToken(config, readAdminToken())
-        try {
-          return await api.request(config)
-        } catch (again) {
-          return Promise.reject(again instanceof ApiError ? again : toApiError(again))
-        }
+    // ---- 会话失效：通知上层回到登录页 ----
+    //
+    // 后端写守卫在「未登录/会话过期」时回 401 session_required。
+    // 这里**不再**弹口令框（旧做法已废弃），而是交给 authStore 清状态、回登录页。
+    // 用回调而不是在这里 import store，是为了避免循环依赖（见文件上方说明）。
+    if (apiError.isSessionExpired) {
+      try {
+        _onSessionExpired?.()
+      } catch (e) {
+        console.warn('[API] 会话失效回调执行失败：', e?.message || e)
       }
     }
 
     return Promise.reject(apiError)
   }
 )
-
-// 单飞标记：并发写请求同时 401 时，只弹一次口令输入框
-let _askingToken = false
-
-async function _promptAdminToken() {
-  _askingToken = true
-  try {
-    const { ElMessageBox } = await import('element-plus')
-    const { value } = await ElMessageBox.prompt(
-      '写操作（上传 / 删除 / 重建）已受管理口令保护。\n请输入后台管理口令，本机记住后无需重复输入。',
-      '需要管理口令',
-      {
-        confirmButtonText: '确认',
-        cancelButtonText: '取消',
-        inputType: 'password',
-        inputPlaceholder: '默认为 kg-admin，可在 backend/.env 修改',
-        inputValidator: v => (v && v.trim() ? true : '口令不能为空'),
-      }
-    ).catch(() => ({ value: null }))
-
-    if (!value) return false
-    try {
-      localStorage.setItem(ADMIN_TOKEN_KEY, value.trim())
-    } catch { /* 隐私模式等场景下存不了，本次仍继续尝试 */ }
-    // 密钥变更后要重建 api 实例上的默认头
-    api.defaults.headers.common['X-Admin-Token'] = value.trim()
-    const { ElMessage } = await import('element-plus')
-    ElMessage.success('口令已记住，正在重试')
-    return true
-  } catch {
-    return false
-  } finally {
-    _askingToken = false
-  }
-}
 
 // ==================== 文件 API ====================
 export const fileAPI = {
@@ -615,80 +605,132 @@ export const profileAPI = {
   fileUrl(path) {
     if (!path) return ''
     if (/^https?:\/\//.test(path)) return path
-    const base = (import.meta.env.VITE_API_BASE || 'http://localhost:8000/api').replace(/\/api\/?$/, '')
+    // 兜底值与主 baseURL 保持一致（127.0.0.1 而非 localhost：
+    // localhost 可能被解析成 IPv6 ::1，后端只绑 IPv4 回环 → 图片全裂）
+    const base = (import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8080/api').replace(/\/api\/?$/, '')
     return `${base}${path}`
   }
 }
 
-// ==================== 后台管理 API（口令保护） ====================
-const adminHeaders = (token) => ({ 'X-Admin-Token': token || '' })
+// ==================== 认证 API ====================
+//
+// 登录页只用这几个接口。令牌由请求拦截器自动挂到请求头，调用方无需关心。
+// 三个成功路径都会顺手删掉 localStorage 里遗留的旧管理口令 ——
+// 它已经不再参与鉴权，留着只会让人以为「这里还存着一个密钥」。
+export const authAPI = {
+  /** 登录页初始探测：是否需初始化、是否开放注册、当前是否已登录 */
+  async status() {
+    const res = await api.get('/auth/status')
+    return res.data
+  },
 
+  /** 首次初始化：设置账号密码并成为首个管理员 */
+  async bootstrap({ username, password, displayName = '' }) {
+    const res = await api.post('/auth/bootstrap', {
+      username, password, display_name: displayName,
+    })
+    dropLegacyAdminToken()
+    return res.data
+  },
+
+  async login({ username, password }) {
+    const res = await api.post('/auth/login', { username, password })
+    dropLegacyAdminToken()
+    return res.data
+  },
+
+  async register({ username, password }) {
+    const res = await api.post('/auth/register', { username, password })
+    dropLegacyAdminToken()
+    return res.data
+  },
+
+  async logout() {
+    const res = await api.post('/auth/logout')
+    return res.data
+  },
+
+  async me() {
+    const res = await api.get('/auth/me')
+    return res.data
+  },
+
+  async changePassword({ oldPassword, newPassword }) {
+    const res = await api.post('/auth/password', {
+      old_password: oldPassword, new_password: newPassword,
+    })
+    return res.data
+  },
+}
+
+// ==================== 后台管理 API ====================
+//
+// 令牌不再作为参数逐个传递 —— 请求拦截器统一挂 X-Session-Token。
+// 旧签名是 `overview(token)`，那样每加一个端点就要多传一次 token，
+// 漏传的端点会静默地退化成「未登录」，问题只在点了那个功能时才暴露。
 export const adminAPI = {
-  async auth(token) {
-    const res = await api.get('/admin/auth', { headers: adminHeaders(token) })
+  async auth() {
+    const res = await api.get('/admin/auth')
     return res.data
   },
 
-  async overview(token) {
-    const res = await api.get('/admin/overview', { headers: adminHeaders(token) })
+  async overview() {
+    const res = await api.get('/admin/overview')
     return res.data
   },
 
-  async candidates(token, params = {}) {
-    const res = await api.get('/admin/candidates', { params, headers: adminHeaders(token) })
+  async candidates(params = {}) {
+    const res = await api.get('/admin/candidates', { params })
     return res.data
   },
 
-  async candidateDetail(token, id) {
-    const res = await api.get(`/admin/candidates/${id}`, { headers: adminHeaders(token) })
+  async candidateDetail(id) {
+    const res = await api.get(`/admin/candidates/${id}`)
     return res.data
   },
 
-  async review(token, id, payload) {
-    const res = await api.post(`/admin/candidates/${id}/review`, payload,
-      { headers: adminHeaders(token) })
+  async review(id, payload) {
+    const res = await api.post(`/admin/candidates/${id}/review`, payload)
     return res.data
   },
 
-  async bulkReview(token, payload) {
-    const res = await api.post('/admin/candidates/bulk-review', payload,
-      { headers: adminHeaders(token) })
+  async bulkReview(payload) {
+    const res = await api.post('/admin/candidates/bulk-review', payload)
     return res.data
   },
 
-  async verify(token, payload) {
-    const res = await api.post('/admin/candidates/verify', payload,
-      { headers: adminHeaders(token) })
+  async verify(payload) {
+    const res = await api.post('/admin/candidates/verify', payload)
     return res.data
   },
 
-  async removeCandidate(token, id) {
-    const res = await api.delete(`/admin/candidates/${id}`, { headers: adminHeaders(token) })
+  async removeCandidate(id) {
+    const res = await api.delete(`/admin/candidates/${id}`)
     return res.data
   },
 
-  async audit(token, params = {}) {
-    const res = await api.get('/admin/audit', { params, headers: adminHeaders(token) })
+  async audit(params = {}) {
+    const res = await api.get('/admin/audit', { params })
     return res.data
   },
 
-  async auditDetail(token, id) {
-    const res = await api.get(`/admin/audit/${id}`, { headers: adminHeaders(token) })
+  async auditDetail(id) {
+    const res = await api.get(`/admin/audit/${id}`)
     return res.data
   },
 
-  async users(token) {
-    const res = await api.get('/admin/users', { headers: adminHeaders(token) })
+  async users() {
+    const res = await api.get('/admin/users')
     return res.data
   },
 
-  async verdictStats(token) {
-    const res = await api.get('/admin/stats/verdicts', { headers: adminHeaders(token) })
+  async verdictStats() {
+    const res = await api.get('/admin/stats/verdicts')
     return res.data
   },
 
-  async adminFiles(token) {
-    const res = await api.get('/admin/files', { headers: adminHeaders(token) })
+  async adminFiles() {
+    const res = await api.get('/admin/files')
     return res.data
   }
 }

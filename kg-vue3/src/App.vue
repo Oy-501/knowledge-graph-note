@@ -62,6 +62,20 @@
       <div class="app-tex-grain"></div>
     </div>
 
+    <!--
+      登录页
+      ------------------------------------------------------------
+      放在背景层**之后**、业务视图**之前**：这样登录页也能用上用户自己设置的
+      背景与主题，看起来和应用是一体的，而不是另一个系统。
+
+      关键点是业务视图用 `v-if="authed"` 包住而不是只有 v-show：
+      视图里的组件（图谱画布、文件列表等）在挂载时就会请求后端，
+      只藏起来的话未登录状态下会发出一堆请求然后全被拒 —— 既吵又慢。
+    -->
+    <LoginView v-if="!authed" />
+
+    <template v-if="authed">
+
     <!-- 图谱视图 -->
     <div v-show="currentView === 'graph'" id="view-graph" class="app-view graph-view">
       <aside class="control-panel">
@@ -131,6 +145,20 @@
       </ErrorBoundary>
     </div>
 
+    <!-- 函数图像（懒加载：内含表达式解析库，进页面才加载） -->
+    <div v-show="currentView === 'plot'" id="view-plot" class="app-view kb-view-wrap">
+      <ErrorBoundary v-if="plotMounted" name="函数图像" @recover="activate('graph')">
+        <FunctionPlotView />
+      </ErrorBoundary>
+    </div>
+
+    <!-- 背景 CSS 生成器（纯前端，不依赖后端） -->
+    <div v-show="currentView === 'bgcss'" id="view-bgcss" class="app-view kb-view-wrap">
+      <ErrorBoundary v-if="bgcssMounted" name="背景 CSS 生成器" @recover="activate('graph')">
+        <BackgroundCssView />
+      </ErrorBoundary>
+    </div>
+
     <!-- 个人主页（头像 / 自定义背景 / 我的数据） -->
     <div v-show="currentView === 'profile'" id="view-profile" class="app-view kb-view-wrap">
       <ErrorBoundary v-if="profileMounted" name="个人主页" @recover="activate('graph')">
@@ -138,12 +166,14 @@
       </ErrorBoundary>
     </div>
 
-    <!-- 后台管理（口令保护：判定依据 / 候选审阅 / 操作审计） -->
+    <!-- 后台管理（判定依据 / 候选审阅 / 操作审计） -->
     <div v-show="currentView === 'admin'" id="view-admin" class="app-view kb-view-wrap">
       <ErrorBoundary v-if="adminMounted" name="后台管理" @recover="activate('graph')">
         <AdminView />
       </ErrorBoundary>
     </div>
+
+    </template>
   </div>
 </template>
 
@@ -177,6 +207,12 @@ const NAV_TABS = [
   { key: 'summary', label: '图谱总结', hint: '结构总结 · 流程图 · 导出文档' },
   { key: 'profile', label: '个人主页', hint: '头像、背景与我的数据' },
   { key: 'admin', label: '后台管理', hint: '候选知识点审阅与操作审计' },
+  // 放在最后而不是插在中间：插中间会让后面所有页签的快捷键整体后移，
+  // 已有的肌肉记忆会突然失效。新增页签追加在末尾最不打扰。
+  { key: 'plot', label: '函数图像', hint: '函数曲线绘制与形成过程' },
+  // 同样追加在末尾。规律：新页签永远排最后 —— 插中间会让后面所有页签的
+  // Ctrl+N 快捷键整体后移，用了几天养成的肌肉记忆会突然失灵。
+  { key: 'bgcss', label: '背景 CSS', hint: '用一句话生成响应式背景代码' },
 ]
 
 const currentView = ref('graph')
@@ -195,6 +231,14 @@ const kbMounted = ref(false)
 const GraphSummaryView = defineAsyncComponent(() => import('@/components/GraphSummaryView.vue'))
 const summaryMounted = ref(false)
 
+// 函数图像：内含数学库，必须懒加载，否则拖慢首屏
+const FunctionPlotView = defineAsyncComponent(() => import('@/components/plot/FunctionPlotView.vue'))
+const plotMounted = ref(false)
+
+// 背景 CSS 生成器：纯前端工具（不依赖后端），同样懒加载
+const BackgroundCssView = defineAsyncComponent(() => import('@/components/bgcss/BackgroundCssView.vue'))
+const bgcssMounted = ref(false)
+
 // 个人主页 / 后台管理（同样懒加载）
 const ProfileView = defineAsyncComponent(() => import('@/components/ProfileView.vue'))
 const AdminView = defineAsyncComponent(() => import('@/components/AdminView.vue'))
@@ -205,6 +249,8 @@ watch(currentView, v => {
   if (v === 'workbench') workbenchMounted.value = true
   if (v === 'kb') kbMounted.value = true
   if (v === 'summary') summaryMounted.value = true
+  if (v === 'plot') plotMounted.value = true
+  if (v === 'bgcss') bgcssMounted.value = true
   if (v === 'profile') profileMounted.value = true
   if (v === 'admin') adminMounted.value = true
 })
@@ -241,8 +287,19 @@ const leftSections = useLocalStorage('kg-left-sections', ['files', 'control', 'a
 setGraphStoreRef(graphStore)
 
 // 全局背景
+/**
+ * 是否渲染旧版「整页单层背景」。
+ *
+ * 素材类背景必须排除掉：
+ *  - 素材由 `.app-tex` 三层渲染，这一层只会是一块铺满视口的纯色
+ *    （backgroundCSS 对素材返回空串 → 回落到 var(--bg-deep)），白占一次全屏合成；
+ *  - 更麻烦的是它和 `.app-tex` **同为 z-index:0**，谁在上面完全靠 DOM 顺序决定。
+ *    现在是 .app-tex 写在后面所以在上，但这属于「碰巧对」，
+ *    再加一个 z-index:0 的层就可能把素材压下去。宁可不让它渲染。
+ */
 const globalBg = computed(() => {
-  return settingsStore.currentBackground.scope === 'global'
+  const bg = settingsStore.currentBackground
+  return settingsStore.backgroundScope === 'global' && bg.type !== 'asset'
 })
 
 const globalBgStyle = computed(() => {

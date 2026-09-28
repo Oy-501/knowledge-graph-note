@@ -308,7 +308,8 @@ async function copyOrDownloadMermaid() {
   padding: 16px 20px 40px;
   height: 100%;
   overflow-y: auto;
-  background: var(--bg-primary);
+  /* 不写 background：整页容器必须透明，否则会整块盖住素材背景层
+     （见 styles/main.css 里 --surface-* 的说明） */
 }
 .sum-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .sum-head-main h2 { margin: 0 0 6px; font-size: 18px; color: var(--text-primary); }
@@ -333,7 +334,7 @@ async function copyOrDownloadMermaid() {
 @media (max-width: 900px) { .sum-two-col { grid-template-columns: 1fr; } }
 
 .sum-card {
-  background: var(--bg-secondary); border: 1px solid var(--border-light);
+  background: var(--surface-1); border: 1px solid var(--border-light);
   border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow-sm);
 }
 .sum-card.sticky { position: sticky; top: 0; }

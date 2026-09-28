@@ -391,10 +391,12 @@ const report = computed(() => {
   line-height: 1.6;
 }
 
-/* 基础指标：2 列小卡片网格 */
+/* 基础指标：2 列小卡片网格。
+   minmax(0, 1fr) 的下限 0 不能省：默认 minmax(auto, 1fr) 会被长数字/长标签
+   撑开，窄栏时整块溢出；给出 0 下限才会老老实实按可用宽度收缩。 */
 .ka-metrics {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
   gap: 8px;
 }
 .ka-card {

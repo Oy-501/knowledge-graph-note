@@ -152,25 +152,39 @@ const showNoteManage = ref(false)
 const miniGraphExpanded = ref(false)
 
 // 背景计算
+/**
+ * 是否在工作台内部**再画一层**背景。
+ *
+ * 只应该在「背景被限制在工作台 / 编辑器范围内」时才画：
+ *  - 作用域是 global 时，App.vue 的 `.app-global-bg` 已经在整页画过了，
+ *    这里再画一遍就是**同一张图叠两次**（两层各 0.8 不透明度）——
+ *    实测「海洋」「暖阳」等预设下，工作台的渐变明显比页面其它地方更深更浓。
+ *  - 素材类背景由 `.app-tex` 的槽位渲染，这里不该插手。
+ *
+ * 旧代码写的是 `bg.value !== 'dark_night'` —— 用一个**硬编码的预设 id**
+ * 把这问题在「暗夜」一个预设上绕开了，其它预设照样叠两层。
+ * 这类"特判一个值"的补丁要优先怀疑：它往往是在掩盖一个普遍问题。
+ */
 const hasBackground = computed(() => {
   const bg = settingsStore.currentBackground
-  return bg.type !== 'preset' || bg.value !== 'dark_night'
+  if (bg.type === 'asset') return false
+  const scope = settingsStore.backgroundScope
+  return scope === 'workbench' || scope === 'editor'
 })
 
 const backgroundStyle = computed(() => {
-  const bg = settingsStore.currentBackground
-  const scope = bg.scope || 'editor'
-  if (scope === 'global' || scope === 'workbench') {
-    return {
-      '--editor-bg': settingsStore.backgroundCSS
-    }
-  }
-  return {}
+  const scope = settingsStore.backgroundScope
+  if (scope === 'editor') return {}   // 编辑器范围：只画背景层，不动工作台变量
+  const css = settingsStore.backgroundCSS
+  // 空串（素材类背景）时不要写成 `--editor-bg: ''`：
+  // 自定义属性被赋空值属于「无效值」，各浏览器对它的处理不一致，
+  // 而这里要的效果很明确 —— 不设，让 var(--editor-bg, transparent) 用兜底。
+  return css ? { '--editor-bg': css } : {}
 })
 
 const bgOverlayStyle = computed(() => {
   const bg = settingsStore.currentBackground
-  const scope = bg.scope || 'editor'
+  const scope = settingsStore.backgroundScope
   if (scope === 'global' || scope === 'workbench') {
     return {
       opacity: bg.opacity ?? 0.8,
@@ -699,9 +713,16 @@ defineExpose({ saveNote })
 <style scoped>
 .kw-workbench {
   display: flex;
-  height: 100vh;
+  /* 必须用 100% 而不是 100vh：工作台在顶部导航栏**之下**，
+     100vh 会比可用高度多出正好一个导航栏（44px），而父级 overflow:hidden
+     不会滚动 —— 结果是工作台底部那一条被直接裁掉。
+     实测：容器 522px、工作台 566px、超出 44px。 */
+  height: 100%;
   overflow: hidden;
-  background: var(--bg-primary);
+  /* 透明而不是 var(--bg-primary)：素材类背景由 texture.css 的槽位渲染，
+     此时 --editor-bg 是空串（见 settingsStore.backgroundCSS 的说明），
+     若这里写不透明底色就会把素材层整个盖掉 —— 「换背景没反应」就是这么来的。 */
+  background: transparent;
   position: relative;
 }
 
@@ -711,7 +732,7 @@ defineExpose({ saveNote })
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background: var(--editor-bg, var(--bg-primary));
+  background: var(--editor-bg, transparent);
 }
 .kw-left,
 .kw-center,
@@ -752,7 +773,7 @@ defineExpose({ saveNote })
 
 /* ===== 全屏模式 ===== */
 .kw-workbench.kw-fullscreen {
-  background: var(--editor-bg, var(--bg-primary));
+  background: var(--editor-bg, transparent);
 }
 .kw-workbench.kw-fullscreen .kw-center {
   background: transparent;
@@ -779,7 +800,9 @@ defineExpose({ saveNote })
   left: 0;
   right: 0;
   z-index: 1060;
-  background: var(--bg-primary);
+  background: var(--surface-3);
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
   border-top: 1px solid var(--border);
   box-shadow: 0 -4px 12px rgba(0,0,0,0.3);
   transition: all 0.3s ease;

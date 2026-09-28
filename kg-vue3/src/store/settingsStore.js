@@ -224,6 +224,15 @@ export const useSettingsStore = defineStore('settings', {
     isDark: (s) => s.settings.theme === 'dark',
     /** 当前背景配置 */
     currentBackground: (s) => s.settings.background,
+    /**
+     * 背景作用域，**已补默认值**。
+     *
+     * 这个默认值必须只有一个出处：此前 `_applyBackground` 里默认 'global'、
+     * 工作台里默认 'editor'，同一个未设置的 scope 在两处被解释成不同结果，
+     * 于是「哪个层该画背景」的判断互相打架。
+     * （与「路径只在一处解析」同理：默认值散落各处，行为就会随调用点漂移。）
+     */
+    backgroundScope: (s) => s.settings.background.scope || 'global',
     /** 编辑器配置 */
     editorConfig: (s) => s.settings.editor,
     /** 获取当前背景 CSS 值 */
@@ -403,7 +412,7 @@ export const useSettingsStore = defineStore('settings', {
     _applyBackground() {
       const bg = this.settings.background
       const css = this.backgroundCSS
-      const scope = bg.scope || 'global'
+      const scope = this.backgroundScope
       const isAsset = bg.type === 'asset'
 
       const root = document.documentElement
@@ -430,19 +439,27 @@ export const useSettingsStore = defineStore('settings', {
       root.dataset.texScope = isAsset ? 'global' : scope
 
       // ── ② 旧版单层背景（渐变 / 纯色 / 自定义图） ──────────────
-      if (scope === 'global') {
-        root.style.setProperty('--app-bg', css || 'var(--bg-deep)')
-        root.style.setProperty('--editor-bg', css || 'var(--bg-primary)')
-        root.style.setProperty('--workbench-bg', css || 'var(--bg-primary)')
-      } else if (scope === 'workbench') {
-        root.style.setProperty('--app-bg', 'var(--bg-deep)')
-        root.style.setProperty('--editor-bg', css || 'var(--bg-primary)')
-        root.style.setProperty('--workbench-bg', css || 'var(--bg-primary)')
+      //
+      // ★ 这里的关键是「没有单层背景时必须**移除**变量，而不是写一个不透明兜底值」。
+      //
+      // 踩过的坑：素材类背景的 css 是空串（见 backgroundCSS getter，
+      // 它是故意返回空串的，意思是「别用单层背景盖住素材层」），
+      // 而这里曾用 `css || 'var(--bg-primary)'` 把它兜底成不透明色写到 <html> 上。
+      // 内联变量优先级最高，于是样式表里 `var(--editor-bg, transparent)` 的
+      // transparent 兜底**永远不会生效** —— var() 只在变量「未定义」时才用兜底值，
+      // 变量被显式赋值（哪怕是空串兜出来的色）就轮不到兜底说话。
+      // 结果 `.kw-bg-layer` 拿到一块铺满工作台的不透明底色，把素材层整块盖住：
+      // 表现就是「换了背景，工作台里却看不出来」。
+      //
+      // 另外：--app-bg / --workbench-bg 全项目**没有任何读取点**（只写不读），
+      // 一并去掉写入，避免再有人被这两个变量误导。
+      if (css) {
+        root.style.setProperty('--editor-bg', css)
       } else {
-        root.style.setProperty('--app-bg', 'var(--bg-deep)')
-        root.style.setProperty('--editor-bg', css || 'var(--bg-primary)')
-        root.style.setProperty('--workbench-bg', 'var(--bg-primary)')
+        root.style.removeProperty('--editor-bg')
       }
+      root.style.removeProperty('--app-bg')
+      root.style.removeProperty('--workbench-bg')
     }
   }
 })

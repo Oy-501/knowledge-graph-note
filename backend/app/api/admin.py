@@ -30,54 +30,83 @@ router = APIRouter()
 
 def require_admin(x_admin_token: Optional[str] = Header(default=None, alias="X-Admin-Token"),
                   request: Request = None):
-    """后台口令校验（失效安全 + 失败限流 + 恒定时间比较）。
+    """后台准入校验：**管理员登录会话**为主，旧管理口令为辅。
 
-    相对旧实现收紧了两点：
+    两条通道（任一通过即可，强度相同）：
 
-    1. **失效安全（fail-closed）**：旧实现是
-       `if not expected: return True` —— 口令为空时**完全放开后台**，
-       批量驳回、删除候选、改判定全部对任意能访问端口的人开放。
-       配置缺失属于「加固未完成」，应当拒绝而不是放行。
-       现在未配置口令直接 503，并明确告知如何配置。
+    ① `X-Session-Token` —— 登录页拿到会话后自动携带，要求 role=admin。
+       这是现在的正常用法：用户登录一次，进后台不用再输任何东西。
+    ② `X-Admin-Token`  —— backend/.env 里的管理口令，留给脚本与 curl。
+       保留它不降低门槛：它本来就能做后台的所有操作。
 
-    2. **失败限流**：旧实现允许无限次尝试，弱口令可被在线暴力破解。
-       按客户端 IP 记录失败次数，超限返回 429。
+    三次收紧都还在（对应早先那轮安全审计）：
 
-    比较改用 hmac.compare_digest（恒定时间），避免 `!=` 逐字符比较
-    通过响应时间泄露口令长度与前缀。
+    - **失效安全（fail-closed）**：没有任何有效凭证一律拒绝。
+      早先的写法是 `if not expected: return True` —— 口令为空时**完全放开后台**，
+      批量驳回、删除候选、改判定全部对任意能访问端口的人开放。
+      现在「口令没配」不再单独判 503：登录会话已经能独立提供身份，
+      口令只是个可选的兼容通道，没配就当作这条路不存在。
+    - **失败限流**：只对②（口令）计数。①（会话令牌）是 256 位随机串，
+      在线暴力尝试没有意义；真要被刷，`/api/auth/login` 那边有独立限流兜着。
+    - **恒定时间比较**：口令比较走 hmac.compare_digest，
+      避免 `!=` 逐字符比较通过响应时间泄露口令长度与前缀。
     """
     from app.services.security import (admin_limiter, admin_token_configured,
                                        client_key, verify_admin_token)
 
-    if not admin_token_configured():
-        raise HTTPException(
-            status_code=503,
-            detail="后端未配置管理口令（ADMIN_TOKEN），后台已按失效安全策略关闭。"
-                   "请在 backend/.env 设置 ADMIN_TOKEN 后重启后端（默认值 kg-admin 建议改掉）。",
-        )
+    # ---- ① 登录会话（要求管理员角色）----
+    if request is not None:
+        try:
+            from app.services import auth_service
+            db = next(get_db())
+            try:
+                session = auth_service.resolve_session(
+                    db, request.headers.get(auth_service.SESSION_HEADER))
+                if session is not None:
+                    user = db.query(User).filter_by(id=session.user_id).first()
+                    if user is not None and not user.is_disabled \
+                            and (user.role or "user") == "admin":
+                        return True
+            finally:
+                db.close()
+        except Exception as exc:  # noqa: BLE001 — 会话通道异常按「未通过」处理，继续看口令
+            logger.warning(f"后台会话校验失败（按未通过处理）：{exc}")
 
-    key = client_key(request) if request is not None else "unknown"
-    allowed, retry_after = admin_limiter.check(key)
-    if not allowed:
-        logger.warning(f"后台口令尝试过于频繁，已临时拒绝：client={key}")
-        raise HTTPException(
-            status_code=429,
-            detail=f"口令错误次数过多，请在 {retry_after} 秒后重试。",
-            headers={"Retry-After": str(retry_after)},
-        )
+    # ---- ② 旧管理口令（未配置则这条路不存在）----
+    if admin_token_configured():
+        key = client_key(request) if request is not None else "unknown"
+        allowed, retry_after = admin_limiter.check(key)
+        if not allowed:
+            logger.warning(f"后台口令尝试过于频繁，已临时拒绝：client={key}")
+            raise HTTPException(
+                status_code=429,
+                detail=f"口令错误次数过多，请在 {retry_after} 秒后重试。",
+                headers={"Retry-After": str(retry_after)},
+            )
+        if verify_admin_token(x_admin_token):
+            admin_limiter.reset(key)   # 校验成功 → 清空失败计数
+            return True
+        # 客户端确实带了口令但不对，或根本没带：记一次失败
+        if (x_admin_token or "").strip():
+            admin_limiter.hit(key)
 
-    if not verify_admin_token(x_admin_token):
-        admin_limiter.hit(key)
-        raise HTTPException(status_code=401, detail="管理口令不正确，请在后台入口重新输入")
-
-    admin_limiter.reset(key)   # 校验成功 → 清空失败计数
-    return True
+    raise HTTPException(
+        status_code=401,
+        detail="需要管理员身份：请在登录页登录管理员账号"
+               "（脚本调用可改用 X-Admin-Token 头）。",
+    )
 
 
 @router.get("/auth")
 def check_auth(_: bool = Depends(require_admin)):
-    """校验口令（前端进后台时先探一次）"""
-    return {"ok": True, "protected": bool((settings.ADMIN_TOKEN or "").strip())}
+    """准入探测（前端进后台时先探一次，确认当前身份能进后台）"""
+    return {
+        "ok": True,
+        "protected": True,
+        # 兼容通道是否可用：只影响「脚本能不能用 X-Admin-Token」，
+        # 与登录会话无关（登录会话始终可用）
+        "legacy_token_configured": bool((settings.ADMIN_TOKEN or "").strip()),
+    }
 
 
 # ---------------------------------------------------------------- 概览

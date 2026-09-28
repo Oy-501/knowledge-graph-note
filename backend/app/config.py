@@ -14,6 +14,11 @@ from typing import List
 from pydantic_settings import BaseSettings
 
 
+# backend/ 目录的绝对路径。所有相对路径（数据库、.env）都以此为基准，
+# 避免"结果取决于从哪个目录启动"这类隐蔽问题。
+BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
 def _pg_reachable(host: str, port: int, timeout: float = 1.2) -> bool:
     """探测 PostgreSQL 是否可达（纯 TCP 握手，无需驱动）"""
     try:
@@ -82,14 +87,19 @@ class Settings(BaseSettings):
 
     # ---- 认证与会话 ----
     SESSION_TTL_DAYS: int = 7           # 会话有效期（天）；每次鉴权命中滑动续期
-    REGISTRATION_OPEN: bool = True      # 是否开放注册（本期仅配置项，无后台开关 UI）
+    # 是否开放注册入口（登录页会出现「注册」页签）。
+    # 默认关闭：这是单机个人应用，多一个可自助注册的入口就多一份暴露面；
+    # 需要新账号时把这里改成 True 重启，或直接在数据库里手工建号。
+    REGISTRATION_OPEN: bool = False
 
     # ---- 安全开关（默认按「默认安全」原则取最严值）----
     # 写操作（POST/PUT/PATCH/DELETE）是否必须携带有效登录会话。
     # 关闭后任意能访问端口的人都能删知识库条目、重建知识库 —— 仅在本机
     # 单人调试且明确知情时才建议关闭。
     PROTECT_WRITES: bool = True
-    # 后台管理口令（写操作守卫使用，务必改成你自己的强口令）
+    # ⚠ 兼容保留的管理口令：写操作现在主要用**登录会话**（X-Session-Token），
+    # 这个口令留给脚本与 curl 作为第二通道（X-Admin-Token），
+    # 日常使用登录页就不再需要它了。留着请改成强口令，不用可以置空。
     ADMIN_TOKEN: str = "kg-admin"
     UPLOAD_DIR: str = "./uploads"       # 头像/背景图等用户上传文件目录
     MAX_IMAGE_MB: int = 5               # 图片上传上限
@@ -136,7 +146,7 @@ class Settings(BaseSettings):
                 )
 
         # 3) SQLite 兜底
-        return f"sqlite:///{self.SQLITE_PATH}"
+        return f"sqlite:///{self.resolved_sqlite_path}"
 
     @property
     def db_is_sqlite(self) -> bool:
@@ -154,11 +164,28 @@ class Settings(BaseSettings):
         root = self.UPLOAD_DIR
         if os.path.isabs(root):
             return root
-        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # backend/
-        return os.path.join(base, root.lstrip("./"))
+        return os.path.join(BACKEND_DIR, root.lstrip("./"))
+
+    @property
+    def resolved_sqlite_path(self) -> str:
+        """SQLite 文件的**绝对路径**（相对路径按 backend/ 解析，而不是当前工作目录）。
+
+        为什么必须绝对化：SQLITE_PATH 默认是 "./kg.db"，若按 cwd 解析，
+        从项目根目录跑一次脚本就会在根目录另开一个 kg.db（甚至是空库）。
+        真出过这事：在根目录跑体检，静默生成了一个 0 字节的 kg.db，
+        体检随即报「缺表：users、files…」——看起来像数据全丢了，
+        实际只是连错了库。若后端哪天也从根目录启动，那就是真的读到空库。
+        与 resolved_upload_dir 同理：路径只在一处解析，别让 cwd 参与决策。
+        """
+        path = self.SQLITE_PATH
+        if os.path.isabs(path):
+            return path
+        return os.path.join(BACKEND_DIR, path.lstrip("./"))
 
     class Config:
-        env_file = ".env"
+        # 用绝对路径指向 backend/.env：否则从其他目录启动时读不到配置，
+        # 会静默退回默认值（例如口令变成默认的 kg-admin）
+        env_file = os.path.join(BACKEND_DIR, ".env")
         env_file_encoding = "utf-8"
 
 

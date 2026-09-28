@@ -348,7 +348,7 @@ onMounted(load)
 </script>
 
 <style scoped>
-.pf-view { flex: 1; min-width: 0; padding: 16px 20px 40px; height: 100%; overflow-y: auto; background: var(--bg-primary); }
+.pf-view { flex: 1; min-width: 0; padding: 16px 20px 40px; height: 100%; overflow-y: auto; }
 .pf-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
 .pf-head h2 { margin: 0 0 6px; font-size: 18px; color: var(--text-primary); }
 .pf-head p { margin: 0; max-width: 620px; font-size: var(--fs-sm); color: var(--text-secondary); line-height: 1.6; }
@@ -356,7 +356,7 @@ onMounted(load)
 .pf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 @media (max-width: 980px) { .pf-grid { grid-template-columns: 1fr; } }
 .pf-card {
-  background: var(--bg-secondary); border: 1px solid var(--border-light);
+  background: var(--surface-1); border: 1px solid var(--border-light);
   border-radius: var(--radius); padding: 14px 16px; margin-bottom: 14px; box-shadow: var(--shadow-sm);
 }
 .pf-card h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: var(--fs-md); color: var(--text-primary); }

@@ -688,7 +688,7 @@ onMounted(async () => {
   padding: 16px 20px 40px;
   height: 100%;
   overflow-y: auto;
-  background: var(--bg-primary);
+  /* 不写 background：整页容器必须透明，否则盖住素材背景层 */
 }
 .kb-head {
   display: flex;
@@ -710,7 +710,7 @@ onMounted(async () => {
 .kb-tabs { margin-top: 6px; }
 
 .kb-card {
-  background: var(--bg-secondary);
+  background: var(--surface-1);
   border: 1px solid var(--border-light);
   border-radius: var(--radius);
   padding: 14px 16px;
@@ -736,7 +736,7 @@ onMounted(async () => {
   gap: 10px; margin-bottom: 14px;
 }
 .kb-stat {
-  background: var(--bg-secondary); border: 1px solid var(--border-light);
+  background: var(--surface-1); border: 1px solid var(--border-light);
   border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow-sm);
 }
 .ks-val { font-size: 22px; font-weight: 700; color: var(--accent); line-height: 1.2; }
