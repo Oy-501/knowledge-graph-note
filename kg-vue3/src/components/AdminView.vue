@@ -1,16 +1,14 @@
 <template>
   <div class="ad-view">
-    <!-- 口令闸门 -->
-    <div v-if="!token" class="ad-gate">
+    <!-- 权限闸门：身份来自登录会话，不再单独输入口令 -->
+    <div v-if="!auth.isAdmin" class="ad-gate">
       <div class="ad-gate-card">
-        <h2>后台管理</h2>
-        <p>查看知识点判定依据、审阅候选知识点、回溯所有用户操作。请输入管理口令进入。</p>
-        <el-input v-model="tokenInput" type="password" show-password placeholder="管理口令"
-                  @keyup.enter="tryEnter" />
-        <el-button type="primary" :loading="checking" style="margin-top:12px" @click="tryEnter">
-          进入后台
-        </el-button>
-        <p class="ad-gate-tip">口令在后端 <code>.env</code> 的 <code>ADMIN_TOKEN</code> 配置（默认 kg-admin，请尽快修改）。</p>
+        <h2>需要管理员权限</h2>
+        <p>后台会展示知识点判定的完整依据，以及所有用户的操作记录，仅管理员可查看。</p>
+        <p class="ad-gate-tip">
+          当前登录的是「<strong>{{ auth.isAdmin ? '管理员' : '普通用户' }}</strong>」。
+          请用管理员账号登录后再进入。
+        </p>
       </div>
     </div>
 
@@ -22,7 +20,6 @@
         </div>
         <div class="ad-head-actions">
           <el-button size="small" :loading="loading" @click="refreshAll">刷新</el-button>
-          <el-button size="small" @click="logout">退出后台</el-button>
         </div>
       </header>
 
@@ -370,11 +367,11 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { adminAPI, systemAPI } from '@/api/index'
 import AppEmpty from '@/components/AppEmpty.vue'
+import { useAuthStore } from '@/store/authStore'
 
-const TOKEN_KEY = 'kg-admin-token'
-const token = ref('')
-const tokenInput = ref('')
-const checking = ref(false)
+// 后台的准入由登录身份决定（写守卫与后端 require_admin 都校验 role=admin），
+// 这里只做界面层的挡板：非管理员看到说明而不是一堆 401 报错。
+const auth = useAuthStore()
 
 const tab = ref('overview')
 const loading = ref(false)
@@ -452,41 +449,16 @@ function fmtTime(iso) {
   return iso ? iso.replace('T', ' ').slice(0, 16) : '—'
 }
 
-// ---- 口令 ----
-async function tryEnter() {
-  if (!tokenInput.value.trim()) {
-    ElMessage.warning('请输入管理口令')
-    return
-  }
-  checking.value = true
-  try {
-    await adminAPI.auth(tokenInput.value.trim())
-    token.value = tokenInput.value.trim()
-    localStorage.setItem(TOKEN_KEY, token.value)
-    ElMessage.success('已进入后台')
-    await refreshAll()
-  } catch (e) {
-    ElMessage.error(e.message || '口令不正确')
-  } finally {
-    checking.value = false
-  }
-}
-
-function logout() {
-  token.value = ''
-  tokenInput.value = ''
-  localStorage.removeItem(TOKEN_KEY)
-}
 
 // ---- 数据加载 ----
 async function refreshAll() {
   loading.value = true
   try {
     const [ov, vs, us, fs] = await Promise.all([
-      adminAPI.overview(token.value),
-      adminAPI.verdictStats(token.value),
-      adminAPI.users(token.value),
-      adminAPI.adminFiles(token.value)
+      adminAPI.overview(),
+      adminAPI.verdictStats(),
+      adminAPI.users(),
+      adminAPI.adminFiles()
     ])
     overview.value = ov
     verdictStats.value = vs
@@ -497,7 +469,7 @@ async function refreshAll() {
     loadDoctor().catch(() => {})
   } catch (e) {
     ElMessage.error(e.message || '加载失败（口令可能已失效）')
-    if (String(e.message || '').includes('口令')) logout()
+    // 会话失效由 api 层统一处理（清会话 → 回登录页），这里不再自行判断
   } finally {
     loading.value = false
   }
@@ -518,7 +490,7 @@ async function loadDoctor() {
 async function loadCandidates() {
   loadingCands.value = true
   try {
-    const data = await adminAPI.candidates(token.value, {
+    const data = await adminAPI.candidates({
       ...filters.value, limit: 30, offset: candOffset.value
     })
     candidates.value = data.candidates || []
@@ -539,7 +511,7 @@ function page(dir) {
 async function loadAudit() {
   loadingAudit.value = true
   try {
-    const data = await adminAPI.audit(token.value, {
+    const data = await adminAPI.audit({
       ...auditFilters.value, limit: 30, offset: auditOffset.value
     })
     auditLogs.value = data.logs || []
@@ -560,7 +532,7 @@ function auditPage(dir) {
 
 async function openDetail(row) {
   try {
-    const data = await adminAPI.candidateDetail(token.value, row.id)
+    const data = await adminAPI.candidateDetail(row.id)
     detail.value = data.candidate
     reviewNote.value = ''
     detailVisible.value = true
@@ -571,7 +543,7 @@ async function openDetail(row) {
 
 async function openAudit(row) {
   try {
-    const data = await adminAPI.auditDetail(token.value, row.id)
+    const data = await adminAPI.auditDetail(row.id)
     auditDetail.value = data.log
     auditVisible.value = true
   } catch (e) {
@@ -584,7 +556,7 @@ async function review(action) {
   if (!detail.value) return
   busy.value = action === 'accept' ? 'accept1' : action === 'reject' ? 'reject1' : 'pending1'
   try {
-    const res = await adminAPI.review(token.value, detail.value.id, {
+    const res = await adminAPI.review(detail.value.id, {
       action, note: reviewNote.value, reviewer: 'admin', ingest: action === 'accept'
     })
     ElMessage.success(`已${action === 'accept' ? '采纳' : action === 'reject' ? '驳回' : '转待审'}` +
@@ -602,7 +574,7 @@ async function rerunOne() {
   if (!detail.value) return
   busy.value = 'verify1'
   try {
-    const res = await adminAPI.verify(token.value, { ids: [detail.value.id], use_web: true })
+    const res = await adminAPI.verify({ ids: [detail.value.id], use_web: true })
     ElMessage.success(`已重跑判定：${JSON.stringify(res.stats)}`)
     await openDetail({ id: detail.value.id })
     await refreshAll()
@@ -616,7 +588,7 @@ async function rerunOne() {
 async function rerunVerify() {
   busy.value = 'verify'
   try {
-    const res = await adminAPI.verify(token.value, {
+    const res = await adminAPI.verify({
       status: filters.value.status || 'open', limit: 50, use_web: true
     })
     ElMessage.success(`判定完成：采纳 ${res.stats.accept} / 待审 ${res.stats.pending} / 驳回 ${res.stats.reject}`)
@@ -637,7 +609,7 @@ async function bulk(action) {
   } catch { return }
   busy.value = action
   try {
-    const res = await adminAPI.bulkReview(token.value, {
+    const res = await adminAPI.bulkReview({
       status: filters.value.status, decision: filters.value.decision,
       limit: 100, action, note: '后台批量操作', reviewer: 'admin', ingest: action === 'accept'
     })
@@ -651,12 +623,8 @@ async function bulk(action) {
 }
 
 onMounted(() => {
-  const saved = localStorage.getItem(TOKEN_KEY)
-  if (saved) {
-    token.value = saved
-    tokenInput.value = saved
-    refreshAll()
-  }
+  // 不是管理员就不发请求：发了也全是 403，还会在控制台刷一堆红字
+  if (auth.isAdmin) refreshAll()
 })
 </script>
 

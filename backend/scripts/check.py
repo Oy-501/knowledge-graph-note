@@ -606,6 +606,10 @@ def check_background_layers() -> None:
 
 
 # ------------------------------------------------------------------ 9. 安全不变量
+#
+# 说明：登录门禁接线（auth_wiring）现在是 check_security 里的一个断言块，
+# 不是独立函数 —— 早期留过一个同名空壳函数，main() 调它等于什么都没做，
+# 已删除。改鉴权相关代码时看 check_security 里标了「登录门禁接线」的那段。
 
 
 def check_security() -> None:
@@ -693,6 +697,104 @@ def check_security() -> None:
         add("sec_auth", "认证守卫", OK,
             "实测：口令未配置→拒绝、口令错误→拒绝 · 恒定时间比较 · 失败限流已启用")
 
+    # ---- 登录门禁接线（认证体系的关键不变量）----
+    #
+    # 这一段守的是「改了鉴权却把登录自己堵死」这类灾难性回归。
+    # 最典型的一种：写守卫拦下了 POST /api/auth/login ——
+    # 守卫只认令牌，而令牌正是登录接口要发给你的东西，于是谁也登不进去。
+    # 这种 bug 不会报错、不会崩，只会表现为「输入正确的账号密码也进不去」，
+    # 排查起来很费时间，所以必须由体检挡住。
+    auth_wiring_problems: List[str] = []
+    try:
+        from app.main import (WRITE_GUARD_EXEMPT, WRITE_GUARD_USER_LEVEL,
+                              SAFE_METHODS)
+        from app.services import auth_service
+        from app.api import auth as auth_api
+    except Exception as exc:  # noqa: BLE001
+        add("auth_wiring", "登录门禁接线", FAIL,
+            f"无法导入认证相关模块：{type(exc).__name__}: {exc}")
+    else:
+        # ① 匿名可达的登录端点必须在豁免名单里
+        must_exempt = {("POST", "/api/auth/login"),
+                       ("POST", "/api/auth/register"),
+                       ("POST", "/api/auth/bootstrap")}
+        missing = sorted(must_exempt - set(WRITE_GUARD_EXEMPT))
+        if missing:
+            auth_wiring_problems.append(
+                "写守卫会拦死登录端点（形成「永远登不进去」的死锁）："
+                + "、".join(f"{m} {p}" for m, p in missing))
+
+        # ② 只要求「已登录」的端点：否则注册出的普通账号连退出都做不到
+        must_user_level = {("POST", "/api/auth/logout"),
+                           ("POST", "/api/auth/password")}
+        missing = sorted(must_user_level - set(WRITE_GUARD_USER_LEVEL))
+        if missing:
+            auth_wiring_problems.append(
+                "以下端点在「登录即可」名单里缺席（普通账号将无法登出/改密）："
+                + "、".join(p for _, p in missing))
+
+        # ③ 会话头名必须全局一致：两处各写一遍字符串，改一处就会静默失效
+        if auth_api.SESSION_HEADER != auth_service.SESSION_HEADER:
+            auth_wiring_problems.append(
+                f"会话头名不一致：api/auth.py={auth_api.SESSION_HEADER!r} "
+                f"vs auth_service.py={auth_service.SESSION_HEADER!r}")
+
+        # ④ 写守卫必须真的去解析会话（用 AST 判断，不看注释里的字样）
+        #    原理：找到 write_guard 函数体，确认它调用了会话解析辅助函数。
+        try:
+            tree = ast.parse((BACKEND / "app" / "main.py").read_text(encoding="utf-8"))
+            guard_fn = next(
+                (n for n in ast.walk(tree)
+                 if isinstance(n, ast.AsyncFunctionDef) and n.name == "write_guard"), None)
+            fns = {n.name: n for n in ast.walk(tree)
+                   if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+
+            def names_used(fn):
+                """函数体里出现的全部名字（含调用名与属性基名）"""
+                out = set()
+                for n in ast.walk(fn):
+                    if isinstance(n, ast.Call):
+                        out.add(getattr(n.func, "id", "") or getattr(n.func, "attr", ""))
+                    if isinstance(n, ast.Name):
+                        out.add(n.id)
+                    if isinstance(n, ast.Attribute):
+                        out.add(n.attr)
+                return out
+
+            if "write_guard" not in fns:
+                auth_wiring_problems.append("main.py 里找不到 write_guard")
+            elif "_session_actor" not in names_used(fns["write_guard"]):
+                auth_wiring_problems.append(
+                    "write_guard 没有调用 _session_actor（写操作可能仍只认旧口令）")
+
+            # 读令牌头这件事发生在辅助函数里（守卫只负责调用它），
+            # 所以常量检查要落在 _session_actor 上 —— 一开始写在 write_guard 上，
+            # 是个错误的前提，会被自己误报。
+            if "_session_actor" not in fns:
+                auth_wiring_problems.append("main.py 里找不到 _session_actor")
+            else:
+                used = names_used(fns["_session_actor"])
+                if "_session_actor" in fns and "SESSION_HEADER" not in used:
+                    auth_wiring_problems.append(
+                        "_session_actor 未使用 SESSION_HEADER 常量读令牌头"
+                        "（硬编码头名会在改名时静默失效）")
+        except Exception as exc:  # noqa: BLE001
+            auth_wiring_problems.append(f"无法解析 main.py：{type(exc).__name__}")
+
+        # ⑤ 认证路由必须已注册到 app
+        if "auth.router" not in (BACKEND / "app" / "main.py").read_text(encoding="utf-8"):
+            auth_wiring_problems.append("认证路由 auth.router 没有注册到 app")
+
+    if auth_wiring_problems:
+        add("auth_wiring", "登录门禁接线", FAIL,
+            "；".join(auth_wiring_problems),
+            "登录端点必须免写守卫；登出/改密只要求已登录；会话头名一致；"
+            "写守卫必须解析会话；认证路由必须注册")
+    else:
+        add("auth_wiring", "登录门禁接线", OK,
+            "登录端点已豁免写守卫 · 登出/改密为「登录即可」· 会话头名一致 · "
+            "写守卫解析会话 · 路由已注册")
+
     # ---- 前端注入防护（输入永不信任 / 纵深防御）----
     fe = PROJECT / "kg-vue3"
     xss_problems = []
@@ -719,6 +821,133 @@ def check_security() -> None:
             "使用 v-html/innerHTML 的位置均已配套转义/净化 · Mermaid 为 strict")
 
 
+# ------------------------------------------------------------------ 10. 语义向量接线
+
+
+def check_vector_wiring() -> None:
+    """语义向量的三条不变量 —— β 维（语义相似度）的质量全指望它们。
+
+    ① 降级编码必须真的按「中文按字切」。
+       曾经的实现用空白切词：中文没有空格，整句话被切成一个词元，于是
+       两个不同的中文句子共享 0 个词元，相似度恒为 0（实测 8 对改写句全 0）。
+       这里**实际调用一次 analyze()** 看行为，不做字符串匹配 ——
+       检查逻辑本身被自己写的注释骗过两次了。
+
+    ② 向量和引擎指纹必须一起写。
+       不同引擎的向量维度不同，混在一起 cosine 恒为 0（「没法比」而不是
+       「不相似」）。只写向量不写指纹，就没法识别哪些需要重建。
+
+    ③ 连线标记不能硬编码。
+       曾经所有自动推理出来的连线都写死 time_bridge=True，于是
+       「时间桥接 553 / 语义桥接 11」这类统计量，量的是「哪段代码写的」，
+       不是「依据是什么」。
+    """
+    problems: List[str] = []
+
+    # ---- ① 降级编码的中文切词（实测，不靠读代码）----
+    try:
+        from app.services import vector_engine
+
+        probe = "数据库索引可以加快查询速度"
+        tokens = vector_engine.analyze(probe)
+        if len(tokens) <= 1:
+            problems.append(
+                f"降级编码把中文整句切成了 {len(tokens)} 个词元"
+                f"（按字切应远多于 1，否则任意两个中文句子的相似度都是 0）")
+        # 换个说法的两句必须有公共词元，否则 β 维对中文毫无信息量
+        other = vector_engine.analyze("为数据表建立索引能提升检索性能")
+        if not (set(tokens) & set(other)):
+            problems.append("同义的中文改写句之间没有任何公共词元，降级编码无法工作")
+    except Exception as exc:  # noqa: BLE001
+        problems.append(f"无法调用向量引擎的切词函数：{type(exc).__name__}: {exc}")
+
+    # ---- ② 向量与指纹成对写入（AST）----
+    files_with_embedding_write: Dict[str, set] = {}
+    for py in sorted((BACKEND / "app").rglob("*.py")):
+        try:
+            tree = ast.parse(py.read_text(encoding="utf-8"))
+        except (SyntaxError, UnicodeDecodeError):
+            continue
+        for fn in [n for n in ast.walk(tree)
+                   if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]:
+            assigns = set()
+            for node in ast.walk(fn):
+                if isinstance(node, ast.Assign):
+                    for tgt in node.targets:
+                        if isinstance(tgt, ast.Attribute):
+                            assigns.add(tgt.attr)
+            if "embedding" in assigns and "embedding_meta" not in assigns:
+                files_with_embedding_write.setdefault(
+                    str(py.relative_to(PROJECT)), set()).add(fn.name)
+    for path, fns in files_with_embedding_write.items():
+        problems.append(
+            f"{path} 的 {'、'.join(sorted(fns))} 写了 embedding 却没写 embedding_meta"
+            f"（换引擎后无法识别陈旧向量）")
+
+    # ---- ③ 连线标记必须跟着「依据」变，不能写死 ----
+    #
+    # 这里要的是「标记反映依据」，不是「代码里不许出现 True 这个字面量」。
+    # kb_link.py 里 Link(semantic_bridge=True) 是**定义**（那条函数就是产知识库
+    # 桥接连线的），属于正常写法；出问题的是推理链路 —— 它对所有连线一律写死
+    # time_bridge=True，于是「时间/语义桥接」的统计量变成「哪段代码写的」。
+    #
+    # 所以分两步：先**实测**标记会不会随依据变（行为验证，最不易误判），
+    # 再只在推理链路那两个文件里扫硬编码（那里没有任何正当理由写死）。
+    try:
+        from app.services.inference import _link_flags
+
+        no_evidence = _link_flags({})
+        by_keyword = _link_flags({"sim_text": 0.5})
+        by_kb = _link_flags({"sim_corpus": 0.4})
+
+        if not no_evidence.get("time_bridge"):
+            problems.append("无任何内容依据时不标 time_bridge（连接线为何相连都说不清）")
+        if by_keyword.get("time_bridge") or by_kb.get("time_bridge"):
+            problems.append("有内容依据仍被标成 time_bridge（标记与依据脱节）")
+        if not by_kb.get("semantic_bridge"):
+            problems.append("知识库桥接出分了却没标 semantic_bridge")
+        if by_keyword.get("semantic_bridge"):
+            problems.append("仅关键词重合被标成 semantic_bridge（semantic/字面被混为一谈）")
+    except Exception as exc:  # noqa: BLE001
+        problems.append(f"无法验证连线标记逻辑：{type(exc).__name__}: {exc}")
+
+    # 硬编码要同时在两种写法里找，缺一种就会漏报：
+    #   ① Link(time_bridge=True)            —— 关键字参数
+    #   ② {"time_bridge": True}             —— 先攒成 dict，后面再落库
+    # 只查 ① 会漏掉 ②。（这一条正是反向验证抓出来的：把标记写死成 dict 字面量，
+    # 检查照样绿灯。）
+    _FLAG_KEYS = ("time_bridge", "semantic_bridge")
+    for rel in ("app/services/inference.py", "app/api/graph.py"):
+        py = PROJECT / "backend" / rel
+        if not py.exists():
+            continue
+        try:
+            tree = ast.parse(py.read_text(encoding="utf-8"))
+        except (SyntaxError, UnicodeDecodeError):
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                for kw in node.keywords:
+                    if kw.arg in _FLAG_KEYS and isinstance(kw.value, ast.Constant):
+                        problems.append(
+                            f"{rel} 里 {kw.arg}={kw.value.value!r} 是硬编码，应按真实依据推导")
+            elif isinstance(node, ast.Dict):
+                for key, val in zip(node.keys, node.values):
+                    if (isinstance(key, ast.Constant) and key.value in _FLAG_KEYS
+                            and isinstance(val, ast.Constant)):
+                        problems.append(
+                            f"{rel} 里 {{\"{key.value}\": {val.value!r}}} 是硬编码，"
+                            f"应按真实依据推导")
+
+    if problems:
+        add("vector_wiring", "语义向量接线", FAIL, "；".join(problems[:4]),
+            "降级编码要按字切词；embedding 与 embedding_meta 成对写；"
+            "连线标记按依据推导，不要写死")
+    else:
+        add("vector_wiring", "语义向量接线", OK,
+            "降级编码中文按字切词有实证 · 向量与引擎指纹成对写入 · 连线标记均由依据推导")
+
+
 # ------------------------------------------------------------------ 主流程
 
 
@@ -740,6 +969,7 @@ def main() -> int:
     check_config()
     check_background_layers()
     check_security()
+    check_vector_wiring()
     check_frontend()
     if args.build:
         check_frontend_build()

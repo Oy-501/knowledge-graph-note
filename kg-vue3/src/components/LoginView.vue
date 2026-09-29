@@ -332,8 +332,6 @@ async function submit() {
   min-height: 0;
   overflow-y: auto;
   display: flex;
-  align-items: center;
-  justify-content: center;
   padding: 28px 20px 40px;
 }
 
@@ -341,7 +339,16 @@ async function submit() {
 .lg-card {
   width: 100%;
   max-width: 396px;
-  padding: 26px 26px 22px;
+  /*
+   * 用 margin:auto 居中，**不要**用 align-items:center ——
+   * 这是 flex 居中一个很常见的坑：当卡片比容器高时（窗口小、或初始化表单字段多，
+   * 必然发生），align-items:center 会把溢出部分顶到容器上方，
+   * 而滚动条只能往下滚 → **卡片顶部永远看不到**（品牌和标题被切掉）。
+   * margin:auto 在空间充足时同样居中，空间不足时退化成正常文档流，能滚到顶。
+   * 实测：566px 高的窗口里卡片 672px，用 align-items 时顶部被裁掉约 106px。
+   */
+  margin: auto;
+  padding: 24px 24px 20px;
   /* 半透明 + 毛玻璃：与全站「视图透明、面板半透明」的约定一致。
      0.92 而不是更低，是为了保住表单文字的对比度（见 main.css 的 --surface-* 说明） */
   background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
@@ -610,8 +617,28 @@ async function submit() {
 
 /* 窄屏：卡片贴边一点，别浪费横向空间 */
 @media (max-width: 460px) {
-  .lg-view { padding: 18px 12px 28px; align-items: flex-start; }
+  .lg-view { padding: 18px 12px 28px; }
   .lg-card { padding: 22px 18px 18px; }
+}
+
+/*
+ * 矮窗口（笔记本分屏、浏览器非最大化时很常见）：
+ * 压缩纵向留白，让初始化表单（字段最多的一种形态）尽量一屏放下，
+ * 不用为了点「创建管理员账号」先滚一下。
+ */
+@media (max-height: 720px) {
+  .lg-view { padding: 16px 20px 22px; }
+  .lg-card { padding: 18px 20px 16px; }
+  .lg-brand { margin-bottom: 14px; }
+  .lg-mark { width: 38px; height: 38px; }
+  .lg-mark svg { width: 26px; height: 26px; }
+  .lg-title { font-size: var(--fs-lg); }
+  .lg-form { gap: 10px; }
+  .lg-alert { padding: 9px 11px; margin-bottom: 11px; }
+  .lg-input { height: 36px; }
+  .lg-btn { height: 38px; }
+  .lg-foot { margin-top: 12px; padding-top: 11px; }
+  .lg-note { margin-top: 10px; }
 }
 
 /* 尊重「减少动态效果」的系统设置：不做位移与动画 */

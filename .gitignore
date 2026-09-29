@@ -30,6 +30,8 @@ dist-old*/
 backend/uploads/
 backend/exports/
 backend/.env
+# 向量模型权重（约 470MB，由 scripts/reembed.py 首次运行时自动下载到此处）
+backend/models/
 
 # 临时/工具目录
 .tmp-verify/

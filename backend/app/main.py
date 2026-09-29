@@ -134,13 +134,16 @@ def _session_actor(request: Request):
     - **返回普通字典而不是 ORM 对象**：库里会话在 `finally` 会被 close，
       游离实例的属性访问时机不受控；顺手把需要的三个字段取出来最稳。
     """
-    token = request.headers.get("X-Session-Token")
-    if not token:
-        return None
-
     from app.database import SessionLocal
     from app.models.models import User
     from app.services import auth_service
+
+    # 头名用常量而不是字符串字面量：这个头名在两个文件里各出现一次，
+    # 改一处忘一处会让会话鉴权**静默失效**（不是报错，是「登录了也写不进去」）。
+    # 体检的「登录门禁接线」会检查这里必须引用常量。
+    token = request.headers.get(auth_service.SESSION_HEADER)
+    if not token:
+        return None
 
     db = SessionLocal()
     try:

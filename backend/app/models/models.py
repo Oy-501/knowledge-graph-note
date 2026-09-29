@@ -127,6 +127,9 @@ class Node(Base):
     level_label = Column(String(50))
     domain = Column(String(100))
     embedding = Column(Text)  # JSON string of float array (SQLite兼容)
+    # 产生上面这条向量的引擎指纹（模式|模型|维度|算法版本）。
+    # 换模型/换算法后旧向量与新向量维度不同、不可比较，靠它识别出来并重建。
+    embedding_meta = Column(String(255))
     metadata_ = Column("metadata", JSON)
     validated = Column(Boolean, default=False)
     validate_status = Column(String(20), default="pending")  # passed, warning, error, pending

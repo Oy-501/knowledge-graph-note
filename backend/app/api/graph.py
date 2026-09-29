@@ -226,7 +226,9 @@ def _persist_links(db, links: list) -> int:
             source_text=link_data.get("source_text", ""),
             source_file=link_data.get("source_file", ""),
             auto_generated=True,
-            semantic_bridge=bool(link_data.get("sim_corpus", 0) > 0),
+            # 直接用推理层给出的标记，别在这里按字段名猜 —— 之前这里读 sim_corpus，
+            # 而推理结果里根本没这个键，于是同一条链路两个入口写出的标记不一样。
+            semantic_bridge=bool(link_data.get("semantic_bridge", False)),
             time_bridge=bool(link_data.get("time_bridge", False)),
         ))
         count += 1

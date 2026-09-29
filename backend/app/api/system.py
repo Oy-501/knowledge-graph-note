@@ -77,11 +77,14 @@ def _check_runtime() -> Dict[str, Any]:
 
 
 def _check_packages() -> Dict[str, Any]:
-    """导出与推理的软依赖是否就绪（缺了不影响核心，但功能会降级）。"""
+    """导出类的软依赖是否就绪。
+
+    sentence-transformers 不放在这里：它不是「可选导出依赖」而是语义相似度的
+    核心依赖，缺了会让 β 维降级成字面重合。单独由 _check_vector_engine 报告。
+    """
     optional = {
         "pptx": "PPTX 导出",
         "docx": "Word 导出",
-        "sentence_transformers": "本地语义向量",
     }
     missing: List[str] = []
     for mod, label in optional.items():
@@ -102,8 +105,52 @@ def _check_packages() -> Dict[str, Any]:
                 "hint": "运行 `pip install -r backend/requirements.txt` 后重启。"}
     if missing:
         return {"status": WARN, "detail": f"可选依赖缺失：{'、'.join(missing)}（对应功能不可用）",
-                "hint": "需要导出/本地向量时再安装即可，不影响其余功能。"}
+                "hint": "需要导出时再安装即可，不影响其余功能。"}
     return {"status": OK, "detail": "必需与可选依赖均可用"}
+
+
+def _check_vector_engine(db: Session) -> Dict[str, Any]:
+    """语义向量引擎：用的是真模型还是降级编码；存量向量是否需要重建。"""
+    from app.services import vector_engine
+
+    info = vector_engine.get_engine_info()
+    health = vector_engine.embedding_health(db)
+    dims = health["dims"] or {}
+    dim_text = "、".join(f"{d}维×{c}" for d, c in sorted(dims.items())) or "无"
+
+    if info["degraded"]:
+        return {
+            "status": WARN,
+            "detail": (
+                f"语义向量已降级为字面重合（mode={info['mode']}，原因：{info['reason'] or '未安装'}）。"
+                f"向量 {health['with_embedding']}/{health['total']} 条，维度 {dim_text}。"
+                f"影响：四维推理的 β 维认不出「换个说法说同一件事」。"
+            ),
+            "hint": "装好 sentence-transformers 后重启，再跑 `py backend/scripts/reembed.py` 重建向量。",
+        }
+
+    if health["stale"]:
+        return {
+            "status": WARN,
+            "detail": (
+                f"引擎 {info['signature']}（{info['dim']} 维）已就绪，但 {health['stale']}/"
+                f"{health['total']} 条向量由旧引擎产出（维度 {dim_text}）。"
+                f"维度不同不可比较，这批节点的 β 维会被跳过。"
+            ),
+            "hint": "跑 `py backend/scripts/reembed.py` 用当前引擎重建全部向量。",
+        }
+
+    if health["total"] and not health["with_embedding"]:
+        return {"status": WARN, "detail": f"引擎 {info['signature']} 已就绪，但尚无节点生成过向量。",
+                "hint": "上传或重建后有向量，语义相似度才会参与打分。"}
+
+    return {
+        "status": OK,
+        "detail": (
+            f"{info['signature']}（{info['dim']} 维）· 向量 {health['with_embedding']}/"
+            f"{health['total']} 条，无陈旧向量"
+        ),
+    }
 
 
 def _check_config() -> Dict[str, Any]:
@@ -327,6 +374,7 @@ def doctor(request: Request, db: Session = Depends(get_db)):
     checks = [
         _check("runtime", "运行环境", _check_runtime),
         _check("packages", "依赖完整性", _check_packages),
+        _check("vector_engine", "语义向量引擎", lambda: _check_vector_engine(db)),
         _check("config", "关键配置", _check_config),
         _check("database", "数据库连接", lambda: _check_database(db)),
         _check("schema", "表结构一致性", _check_schema_drift),

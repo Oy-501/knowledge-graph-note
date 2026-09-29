@@ -65,6 +65,7 @@ _COLUMN_MIGRATIONS = {
     ],
     "nodes": [
         ("chunk_index", "ALTER TABLE nodes ADD COLUMN chunk_index INTEGER DEFAULT 0"),
+        ("embedding_meta", "ALTER TABLE nodes ADD COLUMN embedding_meta VARCHAR(255)"),
     ],
     # 用户认证：密码哈希（NULL=未初始化）、角色、禁用标记
     "users": [

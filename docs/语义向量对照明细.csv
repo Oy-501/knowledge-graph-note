@@ -1,0 +1,17 @@
+﻿kind,text_a,text_b,similarity,engine
+paraphrase,数据库索引可以加快查询速度,为数据表建立索引能提升检索性能,0.8698,st|paraphrase-multilingual-MiniLM-L12-v2|384|2
+paraphrase,上传大文件会让服务卡死,体积过大的文件拖垮了后端响应,0.5726,st|paraphrase-multilingual-MiniLM-L12-v2|384|2
+paraphrase,用户登录后拿到会话令牌,认证成功后颁发 session token,0.5741,st|paraphrase-multilingual-MiniLM-L12-v2|384|2
+paraphrase,知识图谱由节点和边组成,图谱里的实体与关系构成了网络结构,0.6613,st|paraphrase-multilingual-MiniLM-L12-v2|384|2
+paraphrase,索引失效是因为对列使用了函数,在字段上套函数会导致索引无法命中,0.7983,st|paraphrase-multilingual-MiniLM-L12-v2|384|2
+paraphrase,换背景没反应是因为视图根容器不透明,视图容器背景不透明导致背景层被挡住,0.8528,st|paraphrase-multilingual-MiniLM-L12-v2|384|2
+paraphrase,The index speeds up query execution,Creating an index improves retrieval performance,0.7371,st|paraphrase-multilingual-MiniLM-L12-v2|384|2
+paraphrase,Large uploads freeze the server,Huge files make the backend unresponsive,0.4415,st|paraphrase-multilingual-MiniLM-L12-v2|384|2
+unrelated,数据库索引可以加快查询速度,今天中午食堂的红烧肉有点咸,0.0,st|paraphrase-multilingual-MiniLM-L12-v2|384|2
+unrelated,上传大文件会让服务卡死,这段代码的缩进用了两个空格,0.2626,st|paraphrase-multilingual-MiniLM-L12-v2|384|2
+unrelated,用户登录后拿到会话令牌,周末打算去爬山顺便拍点照片,0.1177,st|paraphrase-multilingual-MiniLM-L12-v2|384|2
+unrelated,知识图谱由节点和边组成,天气预报说明天有雨记得带伞,0.0,st|paraphrase-multilingual-MiniLM-L12-v2|384|2
+unrelated,索引失效是因为对列使用了函数,楼下的猫又跑到阳台上晒太阳,0.0,st|paraphrase-multilingual-MiniLM-L12-v2|384|2
+unrelated,换背景没反应是因为视图根容器不透明,地铁早高峰挤得连扶手都抓不到,0.25,st|paraphrase-multilingual-MiniLM-L12-v2|384|2
+unrelated,The index speeds up query execution,She bought a loaf of bread yesterday,0.0,st|paraphrase-multilingual-MiniLM-L12-v2|384|2
+unrelated,Large uploads freeze the server,The concert tickets sold out in minutes,0.1517,st|paraphrase-multilingual-MiniLM-L12-v2|384|2

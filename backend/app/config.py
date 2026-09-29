@@ -52,9 +52,15 @@ class Settings(BaseSettings):
     # ---- CORS ----
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000"
 
-    # ---- Vector Engine ----
-    VECTOR_DIM: int = 768
-    VECTOR_MODEL: str = "all-MiniLM-L6-v2"
+    # ---- Vector Engine（语义向量，决定 inference 的 β 维）----
+    # 模型必须支持中文：本项目知识库是中文语料，all-MiniLM-L6-v2 是纯英文模型，
+    # 拿它编码中文等于随机向量。多语模型同时对英文基准语料（graphrag_bench）可用。
+    VECTOR_MODEL: str = "paraphrase-multilingual-MiniLM-L12-v2"
+    VECTOR_CACHE_DIR: str = "./models"          # 模型权重缓存（相对 backend/，可离线复用）
+    VECTOR_BACKEND: str = "auto"                # auto | transformers | tfidf（tfidf 用于强制验证降级路径）
+    # huggingface.co 在部分网络下不可达；hf-mirror.com 是可用镜像。留空则不改环境变量。
+    HF_ENDPOINT: str = "https://hf-mirror.com"
+    HF_HUB_OFFLINE: bool = False                # 模型已下载好、要断网运行就置 True
 
     # ---- Knowledge Base ----
     KNOWLEDGE_SEED_PATH: str = ""
@@ -162,6 +168,14 @@ class Settings(BaseSettings):
         静态服务却挂在 B 处」→ 上传成功但访问 404。统一从这里取，base 固定 backend/。
         """
         root = self.UPLOAD_DIR
+        if os.path.isabs(root):
+            return root
+        return os.path.join(BACKEND_DIR, root.lstrip("./"))
+
+    @property
+    def resolved_model_dir(self) -> str:
+        """向量模型缓存目录的**绝对路径**（与 upload_dir 同理，不让 cwd 参与决策）"""
+        root = self.VECTOR_CACHE_DIR
         if os.path.isabs(root):
             return root
         return os.path.join(BACKEND_DIR, root.lstrip("./"))

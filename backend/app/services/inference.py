@@ -13,7 +13,7 @@ from loguru import logger
 from app.models.models import Node, Link, NodeSource, KnowledgeBase
 from app.config import settings
 from app.services.vector_engine import (
-    cosine_similarity, jaccard_similarity, encode, embed_to_db
+    cosine_similarity, jaccard_similarity, embedding_for
 )
 
 
@@ -71,7 +71,8 @@ def infer_links_for_new_file(file_id: int, user_id: int, db):
             source_text=link_data.get("source_text", ""),
             source_file=link_data.get("source_file", ""),
             auto_generated=True,
-            time_bridge=True
+            semantic_bridge=bool(link_data.get("semantic_bridge", False)),
+            time_bridge=bool(link_data.get("time_bridge", False)),
         )
         db.add(link)
         count += 1
@@ -141,6 +142,7 @@ def infer_links_batch(
             if score >= th:
                 rel_type = classify_relation(new_node, old_node, score, detail, db)
                 evidence = get_evidence(new_node, old_node, detail)
+                flags = _link_flags(detail)
 
                 node_links.append({
                     "source": new_node["id"],
@@ -153,7 +155,7 @@ def infer_links_batch(
                     "source_text": detail.get("source_text", ""),
                     "source_file": detail.get("source_file", ""),
                     "auto_generated": True,
-                    "time_bridge": True
+                    **flags,
                 })
 
         # 每个节点只保留最强的 N 条（一个节点连 800 个既无意义也会写出海量连线）
@@ -264,14 +266,24 @@ def calculate_score(
     detail["sim_text"] = sim_text
 
     # β: 语义向量余弦
-    text_a = (node_a.get("description") or "") + " " + " ".join(node_a.get("entities", []))
-    text_b = (node_b.get("description") or "") + " " + " ".join(node_b.get("entities", []))
+    # 先看两边向量是不是同一个引擎产出的：不同引擎维度不同，cosine 会返回 0，
+    # 那是「没法比」不是「不相似」。这里显式区分，免得 β 维静默失效还查不出原因。
     sim_vector = 0.0
     try:
-        vec_a = json.loads(node_a.get("embedding", "[]")) if isinstance(node_a.get("embedding"), str) else node_a.get("embedding", [])
-        vec_b = json.loads(node_b.get("embedding", "[]")) if isinstance(node_b.get("embedding"), str) else node_b.get("embedding", [])
+        vec_a = embedding_for(node_a)
+        vec_b = embedding_for(node_b)
         if vec_a and vec_b:
-            sim_vector = cosine_similarity(vec_a, vec_b)
+            meta_a = node_a.get("embedding_meta")
+            meta_b = node_b.get("embedding_meta")
+            if meta_a and meta_b and meta_a != meta_b:
+                logger.debug(
+                    f"β 维跳过：两侧向量来自不同引擎（{meta_a} vs {meta_b}），"
+                    f"需重建向量后才有语义相似度"
+                )
+            elif len(vec_a) != len(vec_b):
+                logger.debug(f"β 维跳过：向量维度不一致（{len(vec_a)} vs {len(vec_b)}）")
+            else:
+                sim_vector = cosine_similarity(vec_a, vec_b)
     except (json.JSONDecodeError, TypeError) as exc:
         # 原本静默 pass：向量字段损坏会让 β 维恒为 0（关联质量下降却查不出原因）
         logger.debug(f"向量解析失败（{type(exc).__name__}），β 维按 0 计："
@@ -416,6 +428,28 @@ def get_evidence(node_a: Dict, node_b: Dict, detail: Dict) -> str:
     return "; ".join(parts) if parts else "弱关联"
 
 
+def _link_flags(detail: Dict) -> Dict:
+    """连线的桥接标记必须来自真实依据，不能硬编码。
+
+    历史问题：这里曾经写死 time_bridge=True，于是所有自动推理出来的连线都以
+    「时间桥接」入库 —— 任何按桥接类型做的统计（例如「时间 553 / 语义 11」）
+    量的其实是「哪段代码写的」，不是「依据是什么」。这类数字不能用来判断
+    语义路径有没有出力。
+
+    现在的定义：
+      semantic_bridge —— 知识库桥接真的出分了（γ > 0）；
+      time_bridge     —— 内容维度（α/β/γ）全无依据，能连上只因时间窗口接近。
+    """
+    has_content = any(
+        (detail.get(k) or 0) > 0
+        for k in ("sim_text", "sim_vector", "sim_corpus", "sim_topology")
+    )
+    return {
+        "semantic_bridge": bool((detail.get("sim_corpus") or 0) > 0),
+        "time_bridge": not has_content,
+    }
+
+
 def _node_to_dict(node: Node) -> Dict:
     """将Node对象转换为字典"""
     return {
@@ -431,5 +465,6 @@ def _node_to_dict(node: Node) -> Dict:
         "group_id": node.group_id or "default",
         "upload_time": node.upload_time or 0,
         "embedding": node.embedding,
+        "embedding_meta": node.embedding_meta,
         "isolate_blacklist": node.isolate_blacklist or []
     }

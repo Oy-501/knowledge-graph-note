@@ -1,7 +1,7 @@
 <template>
   <div class="app-shell" :style="appStyle">
-    <!-- 顶部导航栏 -->
-    <nav class="app-nav">
+    <!-- 顶部导航栏（未登录时不渲染：登录页自己就是完整一屏） -->
+    <nav v-if="authed" class="app-nav">
       <div class="app-nav-brand">知识图谱笔记</div>
 
       <!-- 导航生成自 NAV_TABS：新增视图只需加一项，键盘快捷键自动跟随 -->
@@ -38,6 +38,9 @@
           class="nav-btn nav-btn-save"
           @click="onSaveWorkbench"
         >保存</button>
+        <!-- 账号入口：显示当前登录者，并提供改密 / 退出登录。
+             没有出口用户就退不出去 —— 那等于登录功能只做了一半。 -->
+        <AccountMenu />
       </div>
     </nav>
 
@@ -188,16 +191,28 @@ import GraphCanvas from '@/components/GraphCanvas.vue'
 import KnowledgeAnalytics from '@/components/KnowledgeAnalytics.vue'
 import KnowledgeReview from '@/components/KnowledgeReview.vue'
 import KnowledgeQA from '@/components/KnowledgeQA.vue'
+import AccountMenu from '@/components/AccountMenu.vue'
+import LoginView from '@/components/LoginView.vue'
 import { useFileStore } from '@/store/fileStore'
 import { useGraphStore } from '@/store/graphStore'
 import { useConfigStore } from '@/store/configStore'
 import { useSettingsStore } from '@/store/settingsStore'
+import { useAuthStore } from '@/store/authStore'
 import { setGraphStoreRef } from '@/store/groupStore'
 
 const fileStore = useFileStore()
 const graphStore = useGraphStore()
 const cfg = useConfigStore()
 const settingsStore = useSettingsStore()
+const auth = useAuthStore()
+
+/**
+ * 登录门禁。
+ *
+ * 登录页**不用**懒加载：未登录时它是首屏内容，做成异步 chunk 会先白屏等下载。
+ * 它本身很小（纯表单，无第三方库），放主包里代价可以忽略。
+ */
+const authed = computed(() => auth.isAuthed)
 
 // 导航声明式配置：顺序即快捷键 Ctrl+1..N 的顺序
 const NAV_TABS = [
@@ -320,19 +335,42 @@ const appStyle = computed(() => {
   return {}
 })
 
+/**
+ * 登录成功后才做的加载。
+ *
+ * 与 onMounted 里的设置加载分开，是因为这两类数据的性质不同：
+ * 设置（主题、背景）是**本机**的，登录页也要用，必须无条件加载；
+ * 文件与图谱是**服务端**的，未登录时加载只会拿到一串 401。
+ */
+async function loadWorkspaceData() {
+  try {
+    await fileStore.loadPersisted()
+    graphStore.refreshOrphanCount()
+    if (graphStore.nodeCount > 0) {
+      ElMessage.success(`已恢复 ${graphStore.nodeCount} 节点 / ${graphStore.linkCount} 连线`)
+    }
+  } catch (e) {
+    // 这里不弹错：fileStore 内部已经有失败提示，重复弹只会刷屏
+    console.warn('[App] 工作区数据加载失败：', e?.message || e)
+  }
+}
+
 onMounted(async () => {
   window.addEventListener('keydown', onKeydown)
 
-  // 加载用户设置
+  // 主题与背景是本机设置，先加载 —— 登录页要靠它显示正确的配色与背景
   await settingsStore.load()
 
-  // 恢复持久化数据
-  await fileStore.loadPersisted()
-  // 自动触发孤儿校验
-  graphStore.refreshOrphanCount()
-  if (graphStore.nodeCount > 0) {
-    ElMessage.success(`已恢复 ${graphStore.nodeCount} 节点 / ${graphStore.linkCount} 连线`)
-  }
+  // 探测登录状态；已登录（刷新页面场景）直接进应用，未登录则停在登录页
+  await auth.probe()
+  if (auth.isAuthed) await loadWorkspaceData()
+})
+
+// 登录成功后（含初始化与注册）再加载工作区数据。
+// 用 watch 而不是在登录页里回调：登录、初始化、注册、重试四条路径都会改
+// isAuthed，一处监听就全覆盖，不必在每个入口各写一遍。
+watch(() => auth.isAuthed, (now, before) => {
+  if (now && !before) loadWorkspaceData()
 })
 
 onUnmounted(() => {

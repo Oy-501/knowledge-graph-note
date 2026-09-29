@@ -1,31 +1,220 @@
-"""向量编码服务"""
-import json
+"""向量编码服务
+
+负责把节点文本编码成可比较的向量，供 inference 的四维打分里 β 维（语义相似度）使用。
+
+两种引擎：
+  1) transformers —— sentence-transformers 加载本地模型，真正的语义向量（首选）。
+     「换个说法说同一件事」靠它才认得出：词不一样但意思一样也有高相似度。
+  2) tfidf —— 没装模型时的降级实现：CJK 单字 + 二元组、拉丁词，真实 IDF 加权，
+     带符号哈希 + L2 归一。（只认字面重合，换个说法就不行，是明确的降级而非等价方案。）
+
+改动注意：
+- 不同引擎/不同模型产出的向量维度不同。维度不同的两个向量做 cosine 恒为 0，
+  这不是「不相似」而是「没法比」。所以每条向量都要记下它的引擎指纹
+  （nodes.embedding_meta），换引擎后必须重建向量，否则 β 维会静默失效。
+- 指纹和实际向量必须一起写，别只写其中一个。
+"""
 import hashlib
+import json
+import math
+import os
 import re
-from typing import List, Optional
+from typing import Dict, Iterable, List, Optional
 from loguru import logger
 
-# 尝试加载 sentence-transformers，失败则使用降级方法
+# 算法版本：降级编码的切词/加权方式一旦改动就 +1，
+# 这样即便仍走 tfidf，旧向量也会被识别为「陈旧」而不是被当成可比。
+ALGO_VERSION = "2"
+
+# 降级向量的维度。哈希到固定维度，取 256 以减少碰撞（原来是 100，碰撞概率偏高）。
+FALLBACK_DIM = 256
+
 _encoder = None
 _engine_mode = "fallback-tfidf"
+_engine_dim = FALLBACK_DIM
+_engine_error = ""
+_model_error_detail = ""   # 保留原始报错，供 doctor 展示原因
+_initialized = False       # 初始化只做一次；三态（成功/降级/指定降级）都要认
+
+# 语料 IDF 表：doc -> 词频分布
+_IDF: Dict[str, float] = {}
+_IDF_DOCS = 0
 
 
-def _init_encoder():
-    """延迟初始化向量编码器"""
-    global _encoder, _engine_mode
-    if _encoder is not None:
+# ---------------------------------------------------------------- 文本切分
+
+# CJK 统一表意文字（含扩展 A 与兼容表意），其余按「拉丁/数字词」处理。
+_CJK = r"\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff"
+_TOKEN_RE = re.compile(rf"[{_CJK}]+|[a-z0-9][a-z0-9_+#.\-]*")
+
+# 只放高频虚词，不追求全。目的是别让「的/了/是/the/of」这类词主导相似度。
+_STOPWORDS = {
+    "的", "了", "和", "与", "及", "或", "是", "在", "对", "为", "以", "被", "把", "从",
+    "到", "中", "上", "下", "个", "这", "那", "有", "也", "就", "都", "而", "并", "则",
+    "其", "之", "由", "等", "可", "能", "会", "将", "使", "让", "向", "由", "于", "以",
+    "the", "a", "an", "of", "to", "in", "on", "for", "and", "or", "is", "are", "was",
+    "were", "be", "been", "it", "its", "this", "that", "these", "those", "as", "at",
+    "by", "with", "from", "we", "you", "they", "he", "she", "his", "her", "their",
+    "our", "your", "not", "no", "but", "if", "then", "than", "so", "such", "which",
+    "who", "whom", "what", "when", "where", "how", "can", "could", "will", "would",
+    "should", "may", "might", "must", "have", "has", "had", "do", "does", "did",
+}
+
+
+def analyze(text: str) -> List[str]:
+    """把文本切成可比对的词元。
+
+    中文没有空格，按空白切词会把整句话变成一个词元（两个不同的句子因此毫不相干），
+    所以中日韩文按「字」处理：连续汉字串切成相邻二元组（bigram），单字串保留自身。
+    这样「数据库索引优化」与「优化数据库的索引」能共享 数据/据库/索引 三个词元。
+    """
+    if not text:
+        return []
+    tokens: List[str] = []
+    for raw in _TOKEN_RE.findall(text.lower()):
+        if _is_cjk_run(raw):
+            if len(raw) == 1:
+                if raw not in _STOPWORDS:
+                    tokens.append(raw)
+            else:
+                for i in range(len(raw) - 1):
+                    bigram = raw[i:i + 2]
+                    if bigram[0] in _STOPWORDS and bigram[1] in _STOPWORDS:
+                        continue
+                    tokens.append(bigram)
+        else:
+            if len(raw) >= 2 and raw not in _STOPWORDS:
+                tokens.append(raw)
+    return tokens
+
+
+def _is_cjk_run(part: str) -> bool:
+    first = part[0]
+    return "\u3400" <= first <= "\u4dbf" or "\u4e00" <= first <= "\u9fff" or "\uf900" <= first <= "\ufaff"
+
+
+# ---------------------------------------------------------------- IDF
+
+def build_idf(texts: Iterable[str]) -> int:
+    """用整个语料统计 IDF 表（文档频率），返回参与统计的文档数。
+
+    必须在「编码这批向量之前」先建好，且整批共用同一张表 —— 否则同一批节点里
+    前面用旧 IDF、后面用新 IDF，向量之间就不可比了。
+    """
+    global _IDF, _IDF_DOCS
+    df: Dict[str, int] = {}
+    doc_count = 0
+    for text in texts:
+        tokens = set(analyze(text))
+        if not tokens:
+            continue
+        doc_count += 1
+        for tok in tokens:
+            df[tok] = df.get(tok, 0) + 1
+    # 平滑 IDF：出现在越少文档里的词权重越高；+1 保证不会出现 0（0 权重等于丢词）
+    _IDF = {
+        tok: math.log((1 + doc_count) / (1 + freq)) + 1.0
+        for tok, freq in df.items()
+    }
+    _IDF_DOCS = doc_count
+    return doc_count
+
+
+def idf_stats() -> dict:
+    return {"terms": len(_IDF), "docs": _IDF_DOCS}
+
+
+def reset_idf() -> None:
+    global _IDF, _IDF_DOCS
+    _IDF = {}
+    _IDF_DOCS = 0
+
+
+def _weight(token: str) -> float:
+    """词元权重。没有语料统计时退回 1.0（等价于只用 TF），仍然远好于整句哈希。"""
+    if not _IDF:
+        return 1.0
+    return _IDF.get(token, math.log((1 + _IDF_DOCS) / 1.0) + 1.0)
+
+
+# ---------------------------------------------------------------- 编码
+
+def _init_encoder() -> None:
+    """延迟初始化向量编码器（进程内只做一次）"""
+    global _encoder, _engine_mode, _engine_dim, _engine_error, _model_error_detail, _initialized
+    if _initialized:
         return
 
+    from app.config import settings
+
+    backend = (getattr(settings, "VECTOR_BACKEND", "auto") or "auto").lower()
+    if backend == "tfidf":
+        _engine_mode = "fallback-tfidf"
+        _engine_dim = FALLBACK_DIM
+        _engine_error = "VECTOR_BACKEND=tfidf（显式指定走降级路径）"
+        _model_error_detail = _engine_error
+        _initialized = True
+        logger.warning("VECTOR_BACKEND=tfidf：按要求使用降级编码，不加载模型。")
+        return
+
+    _apply_hf_env(settings)
     try:
         from sentence_transformers import SentenceTransformer
-        from app.config import settings
-        logger.info(f"Loading vector model: {settings.VECTOR_MODEL}")
-        _encoder = SentenceTransformer(settings.VECTOR_MODEL, device="cpu")
+
+        name = settings.VECTOR_MODEL
+        cache_dir = settings.resolved_model_dir
+        os.makedirs(cache_dir, exist_ok=True)
+        logger.info(f"Loading vector model: {name} (cache={cache_dir})")
+        model = SentenceTransformer(
+            name,
+            device="cpu",
+            cache_folder=cache_dir,
+        )
+        # 维度取值方法在 sentence-transformers 6.x 改名了，两个名字都试一下，
+        # 免得版本一升级就抛 FutureWarning（甚至 AttributeError）。
+        dim_getter = (getattr(model, "get_embedding_dimension", None)
+                      or getattr(model, "get_sentence_embedding_dimension", None))
+        dim = int(dim_getter() or 0) if dim_getter else 0
+        _encoder = model
         _engine_mode = "transformers"
-        logger.info("Vector encoder ready: transformers")
-    except Exception as e:
-        logger.warning(f"Failed to load transformers, using TF-IDF fallback: {e}")
+        _engine_dim = dim
+        _engine_error = ""
+        _model_error_detail = ""
+        logger.info(f"Vector encoder ready: transformers/{name} dim={dim}")
+    except Exception as exc:  # noqa: BLE001
+        # 不静默：降级必须留下原因，否则「语义相似度很差」会被当成算法本身的问题。
         _engine_mode = "fallback-tfidf"
+        _engine_dim = FALLBACK_DIM
+        _engine_error = f"{type(exc).__name__}: {exc}"
+        _model_error_detail = _engine_error
+        logger.warning(
+            f"Failed to load transformers, using TF-IDF fallback: {_engine_error}"
+        )
+    finally:
+        _initialized = True
+
+
+def _apply_hf_env(settings) -> None:
+    """HuggingFace 官方站在部分网络下不可达，允许配置镜像（默认 hf-mirror）。"""
+    endpoint = (getattr(settings, "HF_ENDPOINT", "") or "").strip()
+    if endpoint and not os.environ.get("HF_ENDPOINT"):
+        os.environ["HF_ENDPOINT"] = endpoint
+    if getattr(settings, "HF_HUB_OFFLINE", False):
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")
+
+
+def prepare(force: bool = False) -> bool:
+    """显式准备编码器（供启动自检 / 重建向量用），返回是否用上了模型。"""
+    global _encoder, _engine_mode, _engine_dim, _engine_error, _model_error_detail, _initialized
+    if force:
+        _encoder = None
+        _engine_mode = "fallback-tfidf"
+        _engine_dim = FALLBACK_DIM
+        _engine_error = ""
+        _model_error_detail = ""
+        _initialized = False
+    _init_encoder()
+    return _engine_mode == "transformers"
 
 
 def encode(text: str) -> List[float]:
@@ -34,24 +223,29 @@ def encode(text: str) -> List[float]:
 
     if _encoder is not None:
         try:
-            vec = _encoder.encode(text, convert_to_numpy=True)
-            return vec.tolist()
-        except Exception as e:
-            logger.error(f"Transformers encode failed: {e}")
+            vec = _encoder.encode(text, convert_to_numpy=True, normalize_embeddings=True)
+            return _to_list(vec)
+        except Exception as exc:  # noqa: BLE001
+            logger.error(f"Transformers encode failed: {type(exc).__name__}: {exc}")
 
-    # TF-IDF 降级
     return _tfidf_encode(text)
 
 
 def encode_batch(texts: List[str]) -> List[List[float]]:
-    """批量编码"""
-    global _encoder
+    """批量编码。走模型时单批一次前向，比逐条 encode 快一个量级。"""
+    global _encoder, _engine_mode, _engine_dim
     _init_encoder()
 
-    if _encoder is not None:
+    if _encoder is not None and texts:
         try:
-            vecs = _encoder.encode(texts, convert_to_numpy=True)
-            return [v.tolist() for v in vecs]
+            vecs = _encoder.encode(
+                texts,
+                convert_to_numpy=True,
+                normalize_embeddings=True,
+                batch_size=32,
+                show_progress_bar=False,
+            )
+            return [_to_list(v) for v in vecs]
         except Exception as exc:  # noqa: BLE001
             # 这里原本是静默 pass —— 危险：编码器中途失败会让同一批节点出现
             # 「一部分模型向量、一部分 TF-IDF 向量」，两者维度不同时
@@ -62,17 +256,61 @@ def encode_batch(texts: List[str]) -> List[List[float]]:
                 f"注意：降级向量与模型向量不可混用比较，修复后建议重建向量。"
             )
             _encoder = None
+            _engine_mode = "fallback-tfidf"
+            _engine_dim = FALLBACK_DIM
 
     return [_tfidf_encode(t) for t in texts]
 
 
+def _to_list(vec) -> List[float]:
+    if hasattr(vec, "tolist"):
+        return vec.tolist()
+    return [float(x) for x in vec]
+
+
+def _tfidf_encode(text: str, dim: int = FALLBACK_DIM) -> List[float]:
+    """TF-IDF 降级编码：词元加权后带符号哈希到固定维度，再 L2 归一。
+
+    带符号哈希（signed hashing）是为了让碰撞的期望贡献为 0 ——
+    只用取模时，两个无关词元撞到同一维会互相「加正分」，凭空制造相似度。
+    """
+    tokens = analyze(text)
+    if not tokens:
+        return [0.0] * dim
+
+    tf: Dict[str, int] = {}
+    for tok in tokens:
+        tf[tok] = tf.get(tok, 0) + 1
+
+    vec = [0.0] * dim
+    for tok, freq in tf.items():
+        # 次线性 TF：出现 10 次不等于重要 10 倍
+        weight = (1.0 + math.log(freq)) * _weight(tok)
+        digest = hashlib.md5(tok.encode("utf-8")).digest()
+        h = int.from_bytes(digest[:8], "big")
+        idx = h % dim
+        sign = -1.0 if (h >> 63) & 1 else 1.0
+        vec[idx] += sign * weight
+
+    norm = math.sqrt(sum(x * x for x in vec))
+    if norm > 0:
+        vec = [x / norm for x in vec]
+    return vec
+
+
+# ---------------------------------------------------------------- 相似度
+
 def cosine_similarity(a: List[float], b: List[float]) -> float:
-    """计算余弦相似度"""
+    """计算余弦相似度
+
+    维度不一致时返回 0：调用方应先用 is_stale 判断「是不是没法比」，
+    不要把这里的 0 解读成「不相似」。
+    """
     if not a or not b or len(a) != len(b):
         return 0.0
     dot = sum(x * y for x, y in zip(a, b))
-    na = sum(x * x for x in a) ** 0.5
-    nb = sum(x * x for x in b) ** 0.5
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(x * x for x in b))
     if na == 0 or nb == 0:
         return 0.0
     return max(0.0, min(1.0, dot / (na * nb)))
@@ -89,64 +327,92 @@ def jaccard_similarity(a: List[str], b: List[str]) -> float:
     return intersection / union if union > 0 else 0.0
 
 
-def _tfidf_encode(text: str, dim: int = 100) -> List[float]:
-    """TF-IDF 降级编码"""
-    text = re.sub(r'[^\w\s\u4e00-\u9fff]', ' ', text.lower())
-    words = text.split()
-    if not words:
-        return [0.0] * dim
+# ---------------------------------------------------------------- 引擎指纹
 
-    # 词频统计
-    tf = {}
-    for w in words:
-        tf[w] = tf.get(w, 0) + 1
+def engine_signature() -> str:
+    """当前引擎指纹：换模型 / 换编码方式 / 换维度都会变。"""
+    _init_encoder()
+    from app.config import settings
+    if _engine_mode == "transformers":
+        return f"st|{settings.VECTOR_MODEL}|{_engine_dim}|{ALGO_VERSION}"
+    return f"tfidf|ngram|{FALLBACK_DIM}|{ALGO_VERSION}"
 
-    # 哈希到固定维度
-    vec = [0.0] * dim
-    for w, freq in tf.items():
-        h = int(hashlib.md5(w.encode()).hexdigest(), 16) % dim
-        vec[h] += freq / len(words)
 
-    # 归一化
-    norm = sum(x * x for x in vec) ** 0.5
-    if norm > 0:
-        vec = [x / norm for x in vec]
-
-    return vec
+def embedding_is_stale(meta: Optional[str], sig: Optional[str] = None) -> bool:
+    """这条向量的引擎指纹与当前引擎是否不一致（不一致就得重建）"""
+    if not meta:
+        return True
+    return meta != (sig or engine_signature())
 
 
 def get_engine_info() -> dict:
     """获取向量引擎信息"""
+    _init_encoder()
     return {
         "mode": _engine_mode,
-        "dim": 768 if _engine_mode == "transformers" else 100
+        "dim": _engine_dim,
+        "signature": engine_signature(),
+        "degraded": _engine_mode != "transformers",
+        "reason": _engine_error,
+        "idf": idf_stats(),
     }
 
 
+def embedding_for(node_dict: dict) -> Optional[List[float]]:
+    """从节点字典里取向量，兼容「JSON 字符串」与「已经是数组」两种存法。"""
+    raw = node_dict.get("embedding")
+    if not raw:
+        return None
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return None
+    return raw or None
+
+
+# ---------------------------------------------------------------- 落库
+
+def node_text(n: dict) -> str:
+    """节点参与编码的文本。保持与 inference 里 β 维的取值一致，别各写一套。"""
+    parts = []
+    if n.get("entity"):
+        parts.append(str(n["entity"]))
+    if n.get("title"):
+        parts.append(str(n["title"]))
+    if n.get("keywords"):
+        parts.append(" ".join(map(str, n["keywords"])))
+    if n.get("entities"):
+        parts.append(" ".join(map(str, n["entities"])))
+    if n.get("description"):
+        parts.append(str(n["description"]))
+    return " ".join(parts).strip()
+
+
 def embed_to_db(nodes: list, db) -> None:
-    """为节点生成向量并存储到数据库"""
+    """为节点生成向量并存储到数据库（同时写入引擎指纹）"""
     from app.models.models import Node
 
-    def _text(n):
-        parts = []
-        if n.get("entity"):
-            parts.append(n["entity"])
-        if n.get("keywords"):
-            parts.append(" ".join(n["keywords"]))
-        parts.append(n.get("description") or "")
-        return " ".join(parts).strip()
-
-    texts = [_text(n) for n in nodes]
+    texts = [node_text(n) for n in nodes]
     if not texts:
         return
 
+    # 降级路径依赖语料 IDF：这批还没入库，用「既有节点 + 这批」一起统计，
+    # 保证新老向量在同一张 IDF 表下产出，可比较。
+    if not _IDF and _engine_mode != "transformers":
+        _init_encoder()
+    if not _IDF and _engine_mode != "transformers":
+        corpus = _existing_texts(db, texts)
+        docs = build_idf(corpus)
+        logger.info(f"TF-IDF 降级：用语料 {docs} 篇建立 IDF（{len(_IDF)} 个词元）")
+
     try:
         vectors = encode_batch(texts)
-    except Exception as e:
-        logger.error(f"Batch encode failed: {e}")
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"Batch encode failed: {type(exc).__name__}: {exc}")
         return
 
-    # 一次性查出这批节点再回填（原来每个节点一次 SELECT，大文件下几千次查询非常致命）
+    sig = engine_signature()
     id_list = [n.get("id") for n in nodes if n.get("id")]
     node_rows = {n.id: n for n in db.query(Node).filter(Node.id.in_(id_list)).all()} if id_list else {}
 
@@ -156,4 +422,115 @@ def embed_to_db(nodes: list, db) -> None:
         node = node_rows.get(node_data.get("id"))
         if node:
             node.embedding = json.dumps(vectors[i])
+            node.embedding_meta = sig
     db.commit()
+
+
+def _existing_texts(db, extra: List[str]) -> List[str]:
+    """取库里已有节点的文本（给 IDF 统计用）。库不可用时只用本批。"""
+    texts = list(extra)
+    try:
+        from app.models.models import Node
+        for (entity, title, keywords, entities, description) in db.query(
+            Node.entity, Node.title, Node.keywords, Node.entities, Node.description
+        ).all():
+            texts.append(node_text({
+                "entity": entity, "title": title, "keywords": keywords,
+                "entities": entities, "description": description,
+            }))
+    except Exception as exc:  # noqa: BLE001
+        logger.debug(f"读取既有节点文本失败，IDF 只用本批统计：{type(exc).__name__}: {exc}")
+    return texts
+
+
+def rebuild_embeddings(db, user_id: Optional[int] = None, batch: int = 200) -> dict:
+    """用当前引擎重建全部节点向量。
+
+    装好模型之后必须跑一次，否则存量向量还是旧引擎（旧维度）产出的，
+    与新建向量放在一起比较会恒为 0。
+    """
+    from app.models.models import Node
+
+    query = db.query(Node)
+    if user_id is not None:
+        query = query.filter(Node.user_id == user_id)
+    nodes = query.all()
+    if not nodes:
+        return {"total": 0, "updated": 0, "signature": engine_signature()}
+
+    _init_encoder()
+    sig_before = {n.embedding_meta for n in nodes if n.embedding_meta}
+
+    # 先把整个语料的 IDF 建好（仅降级路径需要），再统一切词编码
+    if _engine_mode != "transformers":
+        build_idf([
+            node_text({
+                "entity": n.entity, "title": n.title, "keywords": n.keywords,
+                "entities": n.entities, "description": n.description,
+            })
+            for n in nodes
+        ])
+
+    updated = 0
+    for start in range(0, len(nodes), batch):
+        chunk = nodes[start:start + batch]
+        texts = [
+            node_text({
+                "entity": n.entity, "title": n.title, "keywords": n.keywords,
+                "entities": n.entities, "description": n.description,
+            })
+            for n in chunk
+        ]
+        vectors = encode_batch(texts)
+        for node, vec in zip(chunk, vectors):
+            node.embedding = json.dumps(vec)
+            node.embedding_meta = sig = engine_signature()
+            updated += 1
+        db.commit()
+
+    return {
+        "total": len(nodes),
+        "updated": updated,
+        "signature": engine_signature(),
+        "previous_signatures": sorted(s for s in sig_before if s),
+    }
+
+
+def embedding_health(db) -> dict:
+    """向量健康度：多少节点缺向量 / 陈旧 / 维度与当前引擎不符。"""
+    from app.models.models import Node
+
+    total = db.query(Node).count()
+    with_vec = 0
+    stale = 0
+    empty = 0
+    broken = 0
+    dims: Dict[int, int] = {}
+    sig = engine_signature()
+    expected_dim = _engine_dim if _engine_mode == "transformers" else FALLBACK_DIM
+
+    for (emb, meta) in db.query(Node.embedding, Node.embedding_meta).all():
+        if not emb:
+            empty += 1
+            continue
+        with_vec += 1
+        if embedding_is_stale(meta, sig):
+            stale += 1
+        try:
+            v = json.loads(emb)
+            dims[len(v)] = dims.get(len(v), 0) + 1
+        except (json.JSONDecodeError, TypeError):
+            # 不静默：向量字段损坏会让该节点的 β 维恒为 0，必须能数出来。
+            broken += 1
+
+    return {
+        "total": total,
+        "with_embedding": with_vec,
+        "empty": empty,
+        "broken": broken,
+        "stale": stale,
+        "dims": dims,
+        "engine_dim": expected_dim,
+        "signature": sig,
+        "degraded": _engine_mode != "transformers",
+    }

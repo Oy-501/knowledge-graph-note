@@ -3,8 +3,17 @@ uvicorn[standard]==0.24.0
 sqlalchemy==2.0.23
 # psycopg2-binary: PostgreSQL 驱动；app/config.py 的 DB_MODE=auto/postgres 探测到 docker postgres 时由 SQLAlchemy 使用
 psycopg2-binary==2.9.9
-sentence-transformers==2.2.2
-transformers==4.35.0
+# ---- 语义向量（inference 的 β 维：认得出「换个说法说同一件事」）----
+# 装之前先装 CPU 版 torch：PyPI 上 Windows 的 torch 默认带 CUDA，约 2.5GB；
+# CPU 版约 200MB，本项目只用 CPU 推理。
+#   py -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+# 之后再装下面两个，pip 不会再替换已装好的 torch。
+# 模型权重由 app/config.py 的 HF_ENDPOINT（默认 hf-mirror.com）下载，
+# 缓存到 backend/models/，下好之后可离线运行。
+# 缺这两个包不会报错，但 β 维会降级成字面重合（见 app/services/vector_engine.py）。
+torch==2.14.0
+sentence-transformers==6.1.0
+transformers==5.17.0
 python-multipart==0.0.6
 python-dotenv==1.0.0
 loguru==0.7.2
