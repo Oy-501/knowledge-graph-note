@@ -56,8 +56,8 @@ YR/
 │   └── vite.config.js
 ├── domain_corpus/          # KB corpora (software.md / embedded.md / writing.md / manifest.json)
 ├── test_data/              # samples (doc_A~E + kb_demo + summary_examples)
-├── app.js / index.html / styles.css / main.js / preload.js   # Electron desktop app
-├── server.js               # local static server
+├── legacy/                 # 旧版 Electron/CDN 静态站（app.js / index.html / main.js / preload.js / server.js 等，已非主线）
+├── docs/                   # 全部说明文档（详见下文"详细文档"）
 ├── 启动服务.bat / 知识图谱.bat
 └── docker-compose.yml      # one-click deploy (frontend + backend)
 ```
@@ -81,9 +81,12 @@ npm run dev
 
 ### Electron desktop
 ```bash
+cd legacy
 npm install
 npm start
 ```
+
+> 注：根目录 `legacy/` 为旧版 Electron 桌面壳（已非主线，仅存档）。当前主线为 `backend/` + `kg-vue3/`。
 
 ### Docker
 ```bash
@@ -152,13 +155,16 @@ npm run dev
 
 | 文档 | 内容 |
 |---|---|
-| `技术栈与功能实现清单.md` | 三层全量实现清单（含 F1-F6 / P1-P3 增强功能） |
-| `智能切割与知识点判定说明.md` | 切割算法、四路判定、后台管理、个人主页 |
-| `图谱总结与导出说明.md` | 总结维度、Mermaid 流程图、AI 摘要、6 种导出格式 |
-| `大文件上传保护说明.md` | 四层防崩溃方案与配置 |
-| `知识库设计说明.md` | 知识库数据模型与关联算法 |
-| `UI设计优化说明.md` | P0/P1/P2 可读性、一致性、可达性修复实录 |
-| `代码防御与UI优化说明.md` | 四层防御机制、体检脚本、实测抓出的 4 个真实问题 |
-| `安全审计与加固说明.md` | 16 项安全问题审计与修复、遗留风险清单 |
-| `生存期模型.md` | 9 阶段产品生命周期模型，标注已完成/进行中/未开始与路线图 |
-| `代码布局.md` / `更新日志.md` | 修改入口手册与变更记录（维护体系） |
+| `docs/技术栈与功能实现清单.md` | 三层全量实现清单（含 F1-F6 / P1-P3 增强功能） |
+| `docs/智能切割与知识点判定说明.md` | 切割算法、四路判定、后台管理、个人主页 |
+| `docs/图谱总结与导出说明.md` | 总结维度、Mermaid 流程图、AI 摘要、6 种导出格式 |
+| `docs/大文件上传保护说明.md` | 四层防崩溃方案与配置 |
+| `docs/知识库设计说明.md` | 知识库数据模型与关联算法 |
+| `docs/UI设计优化说明.md` | P0/P1/P2 可读性、一致性、可达性修复实录 |
+| `docs/代码防御与UI优化说明.md` | 四层防御机制、体检脚本、实测抓出的 4 个真实问题 |
+| `docs/安全审计与加固说明.md` | 16 项安全问题审计与修复、遗留风险清单 |
+| `docs/生存期模型.md` | 9 阶段产品生命周期模型，标注已完成/进行中/未开始与路线图 |
+| `docs/函数图像说明.md` | 函数图像页签：实时绘制、回放、特征标注、SVG 导出 |
+| `docs/背景CSS生成器说明.md` | 自然语言→响应式背景 CSS 的规则引擎 |
+| `docs/推荐优化方案.md` | 竞品对比（Obsidian/Graphify 等）与优化建议 |
+| `docs/代码布局.md` / `docs/更新日志.md` | 修改入口手册与变更记录（维护体系） |
