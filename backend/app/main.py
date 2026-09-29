@@ -89,6 +89,16 @@ async def lifespan(app: FastAPI):
         db.close()
 
     logger.info("Database initialized.")
+
+    # 后台预热语义向量模型：延迟加载的话，重启后第一个碰到向量引擎的请求
+    # （通常是「系统自检」）要等十几秒，实测最慢 67 秒，看起来像服务挂了。
+    # 放后台线程是为了不拖慢服务就绪；真正的加载互斥在 vector_engine 里。
+    try:
+        from app.services.vector_engine import warm_up
+        warm_up()
+    except Exception as exc:  # noqa: BLE001 — 预热失败不该影响启动
+        logger.warning(f"向量引擎预热未启动：{type(exc).__name__}: {exc}")
+
     yield
     logger.info("Shutting down...")
 

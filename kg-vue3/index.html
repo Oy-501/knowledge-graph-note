@@ -29,8 +29,17 @@
     })()
   </script>
 
-  <!-- Transformers.js 通过 CDN 全局加载，避免 Vite 打包时 onnxruntime-web 静态初始化失败 -->
-  <script src="https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js"></script>
+  <!--
+    Transformers.js 通过 CDN 全局加载，避免 Vite 打包时 onnxruntime-web 静态初始化失败。
+
+    必须带 defer。这是 898KB 的外部脚本，放在 <head> 且不带 defer 时是**解析阻塞**的：
+    浏览器要等它下载并执行完才继续解析，首屏被直接推后。
+    实测本机 CDN 可达也要多约 0.6s；CDN 不可达时按 TCP 超时算要卡约 21s
+    （对一个本地/桌面应用来说，首屏被第三方 CDN 拖住是不能接受的）。
+    加 defer 后不再阻塞解析；vectorEngine.js 的 getTransformers() 本来就是
+    轮询等待 window.transformers，行为不变。
+  -->
+  <script defer src="https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js"></script>
 </head>
 <body>
   <div id="app"></div>

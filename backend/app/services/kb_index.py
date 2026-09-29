@@ -13,9 +13,11 @@
 import json
 import math
 import re
+import threading
 from collections import Counter, defaultdict
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
+from sqlalchemy import text
 from loguru import logger
 
 # ---------------------------------------------------------------- 归一化
@@ -404,9 +406,78 @@ class KbIndex:
 
 # ---------------------------------------------------------------- 载入
 
+# 进程级索引缓存。为什么要缓存：load_index 一次要读全表 + 重建别名表和邻接表，
+# 实测约 60ms，而它在一次请求里只读一次、却几乎每个 KB 端点都要调。24 并发下
+# 24 份重建在 GIL 下排队，/api/kb/stats 的 p50 从 183ms 涨到 9.6s。
+_INDEX_LOCK = threading.Lock()
+_INDEX_CACHE: Dict[str, Any] = {"key": None, "index": None}
+
+# 指纹用的窄查询。刻意走 text() 而不是 ORM 列：
+# ORM 会把每行实例化成对象、并把 4 个 JSON 列逐个反序列化
+# （404 行 ≈ 1600 次 json.loads，实测占掉这些端点一半以上的 CPU）。
+# 这里只需要知道「内容变没变」，拿库里原样的字符串比对就行，不必解析。
+_KB_SCAN = text(
+    "select entity, aliases, domain, level, definition, bridge_sentences, "
+    "related_terms, opposite_terms, source, credibility from knowledge_base"
+)
+_REL_SCAN = text(
+    "select source_entity, target_entity, relation_type, relation_label, "
+    "weight, evidence from kb_relations"
+)
+
+
+def _content_key(db) -> int:
+    """知识库内容指纹：把参与建索引的列全读出来做键。
+
+    刻意用**内容级**而不是 `count(*) + max(id)` 那种计数级：
+    计数级对「改了一条已有条目」（改别名、改定义、改 related_terms）不敏感，
+    缓存会一直供旧数据，而且这种错很难被发现。内容级任何写路径（含将来新增的）
+    都自动生效，不需要在每个写入口手动失效 —— 那才是容易漏的地方。
+    """
+    kb = db.execute(_KB_SCAN).all()
+    rel = db.execute(_REL_SCAN).all()
+    # 没有类型信息时 SQLite 的 JSON 列回来的是原始字符串（不反序列化），
+    # 全是可哈希的标量，所以直接整体哈希即可，不必在内存里留一份大结构。
+    return hash((len(kb), len(rel),
+                 tuple(tuple(r) for r in kb),
+                 tuple(tuple(r) for r in rel)))
+
+
+def invalidate_index() -> None:
+    """清掉索引缓存（一般不需要：内容指纹会自动感知变化）。"""
+    with _INDEX_LOCK:
+        _INDEX_CACHE["key"] = None
+        _INDEX_CACHE["index"] = None
+
 
 def load_index(db) -> KbIndex:
-    """从数据库载入知识库索引"""
+    """载入知识库索引（带进程级缓存）。
+
+    KbIndex 构造完就只读（所有 self 赋值都在 __init__ 里），因此可以安全地
+    跨线程共享同一个实例。
+
+    锁的范围包含「读指纹 + 构建」：并发都未命中时只让一个线程构建，
+    其余等它建完直接取缓存。否则缓存只解决了热路径，冷启动那一下仍会
+    同时跑出 N 份构建。
+    """
+    with _INDEX_LOCK:
+        try:
+            key = _content_key(db)
+        except Exception as exc:  # noqa: BLE001 — 指纹读不到就退化为不缓存
+            logger.debug(f"知识库指纹计算失败，本次不缓存索引：{type(exc).__name__}: {exc}")
+            return _build_index(db)
+
+        if _INDEX_CACHE["key"] == key and _INDEX_CACHE["index"] is not None:
+            return _INDEX_CACHE["index"]
+
+        index = _build_index(db)
+        _INDEX_CACHE["key"] = key
+        _INDEX_CACHE["index"] = index
+        return index
+
+
+def _build_index(db) -> KbIndex:
+    """从数据库载入知识库索引（无缓存，实际构建在 __init__ 里）"""
     from app.models.models import KnowledgeBase, KbRelation
 
     entries = []

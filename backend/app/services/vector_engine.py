@@ -19,6 +19,7 @@ import json
 import math
 import os
 import re
+import threading
 from typing import Dict, Iterable, List, Optional
 from loguru import logger
 
@@ -29,12 +30,17 @@ ALGO_VERSION = "2"
 # 降级向量的维度。哈希到固定维度，取 256 以减少碰撞（原来是 100，碰撞概率偏高）。
 FALLBACK_DIM = 256
 
+# 模型推理的批大小。实测（300 条文本、12 线程）96 比 32 快约 10%，
+# 再往上（128+）就没收益了，只多占内存。
+ENCODE_BATCH_SIZE = 96
+
 _encoder = None
 _engine_mode = "fallback-tfidf"
 _engine_dim = FALLBACK_DIM
 _engine_error = ""
 _model_error_detail = ""   # 保留原始报错，供 doctor 展示原因
 _initialized = False       # 初始化只做一次；三态（成功/降级/指定降级）都要认
+_init_lock = threading.Lock()   # 模型加载互斥：没有它，并发请求会各加载一份（见 _init_encoder）
 
 # 语料 IDF 表：doc -> 词频分布
 _IDF: Dict[str, float] = {}
@@ -140,11 +146,31 @@ def _weight(token: str) -> float:
 # ---------------------------------------------------------------- 编码
 
 def _init_encoder() -> None:
-    """延迟初始化向量编码器（进程内只做一次）"""
+    """初始化向量编码器（进程内只做一次）。
+
+    **必须加锁。** 这里原来是「先检查 _initialized、再加载」的写法，而
+    `_initialized` 要到加载完成后才置位 —— 于是加载期间到达的并发请求
+    全都通过检查、各自加载一份模型。模型是几百 MB、加载要十几秒，
+    这个窗口大到必炸：实测 24 个并发请求触发了 24 次加载，
+    进程峰值内存 8.1GB，最慢请求 67 秒。
+
+    修法是双重检查 + 锁：锁外先快速判断（热路径不进锁），锁内再判断一次，
+    保证只有第一个线程真正加载，其余线程等它加载完直接复用。
+    """
     global _encoder, _engine_mode, _engine_dim, _engine_error, _model_error_detail, _initialized
     if _initialized:
         return
 
+    with _init_lock:
+        # 双重检查：等锁期间可能已经被别的线程加载好了
+        if _initialized:
+            return
+        _load_encoder()
+
+
+def _load_encoder() -> None:
+    """真正加载模型。只在持有 _init_lock 时调用。"""
+    global _encoder, _engine_mode, _engine_dim, _engine_error, _model_error_detail, _initialized
     from app.config import settings
 
     backend = (getattr(settings, "VECTOR_BACKEND", "auto") or "auto").lower()
@@ -159,12 +185,22 @@ def _init_encoder() -> None:
 
     _apply_hf_env(settings)
     try:
+        import torch
         from sentence_transformers import SentenceTransformer
 
         name = settings.VECTOR_MODEL
         cache_dir = settings.resolved_model_dir
         os.makedirs(cache_dir, exist_ok=True)
-        logger.info(f"Loading vector model: {name} (cache={cache_dir})")
+
+        # CPU 推理的线程数是个大旋钮，实测（16 逻辑核、300 条文本）：
+        #   6 线程 7.3ms/条 / 8 线程（torch 默认，等于物理核）6.0 / 12 线程 4.4 / 16 线程 4.9
+        # 也就是「留几个核给服务本身、其余都给推理」最快，吃满全部核反而因为
+        # 超订变慢。取逻辑核的 3/4，至少 2 个。
+        logical = os.cpu_count() or 2
+        threads = max(2, int(logical * 0.75))
+        torch.set_num_threads(threads)
+
+        logger.info(f"Loading vector model: {name} (cache={cache_dir}, torch_threads={threads})")
         model = SentenceTransformer(
             name,
             device="cpu",
@@ -194,27 +230,88 @@ def _init_encoder() -> None:
         _initialized = True
 
 
+def _model_already_cached(cache_dir: str, model_name: str) -> bool:
+    """缓存目录里是不是已经有这个模型的完整快照。"""
+    try:
+        if not os.path.isdir(cache_dir):
+            return False
+        tail = model_name.split("/")[-1]
+        for entry in os.listdir(cache_dir):
+            if not entry.startswith("models--") or not entry.endswith(tail):
+                continue
+            snapshots = os.path.join(cache_dir, entry, "snapshots")
+            if not os.path.isdir(snapshots):
+                continue
+            for rev in os.listdir(snapshots):
+                if os.listdir(os.path.join(snapshots, rev)):
+                    return True
+    except OSError as exc:
+        # 判不出来就当没缓存（会走联网检查），但留个线索：多半是权限或路径问题
+        logger.debug(f"探测模型缓存失败，按未缓存处理：{type(exc).__name__}: {exc}")
+    return False
+
+
 def _apply_hf_env(settings) -> None:
-    """HuggingFace 官方站在部分网络下不可达，允许配置镜像（默认 hf-mirror）。"""
+    """HuggingFace 官方站在部分网络下不可达，允许配置镜像（默认 hf-mirror）。
+
+    模型已经下好时**自动切离线**。huggingface-hub 每次加载都会去线上做一圈
+    HEAD 检查（adapter_config / processor_config / preprocessor_config…），
+    实测把冷启动从 4.0s 拖到 12.0s —— 全花在等网络往返上，而且模型就在本地。
+    命中缓存就置 HF_HUB_OFFLINE，既省这 8 秒，也让「断网也能启动」成立。
+    """
     endpoint = (getattr(settings, "HF_ENDPOINT", "") or "").strip()
     if endpoint and not os.environ.get("HF_ENDPOINT"):
         os.environ["HF_ENDPOINT"] = endpoint
+
     if getattr(settings, "HF_HUB_OFFLINE", False):
-        os.environ.setdefault("HF_HUB_OFFLINE", "1")
+        os.environ["HF_HUB_OFFLINE"] = "1"
+        return
+
+    if os.environ.get("HF_HUB_OFFLINE") != "1":
+        cache_dir = getattr(settings, "resolved_model_dir", "")
+        model_name = getattr(settings, "VECTOR_MODEL", "")
+        if cache_dir and model_name and _model_already_cached(cache_dir, model_name):
+            os.environ["HF_HUB_OFFLINE"] = "1"
+            logger.info("模型已在本地缓存，本次加载走离线模式（跳过版本检查）")
 
 
 def prepare(force: bool = False) -> bool:
-    """显式准备编码器（供启动自检 / 重建向量用），返回是否用上了模型。"""
+    """显式准备编码器（供启动自检 / 重建向量用），返回是否用上了模型。
+
+    force=True 会先清掉进程内的编码器再重新加载，用于「刚才失败了想再试一次」。
+    必须与 _init_encoder 共用同一把锁：否则清空的动作可能插在别的线程
+    正在用编码器的时候，把它手里的 _encoder 抽走。
+    """
     global _encoder, _engine_mode, _engine_dim, _engine_error, _model_error_detail, _initialized
-    if force:
-        _encoder = None
-        _engine_mode = "fallback-tfidf"
-        _engine_dim = FALLBACK_DIM
-        _engine_error = ""
-        _model_error_detail = ""
-        _initialized = False
-    _init_encoder()
+    with _init_lock:
+        if force:
+            _encoder = None
+            _engine_mode = "fallback-tfidf"
+            _engine_dim = FALLBACK_DIM
+            _engine_error = ""
+            _model_error_detail = ""
+            _initialized = False
+        if not _initialized:
+            _load_encoder()
     return _engine_mode == "transformers"
+
+
+def warm_up() -> None:
+    """后台预加载模型，把首次请求的十几秒挪到启动期（不阻塞服务就绪）。
+
+    为什么值得做：模型是延迟加载的，重启后第一个碰到向量引擎的请求
+    （通常是「系统自检」）要等整个加载过程，实测 28~67 秒 ——
+    用户看到的就是按钮点了半天没反应，很容易被当成服务挂了。
+    """
+    import threading as _t
+
+    def _worker():
+        try:
+            _init_encoder()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"向量引擎预热失败（不影响启动）：{type(exc).__name__}: {exc}")
+
+    _t.Thread(target=_worker, name="vector-warmup", daemon=True).start()
 
 
 def encode(text: str) -> List[float]:
@@ -242,7 +339,7 @@ def encode_batch(texts: List[str]) -> List[List[float]]:
                 texts,
                 convert_to_numpy=True,
                 normalize_embeddings=True,
-                batch_size=32,
+                batch_size=ENCODE_BATCH_SIZE,
                 show_progress_bar=False,
             )
             return [_to_list(v) for v in vecs]

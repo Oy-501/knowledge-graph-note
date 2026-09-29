@@ -7,6 +7,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File as FastAPIFile, UploadFile
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -33,12 +34,14 @@ def kb_stats(user_id: int = 1, db: Session = Depends(get_db)):
     # 否则会出现「知识点 404 / 来源合计 406」这种对不上的数字
     canonical = set(index.entries.keys())
     seen_entities = set()
-    for e in db.query(KnowledgeBase).all():
-        if e.entity in canonical and e.entity not in seen_entities:
-            seen_entities.add(e.entity)
-            source_counter[e.source or "unknown"] += 1
-    for r in db.query(KbRelation).all():
-        source_counter["relation:" + (r.origin or "derived")] += 1
+    # 只取用得到的列：这些统计不需要完整对象，全表读 ORM 对象在并发下很贵
+    for ent, src in db.query(KnowledgeBase.entity, KnowledgeBase.source).all():
+        if ent in canonical and ent not in seen_entities:
+            seen_entities.add(ent)
+            source_counter[src or "unknown"] += 1
+    # 关系边按 origin 计数：2631 行只需要 2 个数字，交给 SQL 分组算
+    for origin, cnt in db.query(KbRelation.origin, func.count()).group_by(KbRelation.origin).all():
+        source_counter["relation:" + (origin or "derived")] += cnt
 
     profiles = db.query(FileKnowledgeProfile).all()
     file_total = db.query(File).filter_by(user_id=user_id).count()
@@ -79,9 +82,11 @@ def list_entries(
     _lim, _off = clamp_paging(limit, offset, max_limit=200)
     rows = query.order_by(KnowledgeBase.id.desc()).offset(_off).limit(_lim).all()
 
-    rel_counter: Counter = Counter()
-    for r in db.query(KbRelation).all():
-        rel_counter[r.source_entity] += 1
+    # 每条目的关系数：用 SQL 分组，别把整张关系表读进内存再数
+    rel_counter: Counter = Counter(dict(
+        db.query(KbRelation.source_entity, func.count())
+          .group_by(KbRelation.source_entity).all()
+    ))
 
     return {
         "total": total,
@@ -328,35 +333,54 @@ def kb_match(payload: MatchPayload, db: Session = Depends(get_db)):
 
 @router.get("/graph")
 def kb_graph(domain: str = "", keyword: str = "", limit: int = 150, db: Session = Depends(get_db)):
-    """知识库本体图（知识点 + 关系边），供前端 D3 渲染"""
-    query = db.query(KnowledgeBase)
+    """知识库本体图（知识点 + 关系边），供前端 D3 渲染
+
+    取数刻意只选用得到的列、并把 definition 的截断放到 SQL 里：
+    这个接口返回的是「节点 + 边」的大 JSON，读全对象和读整段 definition
+    都会直接变成序列化开销（实测接口耗时远高于函数体耗时的部分就在这里）。
+    """
+    query = db.query(
+        KnowledgeBase.entity, KnowledgeBase.domain, KnowledgeBase.level,
+        func.substr(KnowledgeBase.definition, 1, 200).label("definition"),
+        KnowledgeBase.aliases, KnowledgeBase.source, KnowledgeBase.credibility,
+    )
     if domain:
         query = query.filter(KnowledgeBase.domain == domain)
     if keyword:
         query = query.filter(KnowledgeBase.entity.ilike(f"%{escape_like(keyword)}%", escape='\\'))
     _lim, _ = clamp_paging(limit, max_limit=400, default_limit=200)
     rows = query.order_by(KnowledgeBase.level.asc()).limit(_lim).all()
-    names = {e.entity for e in rows}
+    names = {e[0] for e in rows}
 
-    rels = db.query(KbRelation).all()
-    links = [{
-        "source": r.source_entity, "target": r.target_entity,
-        "relation_type": r.relation_type, "relation_label": r.relation_label,
-        "weight": r.weight, "evidence": r.evidence, "origin": r.origin,
-    } for r in rels if r.source_entity in names and r.target_entity in names]
+    # 两端都在本页节点里的边才要。过滤下推到 SQL：原来是把整张关系表读出来
+    # 再在 Python 里逐条判断，几千条边 × 每次请求，白读也白算。
+    links = []
+    if names:
+        rels = db.query(
+            KbRelation.source_entity, KbRelation.target_entity, KbRelation.relation_type,
+            KbRelation.relation_label, KbRelation.weight, KbRelation.evidence,
+            KbRelation.origin,
+        ).filter(
+            KbRelation.source_entity.in_(names),
+            KbRelation.target_entity.in_(names),
+        ).all()
+        links = [{
+            "source": r[0], "target": r[1], "relation_type": r[2],
+            "relation_label": r[3], "weight": r[4], "evidence": r[5], "origin": r[6],
+        } for r in rels]
 
     linked = {l["source"] for l in links} | {l["target"] for l in links}
     return {
         "nodes": [{
-            "id": e.entity, "entity": e.entity, "domain": e.domain, "level": e.level or 3,
-            "definition": (e.definition or "")[:200], "aliases": e.aliases or [],
-            "source": e.source, "degree": 0,
-            "isolated": e.entity not in linked,
-            "credibility": e.credibility or 5,
+            "id": e[0], "entity": e[0], "domain": e[1], "level": e[2] or 3,
+            "definition": e[3] or "", "aliases": e[4] or [],
+            "source": e[5], "degree": 0,
+            "isolated": e[0] not in linked,
+            "credibility": e[6] or 5,
         } for e in rows],
         "links": links,
         "truncated": len(names) >= limit,
-        "total_entries": db.query(KnowledgeBase).count(),
+        "total_entries": db.query(func.count(KnowledgeBase.id)).scalar() or 0,
     }
 
 

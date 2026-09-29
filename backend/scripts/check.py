@@ -939,13 +939,54 @@ def check_vector_wiring() -> None:
                             f"{rel} 里 {{\"{key.value}\": {val.value!r}}} 是硬编码，"
                             f"应按真实依据推导")
 
+    # ---- ④ 并发敏感的单次初始化 / 单次构建必须加锁 ----
+    #
+    # 守的是一次实测出来的事故：模型是延迟加载的，而「先查标志、再加载、
+    # 最后置标志」在加载期间完全不设防 —— 加载要十几秒，窗口极大。
+    # 24 个并发请求触发了 24 次加载，进程峰值 8.1GB，最慢请求 67 秒。
+    # 单用户也会碰到（前端首屏同时发多个请求），但从日志里根本看不出所以然，
+    # 所以必须由体检挡住。
+    lock_guards = [
+        ("app/services/vector_engine.py", "_init_encoder", "_init_lock",
+         "模型加载（几百 MB、十几秒）"),
+        ("app/services/kb_index.py", "load_index", "_INDEX_LOCK",
+         "知识库索引重建（每次约 60ms，且几乎每个 KB 端点都调）"),
+    ]
+    for rel, func_name, lock_name, what in lock_guards:
+        py = PROJECT / "backend" / rel
+        if not py.exists():
+            continue
+        try:
+            tree = ast.parse(py.read_text(encoding="utf-8"))
+        except (SyntaxError, UnicodeDecodeError):
+            continue
+        fns = {n.name: n for n in ast.walk(tree)
+               if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+        fn = fns.get(func_name)
+        if fn is None:
+            problems.append(f"{rel} 里找不到 {func_name}")
+            continue
+        guarded = False
+        for node in ast.walk(fn):
+            if isinstance(node, (ast.With, ast.AsyncWith)):
+                for item in node.items:
+                    names = {x.id for x in ast.walk(item.context_expr)
+                             if isinstance(x, ast.Name)}
+                    if lock_name in names:
+                        guarded = True
+        if not guarded:
+            problems.append(
+                f"{rel} 的 {func_name} 没持有 {lock_name}"
+                f"（{what}会被并发重做，危险且很难从日志看出来）")
+
     if problems:
         add("vector_wiring", "语义向量接线", FAIL, "；".join(problems[:4]),
             "降级编码要按字切词；embedding 与 embedding_meta 成对写；"
-            "连线标记按依据推导，不要写死")
+            "连线标记按依据推导；单次初始化/构建必须加锁")
     else:
         add("vector_wiring", "语义向量接线", OK,
-            "降级编码中文按字切词有实证 · 向量与引擎指纹成对写入 · 连线标记均由依据推导")
+            "降级编码中文按字切词有实证 · 向量与引擎指纹成对写入 · "
+            "连线标记均由依据推导 · 模型加载与索引构建均有并发锁")
 
 
 # ------------------------------------------------------------------ 主流程
