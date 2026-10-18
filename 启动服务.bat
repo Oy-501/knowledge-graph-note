@@ -7,9 +7,9 @@ echo   知识图谱系统 - 一键启动
 echo ========================================
 echo.
 
-:: 启动后端（app.main，端口 8080）
-echo [1/2] 启动后端 FastAPI (端口 8080)...
-start "后端 - FastAPI" cmd /k "cd /d c:\Users\yr200\Documents\trae_projects\YR\backend && py -m uvicorn app.main:app --host 127.0.0.1 --port 8080"
+:: 启动后端（app.main，端口 8088）
+echo [1/2] 启动后端 FastAPI (端口 8088)...
+start "后端 - FastAPI" cmd /k "cd /d c:\Users\yr200\Documents\trae_projects\YR\backend && py -m uvicorn app.main:app --host 127.0.0.1 --port 8088"
 
 timeout /t 3 /nobreak >nul
 
@@ -20,7 +20,7 @@ start "前端 - Vue3" cmd /k "cd /d c:\Users\yr200\Documents\trae_projects\YR\kg
 timeout /t 3 /nobreak >nul
 
 echo.
-echo   后端 API: http://127.0.0.1:8080
+echo   后端 API: http://127.0.0.1:8088
 echo   前端页面: http://127.0.0.1:5173
 echo ========================================
 echo.
