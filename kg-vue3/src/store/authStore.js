@@ -52,6 +52,12 @@ export const useAuthStore = defineStore('auth', () => {
   const busy = ref(false)
   /** 探测失败的原因（登录页据此提示「后端没启动」这类问题） */
   const probeError = ref('')
+  /**
+   * 待展示的一次性恢复码：{ code, reason }。
+   * reason = bootstrap | register | reset —— 弹窗文案要跟着场景走。
+   * 后端只返回这一次，展示完必须清掉；刷新页面就再也拿不到了（库里只有哈希）。
+   */
+  const pendingRecovery = ref(null)
 
   // 内存里的令牌与 localStorage 保持同步，避免两处各写一遍
   setSessionToken(token.value)
@@ -115,6 +121,9 @@ export const useAuthStore = defineStore('auth', () => {
     // 否则登出后又会回到初始化表单，而它已经被后端 403 拒了
     needBootstrap.value = false
     setSession(data.token, data.user)
+    if (data.recovery_code) {
+      pendingRecovery.value = { code: data.recovery_code, reason: 'bootstrap' }
+    }
     return data
   }
 
@@ -127,7 +136,34 @@ export const useAuthStore = defineStore('auth', () => {
   async function register({ username, password }) {
     const data = await authAPI.register({ username, password })
     setSession(data.token, data.user)
+    if (data.recovery_code) {
+      pendingRecovery.value = { code: data.recovery_code, reason: 'register' }
+    }
     return data
+  }
+
+  /**
+   * 忘记密码：用恢复码换新密码。
+   *
+   * **不自动登录**：重置后应当让用户用新密码自己登一次 ——
+   * 顺手把人登进去，会掩盖「新密码到底能不能用」这个最该被验证的事。
+   */
+  async function resetPassword({ username, recoveryCode, newPassword }) {
+    const data = await authAPI.resetPassword({ username, recoveryCode, newPassword })
+    if (data.recovery_code) {
+      pendingRecovery.value = { code: data.recovery_code, reason: 'reset' }
+    }
+    return data
+  }
+
+  /** 用户表示「已保存」后清掉，避免弹窗反复出现 */
+  function dismissRecovery() {
+    pendingRecovery.value = null
+  }
+
+  /** 后台创建账号 / 重置他人密码后，复用同一个恢复码弹窗展示结果 */
+  function showRecovery(code, reason = 'reset') {
+    if (code) pendingRecovery.value = { code, reason }
   }
 
   /** 登出：先尽力通知后端吊销，再清本地（后端失败也必须清，否则退不出去） */
@@ -159,9 +195,11 @@ export const useAuthStore = defineStore('auth', () => {
 
   return {
     token, user, needBootstrap, registrationOpen, sessionTtlDays,
-    ready, probing, busy, probeError,
+    ready, probing, busy, probeError, pendingRecovery,
     isAuthed, isAdmin, displayName,
     probe, setSession, clearLocal,
     bootstrap, login, register, logout, refreshMe, changePassword,
+    resetPassword, dismissRecovery,
+    showRecovery,
   }
 })

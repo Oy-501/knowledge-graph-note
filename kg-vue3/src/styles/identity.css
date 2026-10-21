@@ -1,0 +1,168 @@
+/* ============================================================
+   identity.css —— 「学术仪器」身份层
+   ------------------------------------------------------------
+   这一层放在 main.css / texture.css / ai-ui.css **之后**加载，
+   只做三件事，不改任何组件结构：
+
+   1. 引入展示字（衬线）与身份色（朱砂）两个令牌；
+   2. 导航栏的品牌印记与当前页签的编辑式下划线；
+   3. 页面级标题（h2）的衬线化 + 朱砂菱形导引符。
+
+   为什么强调色仍然是青色、不换成朱砂：
+   朱砂与 --danger(#FB7185) 同属红区，一旦拿它当交互色，
+   按钮、链接、错误提示会混成一片 —— 「危险」就不再是危险。
+   所以这里把朱砂限定为**身份色**（印章 / 栏号 / 当前页），
+   交互色继续由 --accent 负责。两个色各司其职，互不借位。
+   ============================================================ */
+
+:root {
+  /* 展示字：系统里已有的衬线（宋体系），不引外链字体 —— 桌面端离线可用。
+     只用于 ≥18px 的标题与品牌，小字仍走黑体（宋体小字在 1x 屏上发虚）。 */
+  --font-display: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", serif;
+
+  /* 身份色：朱砂。亮色底用偏深的朱砂保证对比 */
+  --seal: #b8362a;
+  --seal-ink: #fdfbf7;
+
+  /* 发丝线：编辑排版的分栏线，比 --border 更清晰但仍是 1px */
+  --rule: color-mix(in srgb, var(--text-primary) 22%, transparent);
+
+  /* 圆角不再在这里收紧：全站只有三档（控件 6 / 卡片 10 / 浮层 14），
+     由 main.css 统一定义。这一层如果另写一套，就会出现「同一个按钮
+     在两个页面圆角不同」—— 这正是要消灭的那类不一致。 */
+}
+
+html.dark {
+  /* 深底上的朱砂要提亮，否则发闷、看不出是朱砂 */
+  --seal: #dc4a32;
+  --seal-ink: #120806;
+  --rule: color-mix(in srgb, var(--text-primary) 18%, transparent);
+}
+
+/* 颗粒层强度：main.css 里的默认值是 0.5（亮）/ 0.35（暗）。
+   但颗粒的职责是「打散色带」，0.35 已经明显压过这个职责 —— 全屏 feTurbulence
+   在 1x 屏上看起来像压缩噪点，而不是纸纹。压到 0.14 / 0.16 只留「有材质」的暗示。
+   注意：这是**默认值**；用户在「背景 CSS」里调过的话仍以自己的设置为准。 */
+:root { --tex-grain-opacity: 0.14; }
+html.dark { --tex-grain-opacity: 0.16; }
+
+/* ============================ 导航栏 ============================ */
+
+/* 顶栏 48px：8 个视图页签移到左侧导航后，顶栏只承载品牌与全局入口，
+   省下的 4px 全部还给画布。 */
+.app-topbar {
+  height: 48px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--rule);
+  box-shadow: none;
+}
+
+.app-topbar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 12px;
+  font-family: var(--font-display);
+  font-size: calc(var(--fs-base) + 1px);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* 印章：全站的身份印记，和落地页同一枚。
+   旋转 -3° 是刻意的「盖章」感，不摆正 —— 摆正就成了一个普通方块图标。 */
+.app-seal {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  background: var(--seal);
+  color: var(--seal-ink);
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 15px;
+  line-height: 1;
+  border-radius: 2px;
+  transform: rotate(-3deg);
+  position: relative;
+  box-shadow: 1.5px 1.5px 0 rgba(0, 0, 0, 0.35);
+}
+.app-seal::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border: 1px solid color-mix(in srgb, var(--seal-ink) 55%, transparent);
+  pointer-events: none;
+}
+html.dark .app-seal { box-shadow: 1.5px 1.5px 0 rgba(0, 0, 0, 0.55); }
+
+/* 导航项：从「顶部横排页签」改为「左侧竖排导航」。
+   选中标记随位置一起从「底部 2px 下划线」改为「左侧 3px 竖条」——
+   位置变了，但「只落在标记位、只占几像素」的约定没变。 */
+.nav-tab {
+  position: relative;
+  border-radius: var(--radius-sm);
+  padding: 0 10px;
+}
+.app-sidebar.is-collapsed .nav-tab { padding: 0; }
+
+/* 选中标记吃 --mark：这是模块身份在外壳层唯一的落点。
+   8 个导航项里同时只有一个激活，所以任何时刻屏幕上只有一种模块色 ——
+   不会变成彩虹导航。图谱这样的纯画布页没有页面标题，这里是它唯一的身份落点。 */
+.nav-tab.active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--mark, var(--seal));
+}
+/* 当前页的快捷键角标常显，且用等宽字 —— 编辑刊物的栏号感 */
+.nav-tab.active .nav-tab-key {
+  color: var(--seal);
+  background: transparent;
+  font-weight: 700;
+}
+
+/* ============================ 页面标题 ============================ */
+
+/* 只作用于页面级 h2（各视图的页头标题）。组件内部的 h3 不动 ——
+   控制面板这类高密度区域里，衬线小标题会显得局促。 */
+.app-view h2 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  font-size: calc(var(--fs-lg) + 1px);
+}
+
+/* 菱形导引符：所有页面标题共用一个「栏目起始」标记，
+   是这一层最显眼的重复母题，也是全站最容易记住的形状。
+
+   颜色改吃 --mark（模块令牌，见 styles/modules.css），不再写死朱砂：
+   这样切页签时只有这枚 7px 的菱形换色，其余外壳纹丝不动 ——
+   个性因此是「换个标记」，而不是「整页换皮」。
+   印章 .app-seal 仍然固定朱砂：那是品牌印记，不属于任何单个模块。 */
+.app-view h2::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 10px;
+  background: var(--mark, var(--seal));
+  transform: rotate(45deg) translateY(-1px);
+  vertical-align: 0.06em;
+}
+
+/* 大数字（统计 / 计数）走等宽 + 表格数字，读数不跳动 */
+.app-view .stat-value,
+.app-view .num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================ 降级 ============================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .app-seal { box-shadow: none; }
+}

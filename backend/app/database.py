@@ -67,11 +67,12 @@ _COLUMN_MIGRATIONS = {
         ("chunk_index", "ALTER TABLE nodes ADD COLUMN chunk_index INTEGER DEFAULT 0"),
         ("embedding_meta", "ALTER TABLE nodes ADD COLUMN embedding_meta VARCHAR(255)"),
     ],
-    # 用户认证：密码哈希（NULL=未初始化）、角色、禁用标记
+    # 用户认证：密码哈希（NULL=未初始化）、角色、禁用标记、恢复码哈希
     "users": [
         ("password_hash", "ALTER TABLE users ADD COLUMN password_hash VARCHAR(255)"),
         ("role", "ALTER TABLE users ADD COLUMN role VARCHAR(20) DEFAULT 'user'"),
         ("is_disabled", "ALTER TABLE users ADD COLUMN is_disabled BOOLEAN DEFAULT FALSE"),
+        ("recovery_hash", "ALTER TABLE users ADD COLUMN recovery_hash VARCHAR(255)"),
     ],
     # 公共知识库：署名/下架开关/分享时间（种子条目 shared_by_user_id 保持 NULL）
     "knowledge_base": [

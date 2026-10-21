@@ -55,6 +55,10 @@ WRITE_GUARD_EXEMPT = {
     ("POST", "/api/auth/login"),
     ("POST", "/api/auth/register"),
     ("POST", "/api/auth/bootstrap"),
+    # 忘记密码：用户此时**一定**没有可用会话（否则不会来重置）。
+    # 它靠「用户名 + 恢复码」这对凭证守卫，不靠会话；
+    # 失败次数单独计数（security.reset_limiter），不复用登录额度。
+    ("POST", "/api/auth/reset-password"),
 }
 
 # 「登录即可，不要求管理员」的写端点。
@@ -65,6 +69,20 @@ WRITE_GUARD_EXEMPT = {
 WRITE_GUARD_USER_LEVEL = {
     ("POST", "/api/auth/logout"),
     ("POST", "/api/auth/password"),
+
+    # ---- 个人空间：登录即可，不要求管理员 ----
+    # 昵称、头像、背景（含背景素材参数）都是「自己的东西」，改它不影响任何别人，
+    # 也不改变知识内容。把它挂到管理员门槛上是过度收紧：普通账号连换个背景都会被
+    # 403 挡住，而这跟权限模型要保护的东西（知识内容的增删改、对外公开）毫无关系。
+    # 判定原则：**只有会改变「知识」或「他人可见状态」的写操作才要管理员**，
+    # 纯个人偏好一律落在这一档。
+    ("PUT", "/api/profile"),
+    ("POST", "/api/profile/avatar"),
+    ("POST", "/api/profile/background"),
+    ("DELETE", "/api/profile/background"),
+
+    # 文本摘要：纯计算，不改任何数据；登录即可用
+    ("POST", "/api/system/summarize"),
 }
 
 # 后台自身已有更强的校验（恒定时间比较 + 失败限流），避免重复判定

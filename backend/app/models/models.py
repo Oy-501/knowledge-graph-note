@@ -14,6 +14,8 @@ class User(Base):
     username = Column(String(100), unique=True, nullable=False)
     # ---- 认证（补列，走 database._COLUMN_MIGRATIONS）----
     password_hash = Column(String(255))        # bcrypt；NULL=未初始化（旧 default 行）
+    # 恢复码：忘记密码时用它自助重置。只存 bcrypt 哈希，明文只在生成时显示一次。
+    recovery_hash = Column(String(255))
     role = Column(String(20), default="user")  # user | admin
     is_disabled = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)

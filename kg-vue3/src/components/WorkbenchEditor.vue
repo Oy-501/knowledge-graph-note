@@ -1590,7 +1590,7 @@ defineExpose({ focus })
 .wbe-preview-content ::selection { background: var(--accent-soft); }
 
 /* 标题输入获得焦点的高亮底边 */
-.wbe-title-input:focus { border-bottom-color: var(--mint); }
+.wbe-title-input:focus { border-bottom-color: var(--accent); }
 
 /* 右键菜单 / 关联浮窗 更柔和 */
 .wbe-context-menu,

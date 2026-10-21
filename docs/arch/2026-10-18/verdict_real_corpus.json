@@ -1,0 +1,598 @@
+{
+  "说明": "从正式库 backend/kg.db 只读导出的真实语料，供 tests/test_verdict_real_data.py 使用。测试仍在独立的测试库里跑（不连正式库），这里导出的只是**输入文本**与**当时的判定记录**。",
+  "真实候选": [
+    {
+      "id": 1,
+      "entity": "LLM",
+      "description": "普通 LLM：单次问答，没有自主行动，不会主动调用外部能力，无持久记忆。",
+      "keywords": [
+        "普通",
+        "单次问答",
+        "没有自主行动",
+        "不会主动调用",
+        "外部能力",
+        "无持久记忆",
+        "LLM"
+      ],
+      "domain": "software",
+      "level": 3,
+      "生产库判定": {
+        "score": 0.73,
+        "decision": "pending",
+        "stage": "auto",
+        "web": "ok",
+        "status": "open"
+      }
+    },
+    {
+      "id": 2,
+      "entity": "基础概念辨析",
+      "description": "Agent：闭环循环思考→行动→观察→反思，自主决定要不要调用工具，支持长任务。",
+      "keywords": [
+        "闭环循环思考",
+        "行动",
+        "观察",
+        "反思",
+        "自主决定要不",
+        "要调用工具",
+        "Agent"
+      ],
+      "domain": "writing",
+      "level": 3,
+      "生产库判定": {
+        "score": 0.48,
+        "decision": "pending",
+        "stage": "auto",
+        "web": "ok",
+        "status": "open"
+      }
+    },
+    {
+      "id": 3,
+      "entity": "基础概念辨析",
+      "description": "Agent：模型自主判断下一步动作，遇到失败可以动态修改计划，步骤不固定。",
+      "keywords": [
+        "固定写死流程",
+        "步骤人为预先",
+        "编排",
+        "不能动态调整",
+        "Chain",
+        "模型自主判断",
+        "下一步动作",
+        "遇到失败可以",
+        "动态修改计划",
+        "步骤不固定",
+        "Agent"
+      ],
+      "domain": "ai",
+      "level": 3,
+      "生产库判定": {
+        "score": 0.53,
+        "decision": "pending",
+        "stage": "auto",
+        "web": "ok",
+        "status": "open"
+      }
+    },
+    {
+      "id": 4,
+      "entity": "Memory 记忆模块",
+      "description": "放在 Prompt 上下文窗口，保存当前任务中间步骤、思考过程、工具返回结果；窗口满了需要做摘要、截断、压缩。",
+      "keywords": [
+        "分为三类记忆",
+        "解决上下文窗",
+        "口有限的问题",
+        "Git",
+        "Hub",
+        "放在",
+        "上下文窗口",
+        "保存当前任务",
+        "中间步骤",
+        "思考过程",
+        "工具返回结果",
+        "Prompt",
+        "保存本次对话",
+        "历史",
+        "用户本轮交互",
+        "信息",
+        "会话结束可以",
+        "清除",
+        "存入向量数据",
+        "数据库",
+        "跨会话复用",
+        "细分"
+      ],
+      "domain": "software",
+      "level": 3,
+      "生产库判定": {
+        "score": 0.48,
+        "decision": "pending",
+        "stage": "auto",
+        "web": "ok",
+        "status": "open"
+      }
+    },
+    {
+      "id": 5,
+      "entity": "Planning 规划推理模块",
+      "description": "负责把大任务拆解成小的子任务，动态调整方案GitHub",
+      "keywords": [
+        "负责把大任务",
+        "拆解成小的子",
+        "任务",
+        "动态调整方案",
+        "Git",
+        "Hub"
+      ],
+      "domain": "software",
+      "level": 3,
+      "生产库判定": {
+        "score": 0.58,
+        "decision": "pending",
+        "stage": "auto",
+        "web": "ok",
+        "status": "open"
+      }
+    },
+    {
+      "id": 6,
+      "entity": "API",
+      "description": "Agent 和外部世界交互的手段：搜索、数据库查询、API 调用、代码执行、计算器、文件读写。",
+      "keywords": [
+        "和外部世界交",
+        "互的手段",
+        "搜索",
+        "数据库查询",
+        "调用",
+        "代码执行",
+        "Agent",
+        "API"
+      ],
+      "domain": "software",
+      "level": 3,
+      "生产库判定": {
+        "score": 0.58,
+        "decision": "pending",
+        "stage": "auto",
+        "web": "ok",
+        "status": "open"
+      }
+    },
+    {
+      "id": 7,
+      "entity": "Tools 工具模块",
+      "description": "工具调用常见故障：参数缺失、格式错误、接口超时、重复调用工具、无意义循环调用。",
+      "keywords": [
+        "工具调用常见",
+        "故障",
+        "参数缺失",
+        "格式错误",
+        "接口超时",
+        "重复调用工具",
+        "优化手段",
+        "设置最大调用",
+        "轮次",
+        "参数校验",
+        "重试熔断",
+        "无需工具时禁"
+      ],
+      "domain": "software",
+      "level": 3,
+      "生产库判定": {
+        "score": 0.43,
+        "decision": "pending",
+        "stage": "auto",
+        "web": "ok",
+        "status": "open"
+      }
+    },
+    {
+      "id": 8,
+      "entity": "Reflection 反思模块",
+      "description": "执行完子任务之后自我校验结果，判断是否出错，是否需要重新执行，修正计划。",
+      "keywords": [
+        "执行完子任务",
+        "之后自我校验",
+        "结果",
+        "判断是否出错",
+        "是否需要重新",
+        "执行"
+      ],
+      "domain": "software",
+      "level": 3,
+      "生产库判定": {
+        "score": 0.38,
+        "decision": "pending",
+        "stage": "auto",
+        "web": "ok",
+        "status": "open"
+      }
+    },
+    {
+      "id": 9,
+      "entity": "RAG",
+      "description": "RAG 主要解决私有知识库问答；Agent 可以把 RAG 作为其中一个工具。",
+      "keywords": [
+        "主要解决私有",
+        "知识库问答",
+        "可以把",
+        "作为其中一个",
+        "工具",
+        "RAG",
+        "Agent"
+      ],
+      "domain": "software",
+      "level": 3,
+      "生产库判定": {
+        "score": 0.83,
+        "decision": "pending",
+        "stage": "auto",
+        "web": "ok",
+        "status": "open"
+      }
+    },
+    {
+      "id": 10,
+      "entity": "注入",
+      "description": "Prompt 注入、越权调用工具；遵循最小权限原则，输入输出做脱敏过滤。",
+      "keywords": [
+        "注入",
+        "越权调用工具",
+        "遵循最小权限",
+        "原则",
+        "输入输出做脱",
+        "敏过滤",
+        "Prompt"
+      ],
+      "domain": "software",
+      "level": 3,
+      "生产库判定": {
+        "score": 0.0,
+        "decision": "reject",
+        "stage": "auto",
+        "web": "ok",
+        "status": "rejected"
+      }
+    },
+    {
+      "id": 11,
+      "entity": "高频面试问答",
+      "description": "缺点：结果不可 100% 确定，有幻觉，成本高，存在循环风险，需要做大量容错。",
+      "keywords": [
+        "优点",
+        "不用写大量硬",
+        "编码逻辑",
+        "处理模糊",
+        "非结构化任务",
+        "缺点",
+        "结果不可",
+        "确定",
+        "有幻觉",
+        "成本高",
+        "存在循环风险"
+      ],
+      "domain": "software",
+      "level": 3,
+      "生产库判定": {
+        "score": 0.43,
+        "decision": "pending",
+        "stage": "auto",
+        "web": "ok",
+        "status": "open"
+      }
+    }
+  ],
+  "真实知识库样本": [
+    {
+      "entity": "Agent",
+      "definition": "Agent 以 LLM 为大脑，结合工具调用与规划，能自主完成多步任务，是 LLM 从对话到行动的进化方向。",
+      "domain": "ai_ml",
+      "related_terms": [
+        "LLM",
+        "工具调用",
+        "函数调用"
+      ]
+    },
+    {
+      "entity": "BERT",
+      "definition": "BERT 以 Transformer 编码器与掩码语言模型实现双向理解，是 NLP 文本分类与命名实体识别的预训练基石。",
+      "domain": "ai_ml",
+      "related_terms": [
+        "Transformer",
+        "编码器",
+        "预训练"
+      ]
+    },
+    {
+      "entity": "CNN",
+      "definition": "CNN 以卷积与池化提取图像空间特征，是计算机视觉图像识别与目标检测的基准模型。",
+      "domain": "ai_ml",
+      "related_terms": [
+        "深度学习",
+        "卷积",
+        "池化"
+      ]
+    },
+    {
+      "entity": "Dijkstra 算法",
+      "definition": "Dijkstra 算法以贪心优先队列求解非负权图最短路径，是网络路由协议 OSPF 的底层算法。",
+      "domain": "algorithm",
+      "related_terms": [
+        "最短路径",
+        "图",
+        "贪心算法"
+      ]
+    },
+    {
+      "entity": "LRU 缓存",
+      "definition": "LRU 缓存以哈希表加双向链表实现最近最少使用淘汰，是 Redis 内存淘汰与操作系统页面置换的标准策略。",
+      "domain": "algorithm",
+      "related_terms": [
+        "哈希表",
+        "链表",
+        "Redis"
+      ]
+    },
+    {
+      "entity": "PageRank",
+      "definition": "PageRank 通过入度与出度衡量图节点中心度，是孤儿收养机制选取 Top5 核心节点的算法原型。",
+      "domain": "algorithm",
+      "related_terms": [
+        "图",
+        "中心度",
+        "节点"
+      ]
+    },
+    {
+      "entity": "API 版本管理",
+      "definition": "API 版本管理以 URL 路径或请求头区分版本，是微服务接口演进时保持向后兼容的标准实践。",
+      "domain": "backend",
+      "related_terms": [
+        "RESTful API",
+        "后端网关",
+        "微服务架构"
+      ]
+    },
+    {
+      "entity": "RBAC",
+      "definition": "RBAC 以角色关联权限，简化授权管理，是后端微服务权限设计的主流模型。",
+      "domain": "backend",
+      "related_terms": [
+        "授权",
+        "ABAC",
+        "角色"
+      ]
+    },
+    {
+      "entity": "Raft",
+      "definition": "Raft 以领导选举与日志复制实现分布式共识，是 etcd 与 TiKV 等分布式系统一致性保障的底层算法。",
+      "domain": "backend",
+      "related_terms": [
+        "分布式系统",
+        "一致性",
+        "共识算法"
+      ]
+    },
+    {
+      "entity": "ACID",
+      "definition": "ACID 是 SQL 关系型数据库事务的四大保证，与分布式 CAP 理论中的强一致分支相对应。",
+      "domain": "data_flow",
+      "related_terms": [
+        "SQL 关系型数据库",
+        "事务",
+        "原子性"
+      ]
+    },
+    {
+      "entity": "B+ 树",
+      "definition": "B+ 树以多叉平衡结构减少磁盘 IO，是 MySQL 索引与范围查询的数据结构基础。",
+      "domain": "data_flow",
+      "related_terms": [
+        "索引",
+        "二叉树",
+        "范围查询"
+      ]
+    },
+    {
+      "entity": "BASE",
+      "definition": "BASE 选择最终一致性，是 NoSQL 在 CAP 权衡下相对 ACID 的折中策略。",
+      "domain": "data_flow",
+      "related_terms": [
+        "CAP",
+        "NoSQL",
+        "最终一致性"
+      ]
+    },
+    {
+      "entity": "DevOps",
+      "definition": "DevOps 以 CI/CD 与 IaC 打通开发运维壁垒，是微服务架构从代码到生产的全链路自动化方法论。",
+      "domain": "devops",
+      "related_terms": [
+        "CI/CD",
+        "监控告警",
+        "基础设施即代码"
+      ]
+    },
+    {
+      "entity": "ELK",
+      "definition": "ELK 以 Elasticsearch 存储、Logstash 采集、Kibana 可视化，是日志聚合与监控告警的经典技术栈。",
+      "domain": "devops",
+      "related_terms": [
+        "日志聚合",
+        "Elasticsearch",
+        "Logstash"
+      ]
+    },
+    {
+      "entity": "GitOps",
+      "definition": "GitOps 以 Git 仓库为单一事实来源驱动 Kubernetes 部署，ArgoCD 是其代表，是声明式配置的 DevOps 实践。",
+      "domain": "devops",
+      "related_terms": [
+        "Git",
+        "CI/CD",
+        "Kubernetes"
+      ]
+    },
+    {
+      "entity": "Docker 容器化",
+      "definition": "Docker 容器化基于 Linux 内核命名空间与 Cgroups，将微服务及其依赖打包为镜像，支撑持续集成交付。",
+      "domain": "framework",
+      "related_terms": [
+        "微服务架构",
+        "镜像",
+        "容器"
+      ]
+    },
+    {
+      "entity": "Grafana",
+      "definition": "Grafana 将 Prometheus 指标与日志数据可视化，以仪表盘与告警规则呈现，是监控系统的展示层。",
+      "domain": "framework",
+      "related_terms": [
+        "Prometheus",
+        "监控告警",
+        "仪表盘"
+      ]
+    },
+    {
+      "entity": "Helm",
+      "definition": "Helm 以模板化 Chart 打包 Kubernetes 资源，是 K8s 的包管理器，与配置中心协同管理微服务部署。",
+      "domain": "framework",
+      "related_terms": [
+        "Kubernetes",
+        "模板",
+        "包管理"
+      ]
+    },
+    {
+      "entity": "CSS",
+      "definition": "CSS 控制 HTML 样式与布局，其属性变更触发重排重绘，是虚拟 DOM 与响应式设计优化的核心目标。",
+      "domain": "frontend",
+      "related_terms": [
+        "HTML",
+        "JavaScript",
+        "样式"
+      ]
+    },
+    {
+      "entity": "DOM",
+      "definition": "DOM 是浏览器解析 HTML 后构建的树形节点模型，JavaScript 操作 DOM 触发渲染更新，是虚拟 DOM 要优化的对象。",
+      "domain": "frontend",
+      "related_terms": [
+        "HTML",
+        "JavaScript",
+        "虚拟 DOM"
+      ]
+    },
+    {
+      "entity": "Flexbox",
+      "definition": "Flexbox 以一维弹性布局模型简化 CSS 对齐与分布，与 Grid 互补，是响应式设计中减少重排重绘的布局利器。",
+      "domain": "frontend",
+      "related_terms": [
+        "CSS",
+        "响应式设计",
+        "Grid"
+      ]
+    },
+    {
+      "entity": "ADC",
+      "definition": "ADC 模数转换器将模拟信号转为数字值。ADC 用于读取传感器数据。ADC 可通过 DMA 提高采样效率。ADC 与 GPIO 引脚复用。ADC 是嵌入式采集模拟量的核心。",
+      "domain": "general",
+      "related_terms": [
+        "传感器",
+        "嵌入式",
+        "GPIO"
+      ]
+    },
+    {
+      "entity": "ARM",
+      "definition": "ARM 是精简指令集架构，广泛用于微控制器。STM32 基于 ARM 架构设计。ARM 在嵌入式领域占主导地位。ARM 与 C语言配合开发嵌入式软件。ARM 的低功耗特性适合微控制器。",
+      "domain": "general",
+      "related_terms": [
+        "STM32",
+        "微控制器",
+        "嵌入式"
+      ]
+    },
+    {
+      "entity": "Angular",
+      "definition": "Angular 是 Google 维护的企业级前端框架，完全基于 TypeScript 构建。与 React 和 Vue 不同，Angular 提供完整的 MVC 架构。Angular 依赖 JavaScript 和 TypeScript 的最新特性。Angular 适合大型前端开发团队使用。",
+      "domain": "general",
+      "related_terms": [
+        "JavaScript",
+        "前端开发",
+        "TypeScript"
+      ]
+    },
+    {
+      "entity": "CAS 原子操作",
+      "definition": "CAS（Compare-And-Swap）是无锁编程的原子操作，与自旋锁配合规避锁开销，是并发编程底层基石。",
+      "domain": "low_level",
+      "related_terms": [
+        "锁",
+        "自旋锁",
+        "并发编程"
+      ]
+    },
+    {
+      "entity": "JIT 编译",
+      "definition": "JIT 编译在运行时将热点字节码转为机器码，是 JVM 性能优化的核心手段，与 AOT 编译形成互补。",
+      "domain": "low_level",
+      "related_terms": [
+        "字节码",
+        "JVM",
+        "编译器"
+      ]
+    },
+    {
+      "entity": "JMM",
+      "definition": "JMM 规定多线程间共享变量的可见性与 happens-before 关系，依赖内存屏障与锁实现。",
+      "domain": "low_level",
+      "related_terms": [
+        "JVM 内存模型",
+        "内存屏障",
+        "并发编程"
+      ]
+    },
+    {
+      "entity": "CDN",
+      "definition": "CDN 通过 DNS 解析将静态资源导向边缘节点，依赖负载均衡与缓存，是前端渲染加速的关键基础设施。",
+      "domain": "network",
+      "related_terms": [
+        "DNS 解析",
+        "负载均衡",
+        "缓存"
+      ]
+    },
+    {
+      "entity": "CORS",
+      "definition": "CORS 是浏览器放宽同源策略的安全机制，通过 HTTP 头控制跨域资源访问，是前后端分离部署的必备配置。",
+      "domain": "network",
+      "related_terms": [
+        "HTTP",
+        "同源策略",
+        "前端渲染"
+      ]
+    },
+    {
+      "entity": "Cookie",
+      "definition": "Cookie 在 HTTP 协议下承载会话状态，与 Session 协同完成鉴权，需 HTTPS 与同源策略保障安全。",
+      "domain": "network",
+      "related_terms": [
+        "HTTP",
+        "Session",
+        "鉴权"
+      ]
+    }
+  ],
+  "生产库分布": {
+    "候选总数": 11,
+    "有分数的": 11,
+    "饱和到 1.0 的": 0,
+    "待审占比": 0.909,
+    "驳回占比": 0.091,
+    "描述为空的": 0,
+    "重复实体组": [
+      "基础概念辨析"
+    ]
+  }
+}

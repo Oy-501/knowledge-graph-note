@@ -1,0 +1,14 @@
+# 开发/测试依赖 —— 刻意与 requirements.txt 分开，避免测试依赖进入生产镜像
+#
+# 安装：
+#   py -m pip install -r backend/requirements-dev.txt
+#
+# 跑测试（必须在 backend/ 目录下）：
+#   cd backend && py -m pytest
+#
+# pytest 引入前审查（2026-10-01）：
+#   许可证 MIT · 维护方 pytest-dev（Holger Krekel 等）· PyPI 当月下载量千万级
+#   已知漏洞 GHSA-6w46-j5rx-g56g（/tmp/pytest-of-{user} 权限问题）
+#     → 影响版本 ≤9.0.2，9.0.3 已修；且该问题**仅 UNIX**，Windows 不受影响
+#     → 当前 9.1.1 不在影响范围
+pytest>=9.1.1

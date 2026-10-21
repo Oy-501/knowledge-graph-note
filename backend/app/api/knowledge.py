@@ -4,7 +4,10 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Optional, Any
 from app.database import get_db
-from app.services.errors import escape_like
+from app.models.models import Node
+from app.services.errors import AppError, clamp_paging, escape_like
+from app.services.search import (node_references, search_knowledge_base,
+                                 search_nodes, search_notes)
 from app.services.validator import validate_content, summarize, split_sentence_ranges
 from app.services.inference import infer_links_batch
 
@@ -103,28 +106,44 @@ def infer_links(request: InferRequest, user_id: int = 1, db: Session = Depends(g
 
 
 @router.get("/search")
-def search_knowledge(keyword: str, limit: int = 20, db: Session = Depends(get_db)):
-    """搜索知识库中的知识点"""
-    from app.models.models import KnowledgeBase, Node
+def search_knowledge(keyword: str = "", limit: int = 10, user_id: int = 1,
+                     db: Session = Depends(get_db)):
+    """跨「知识库 / 图谱节点 / 笔记」检索。
 
-    # 搜索知识库
-    kb_results = db.query(KnowledgeBase).filter(
-        KnowledgeBase.entity.ilike(f"%{escape_like(keyword)}%", escape='\\')
-    ).limit(limit).all()
+    旧版只在 entity 上做 ILIKE：别名、定义、节点标题、笔记正文都不参与，
+    于是「搜一个同义词就什么都搜不到」。
+    现在三段都参与，并标注命中来源（实体 / 别名 / 定义）。
+    返回键 `knowledge_base` / `nodes` 保持原样，新增 `notes` 与 `total`。
+    """
+    key = (keyword or "").strip()
+    limit, _ = clamp_paging(limit, 0, max_limit=50, default_limit=10)
+    if not key:
+        # 空关键词不能走 ILIKE '%%' —— 那等于把整库倒出来
+        return {"keyword": "", "knowledge_base": [], "nodes": [], "notes": [], "total": 0}
 
-    # 搜索已有节点
-    node_results = db.query(Node).filter(
-        Node.entity.ilike(f"%{escape_like(keyword)}%", escape='\\'),
-        Node.status == "active"
-    ).limit(limit).all()
-
+    kb_rows = search_knowledge_base(db, key, limit)
+    node_rows = search_nodes(db, key, limit)
+    note_rows, note_total = search_notes(db, key, user_id=user_id, limit=limit, offset=0)
     return {
-        "knowledge_base": [
-            {"id": k.id, "entity": k.entity, "domain": k.domain, "definition": k.definition}
-            for k in kb_results
-        ],
-        "nodes": [
-            {"id": n.id, "entity": n.entity, "title": n.title, "level": n.level}
-            for n in node_results
-        ]
+        "keyword": key,
+        "knowledge_base": kb_rows,
+        "nodes": node_rows,
+        "notes": note_rows,
+        "total": len(kb_rows) + len(node_rows) + note_total,
     }
+
+
+@router.get("/node/{node_id}/notes")
+def node_notes(node_id: int, user_id: int = 1, limit: int = 30,
+               db: Session = Depends(get_db)):
+    """反向链接：哪些笔记写过这个知识点。
+
+    分 `linked`（显式关联）与 `mentioned`（正文提到但没连），
+    后者是补齐关联最快的地方。
+    """
+    node = db.query(Node).filter_by(id=node_id).first()
+    if node is None:
+        raise AppError("知识点不存在", status_code=404, code="node_not_found",
+                       hint="它可能已被删除，或者链接指向了旧的节点 id。")
+    limit, _ = clamp_paging(limit, 0, max_limit=100, default_limit=30)
+    return {"ok": True, **node_references(db, node, user_id=user_id, limit=limit)}

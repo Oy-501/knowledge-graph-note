@@ -1,0 +1,55 @@
+/* ============================================================
+   tokens.css — 设计令牌
+   调性：杂志编辑（Editorial）× 中文出版物质感
+   纸面 / 墨 / 朱砂 三色纪律：60% 纸面、30% 墨、10% 朱砂
+   ============================================================ */
+
+:root {
+  /* ---- 色彩：全部语义化，组件内不写死色值 ---- */
+  --paper:       #f5f1e8;   /* 主表面：暖纸白 */
+  --paper-deep:  #ece4d2;   /* 次级表面：压一层做分区 */
+  --card:        #fbf8f1;   /* 卡片：比纸面更亮一点，形成层级 */
+  --ink:         #1c1813;   /* 主文字：暖调近黑（禁用纯黑） */
+  --ink-2:       #3d372c;   /* 次级文字 */
+  --muted:       #6c6354;   /* 辅助文字：在纸面上实测 5.0:1（压深过 #7d7462，那时只有 4.1:1） */
+  --accent:      #c13b2a;   /* 朱砂：批注与印章的传统强调色 */
+  --accent-deep: #9c2c1f;   /* 朱砂压深：小字/悬停用，保对比度 */
+  --line:        rgba(28, 24, 19, 0.16);  /* 发丝线 */
+  --line-strong: rgba(28, 24, 19, 0.38);
+
+  /* ---- 字体：展示字 + 正文字 + 等宽字，三套各司其职 ---- */
+  /* 拉丁展示字 Fraunces，中文展示字思源宋体；本地宋体做离线回退，编辑感不丢 */
+  --font-display: "Fraunces", "Noto Serif SC", "Songti SC", "STSong", "SimSun", serif;
+  --font-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: "Space Mono", "IBM Plex Mono", ui-monospace, "Cascadia Mono", monospace;
+
+  /* ---- 字阶：1.25 模块化比例，禁止临时手写 ---- */
+  --fs--1: 0.8rem;     /* 12.8px 栏目编号 / 图注 */
+  --fs-0:  1rem;       /* 16px 正文 */
+  --fs-1:  1.25rem;    /* 20px 引言 */
+  --fs-2:  1.563rem;   /* 25px 小节题 */
+  --fs-3:  1.953rem;   /* 31px 区块题 */
+  --fs-4:  2.441rem;   /* 39px 大数字 */
+  --fs-5:  clamp(2.9rem, 5.2vw, 4.5rem);   /* 首屏主标题：上限按 7 字 × 栏宽实测标定，不许再折行 */
+
+  /* ---- 间距梯度 ---- */
+  --space-1: 4px;  --space-2: 8px;  --space-3: 16px;
+  --space-4: 24px; --space-5: 40px; --space-6: 64px; --space-7: 96px;
+
+  /* ---- 造型：编辑风 = 直角与发丝线，圆角压到最小 ---- */
+  --radius: 2px;
+
+  /* ---- 阴影：纸面体系下阴影克制，层级主要靠发丝线与色块 ---- */
+  --shadow-1: 0 2px 8px rgba(28, 24, 19, 0.10);
+  --shadow-2: 0 8px 28px rgba(28, 24, 19, 0.14);
+
+  /* ---- 动效 ---- */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 160ms;
+  --dur-base: 340ms;
+  --dur-slow: 680ms;
+
+  /* ---- 版心 ---- */
+  --measure: 1180px;   /* 版心最大宽 */
+  --column-gap: clamp(24px, 4vw, 56px);
+}

@@ -1184,8 +1184,8 @@ onUnmounted(() => {
 }
 .monitor-card:hover,
 .legend-item:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-card);
+  /* 只提底色与边框：列表型元素一屏多行，位移会让整块面板"抖" */
+  background-color: var(--bg-hover);
   border-color: var(--border);
 }
 
@@ -1474,7 +1474,7 @@ onUnmounted(() => {
   color: var(--text-primary);
 }
 .plugin-desc {
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   color: var(--text-muted);
   line-height: 1.4;
 }
@@ -1487,10 +1487,8 @@ onUnmounted(() => {
   gap: 6px;
 }
 .plugin-group-label {
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 .plugin-btns {
   display: flex;
@@ -1506,5 +1504,18 @@ onUnmounted(() => {
   background: var(--bg-secondary);
   border: 1px dashed var(--border-light);
   border-radius: var(--radius);
+}
+
+/* 面板内可读性下限：下面这些都是「要读的字」，不是角标。
+   它们的 11px 来自父容器继承（父级给 --fs-xs，子元素没再声明），
+   所以这里单写一条就能覆盖，且不影响同容器里的序号/计数徽标。 */
+.legend-label,
+.val-stat-label,
+.val-unverified-title,
+.val-unverified-status,
+.aq-mode-btn,
+.sort-btn,
+.group-tab {
+  font-size: var(--fs-sm);
 }
 </style>

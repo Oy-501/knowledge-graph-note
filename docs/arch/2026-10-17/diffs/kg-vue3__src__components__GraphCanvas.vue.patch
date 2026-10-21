@@ -1,0 +1,143 @@
+diff --git a/kg-vue3/src/components/GraphCanvas.vue b/kg-vue3/src/components/GraphCanvas.vue
+index 776eee9..51abe5b 100644
+--- a/kg-vue3/src/components/GraphCanvas.vue
++++ b/kg-vue3/src/components/GraphCanvas.vue
+@@ -133,6 +133,7 @@
+       :links="drawer.links"
+       :allNodes="graphStore.nodes"
+       @close="closeDrawer"
++      @open-note="onOpenNote"
+     />
+ 
+     <!-- 右键菜单 -->
+@@ -157,7 +158,7 @@
+ import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+ import { select } from 'd3-selection'
+ import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide } from 'd3-force'
+-import { zoom } from 'd3-zoom'
++import { zoom, zoomIdentity } from 'd3-zoom'
+ import { drag } from 'd3-drag'
+ import { ElMessage } from 'element-plus'
+ import { useGraphStore } from '@/store/graphStore'
+@@ -175,11 +176,15 @@ const graphStore = useGraphStore()
+ const cfg = useConfigStore()
+ const groupStore = useGroupStore()
+ 
++const emit = defineEmits(['open-note'])
++
+ const wrapRef = ref(null)
+ const svgRef = ref(null)
+ 
+ let svg, gRoot, gLinks, gNodes, simulation, zoomBehavior
+ let nodeSel, linkSel
++// 数据变化后等布局收敛再自动适配一次视图（见 render() 与 fitToView）
++let pendingFit = false
+ 
+ const width = ref(0), height = ref(0)
+ 
+@@ -284,6 +289,9 @@ function initSvg() {
+     .attr('width', 20000).attr('height', 20000)
+     .attr('fill', 'url(#kgGrid)')
+   zoomBehavior = zoom().scaleExtent([0.2, 5]).on('zoom', e => {
++    // 用户手动缩放/拖拽（带 sourceEvent）→ 放弃这次自动适配，别覆盖他的视角。
++    // 程序化调用 zoomBehavior.transform 时 sourceEvent 为 null，不会误判。
++    if (e.sourceEvent) pendingFit = false
+     gRoot.attr('transform', e.transform)
+   })
+   svg.call(zoomBehavior)
+@@ -296,10 +304,20 @@ function initSvg() {
+ 
+   simulation = forceSimulation()
+     .force('link', forceLink().id(d => d.id).distance(d => linkDistance(d)).strength(d => linkStrength(d)))
+-    .force('charge', forceManyBody().strength(nodeTotal > 1500 ? -60 : (nodeTotal > 800 ? -110 : -180)))
++    // 斥力：小图谱原来只有 -180，几十个节点就挤成一坨、标签互相压叠。
++    // 提到 -300 后一圈多出约 1/3 的呼吸空间。大图谱仍走原来的低斥力 ——
++    // 几千节点时「收敛速度」比「好看」重要。
++    .force('charge', forceManyBody().strength(nodeTotal > 1500 ? -60 : (nodeTotal > 800 ? -110 : -300)))
+     .force('center', forceCenter(width.value / 2, height.value / 2))
+-    .force('collide', forceCollide().radius(d => nodeRadius(d) + 4))
++    // 碰撞半径 +4 只够「不重叠」，视觉上仍是贴在一起的一团；
++    // +11 才是「看得出个体」的间距，也让连线不被节点整个盖住。
++    .force('collide', forceCollide().radius(d => nodeRadius(d) + 11))
+     .on('tick', onTick)
++    .on('end', () => {
++      if (!pendingFit) return
++      pendingFit = false
++      fitToView()
++    })
+   if (nodeTotal > 800) simulation.alphaDecay(0.05)
+ }
+ 
+@@ -319,6 +337,36 @@ function nodeRadius(d) {
+   return Math.max(10, 10 + Math.min(20, deg * 2))
+ }
+ 
++/**
++ * 把整张图缩放平移到画布中央（自动适配视图）。
++ *
++ * 为什么需要：节点间距调大后，力导布局的自然尺寸常常大于画布，
++ * 用户一进来只看到「半张图」，还得自己滚轮缩小才看得全 —— 第一眼就是残缺的。
++ * 只在数据变化后的首次收敛调用一次；用户手动缩放/拖拽之后不再覆盖他的视角。
++ */
++function fitToView(padding = 44) {
++  if (!svg || !gRoot) return
++  const nodes = graphStore.nodes || []
++  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
++  for (const n of nodes) {
++    if (!Number.isFinite(n.x) || !Number.isFinite(n.y)) continue
++    const r = nodeRadius(n) + 14       // 节点半径 + 标签余量
++    minX = Math.min(minX, n.x - r); maxX = Math.max(maxX, n.x + r)
++    minY = Math.min(minY, n.y - r); maxY = Math.max(maxY, n.y + r)
++  }
++  if (!Number.isFinite(minX)) return
++
++  const bw = Math.max(1, maxX - minX)
++  const bh = Math.max(1, maxY - minY)
++  const vw = width.value || 1
++  const vh = height.value || 1
++  // 上限 1.4：节点很少时不要把两三个点放大成巨物
++  const k = Math.max(0.2, Math.min((vw - padding * 2) / bw, (vh - padding * 2) / bh, 1.4))
++  const tx = vw / 2 - k * (minX + maxX) / 2
++  const ty = vh / 2 - k * (minY + maxY) / 2
++  svg.call(zoomBehavior.transform, zoomIdentity.translate(tx, ty).scale(k))
++}
++
+ function onTick() {
+   if (!gLinks || !gNodes) return
+   gLinks.selectAll('path.link-line')
+@@ -534,6 +582,10 @@ function render() {
+   nodeSel.classed('dim', false)
+ 
+   // === 启动仿真 ==========
++  // 布局结束后自动适配一次视图：节点间距调大后，整团很容易超出画布，
++  // 用户看到的是「半张图」—— 得先缩一下才看得全。只在数据变化后的首次收敛做，
++  // 用户自己缩放/拖拽过之后不再覆盖他的视角。
++  pendingFit = true
+   if (useProgressive) {
+     // 渐进式：分 5 批加入节点
+     simulation.nodes([])
+@@ -595,8 +647,11 @@ function nodeFillOpacity(d) {
+ }
+ /* 标签字号随节点半径自适应（10–14px） */
+ function labelFontSize(d) {
++  // 字号必须在这里改：标签的 font-size 是 D3 内联上去的，
++  // CSS 里的 .node-label 会被内联样式压住（曾出现过「改了 CSS 但量出来还是 11px」）。
++  // 12px 是图上的可读下限：11px 在 1x 屏上要凑近看，而标签正是图谱唯一要"读"的文字。
+   const r = nodeRadius(d)
+-  return r >= 22 ? '13px' : r >= 15 ? '12px' : '11px'
++  return r >= 22 ? '13px' : '12px'
+ }
+ 
+ /** 获取节点所属分组的颜色，默认分组不显示 */
+@@ -835,6 +890,11 @@ function closeDrawer() {
+   drawer.value.visible = false
+ }
+ 
++function onOpenNote(noteId) {
++  drawer.value.visible = false
++  emit('open-note', noteId)
++}
++
+ // === 右键菜单 ===
+ function onNodeContextMenu(ev, d) {
+   ev.preventDefault()

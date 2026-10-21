@@ -183,11 +183,11 @@ function relColor(type) {
   gap: 6px;
 }
 .kqa-examples-label {
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   color: var(--text-muted);
 }
 .kqa-chip {
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   padding: 3px 9px;
   border: 1px solid var(--border-light);
   border-radius: var(--radius-full);
@@ -208,7 +208,7 @@ function relColor(type) {
   font-size: var(--fs-sm);
 }
 .kqa-empty-sub {
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   margin-top: 4px;
   opacity: 0.75;
 }

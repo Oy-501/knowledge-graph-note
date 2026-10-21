@@ -1,0 +1,104 @@
+/* ============================================================
+   base.css — 重置、排版基调、焦点与降级动效
+   ============================================================ */
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--fs-0);
+  line-height: 1.75;          /* 中文正文行高 ≥1.7 */
+  letter-spacing: 0.02em;     /* 中文正文微字距 */
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+h1, h2, h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1.08;          /* 大标题行高压到 0.95–1.1 区间 */
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+p { margin: 0; }
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img, svg { display: block; max-width: 100%; }
+
+button { font: inherit; cursor: pointer; }
+
+::selection {
+  background: var(--accent);
+  color: var(--paper);
+}
+
+/* ---- 焦点圈：2px 描边 + 2px 偏移，键盘导航必须可见 ---- */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius);
+}
+
+/* ---- 跳转链接：键盘用户第一站 ---- */
+.skip-link {
+  position: absolute;
+  left: var(--space-3);
+  top: -48px;
+  z-index: 100;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 10px 18px;
+  font-family: var(--font-mono);
+  font-size: var(--fs--1);
+  transition: top var(--dur-fast) ease-out;
+}
+.skip-link:focus-visible { top: var(--space-3); }
+
+/* ---- 通用容器 ---- */
+.measure {
+  max-width: var(--measure);
+  margin-inline: auto;
+  padding-inline: clamp(20px, 4vw, 48px);
+}
+
+/* ---- 等宽数字：数据密集处统一 ---- */
+.mono,
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- 栏目字头：mono 小号大写字距，编辑刊物的栏号感 ---- */
+.kicker {
+  font-family: var(--font-mono);
+  font-size: var(--fs--1);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent-deep);
+}
+
+/* ---- 降级动效：用户偏好减少动效时，全部动画与过渡关闭 ---- */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

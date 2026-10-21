@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import secrets
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
 
@@ -65,6 +66,141 @@ def _validate_credentials(username: str, password: str) -> Tuple[str, str]:
     return username, password
 
 
+# ---------------------------------------------------------------- 恢复码
+
+# 恢复码是**本地应用在没有邮件服务时的「忘记密码」方案**：
+# 注册/初始化/管理员重置时生成一次、只显示一次，用户自己存好；
+# 忘记密码时用它换新密码。库里只存 bcrypt 哈希，明文不落盘。
+#
+# 字母表去掉了 0/O/1/I/L —— 这串码是要人手抄到纸上的，
+# 长得像的字符会让「抄对却总是不对」变成一次无解的排障。
+_RECOVERY_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+_RECOVERY_GROUPS, _RECOVERY_GROUP_LEN = 4, 4   # 16 位 ≈ 80 bit，足够抗在线穷举
+
+
+def generate_recovery_code() -> str:
+    """生成恢复码明文，形如 ABCD-EFGH-JKMN-PQRS。"""
+    chars = "".join(secrets.choice(_RECOVERY_ALPHABET)
+                    for _ in range(_RECOVERY_GROUPS * _RECOVERY_GROUP_LEN))
+    return "-".join(chars[i:i + _RECOVERY_GROUP_LEN]
+                    for i in range(0, len(chars), _RECOVERY_GROUP_LEN))
+
+
+def normalize_recovery_code(code: str) -> str:
+    """归一化用户输入：忽略连字符/空格、不区分大小写。
+
+    手抄场景下大小写与分隔符是纯粹的干扰项 —— 校验的是「同一串字符」，
+    不是「有没有按我们的格式输入」。
+    """
+    return "".join(ch for ch in (code or "").upper() if ch.isalnum())
+
+
+def issue_recovery_code(db: Session, user: User) -> str:
+    """为用户签发新恢复码：库中只留哈希，返回明文（调用方负责只显示一次）。"""
+    code = generate_recovery_code()
+    user.recovery_hash = hash_password(normalize_recovery_code(code))
+    db.commit()
+    return code
+
+
+def verify_recovery_code(user: User, code: str) -> bool:
+    """校验恢复码；哈希缺失或异常一律失败（fail-closed）。"""
+    normalized = normalize_recovery_code(code)
+    if not normalized or not user.recovery_hash:
+        return False
+    try:
+        return bcrypt.checkpw(normalized.encode("utf-8"),
+                              user.recovery_hash.encode("utf-8"))
+    except Exception:  # noqa: BLE001 — 校验出错也必须拒绝
+        return False
+
+
+def reset_with_recovery(db: Session, username: str, recovery_code: str,
+                        new_password: str) -> str:
+    """用恢复码重设密码，返回**新的**恢复码（旧码立即作废）。
+
+    两条刻意的设计：
+
+    1. **不区分「用户不存在」与「恢复码错误」**：这个接口是匿名的，
+       一旦两种错误提示不同，它就变成了用户名枚举器。
+    2. **重置成功后吊销该用户全部会话**：改密的目的是「把别处的登录踢下线」，
+       留着一个旧会话等于这次重置没做完。恢复码同时轮换 —— 用过的码不能再用。
+    """
+    user = db.query(User).filter(User.username == (username or "").strip()).first()
+    if user is None or user.is_disabled or not verify_recovery_code(user, recovery_code):
+        raise AppError("用户名或恢复码不正确", status_code=401, code="bad_recovery_code",
+                       hint="恢复码是注册时显示的那串字符（形如 ABCD-EFGH-JKMN-PQRS，"
+                            "大小写与连字符不影响）；找不到的话请联系管理员在后台重置。")
+
+    _validate_credentials(user.username, new_password)
+    user.password_hash = hash_password(new_password)
+    db.commit()
+    new_code = issue_recovery_code(db, user)
+    revoke_user_sessions(db, user.id)
+
+    from app.services import audit
+    audit.log_event(
+        db, "reset_password", actor="user", user_id=user.id, target_type="user",
+        target_id=user.id, target_name=user.username,
+        summary=f"用户 {user.username} 通过恢复码重置了密码",
+        detail={"by": "recovery_code", "sessions_revoked": True},
+    )
+    return new_code
+
+
+def create_user(db: Session, username: str, password: str,
+                role: str = "user") -> Tuple[dict, str]:
+    """管理员新建账号，返回 (用户信息, 一次性恢复码)。"""
+    username, password = _validate_credentials(username, password)
+    if role not in ("user", "admin"):
+        raise AppError("角色只能是 user 或 admin", status_code=400, code="bad_role",
+                       hint="user = 只读账号；admin = 可写、可进后台。")
+    if db.query(User).filter(User.username == username).first():
+        raise AppError("该用户名已被占用", status_code=409, code="username_taken",
+                       hint="请换一个用户名。")
+
+    user = User(username=username, password_hash=hash_password(password),
+                role=role, is_disabled=False)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    code = issue_recovery_code(db, user)
+
+    from app.services import audit
+    audit.log_event(
+        db, "admin_create_user", actor="admin", user_id=user.id, target_type="user",
+        target_id=user.id, target_name=username,
+        summary=f"管理员创建账号：{username}（{role}）",
+        detail={"role": role},
+    )
+    return user_public(db, user), code
+
+
+def admin_reset_password(db: Session, user_id: int, new_password: str) -> str:
+    """管理员重置某个用户的密码，返回新的一次性恢复码。
+
+    这是「用户连恢复码也丢了」时的唯一出口 —— 没有它，本地应用就只能去改数据库。
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        raise AppError("用户不存在", status_code=404, code="user_not_found")
+    _validate_credentials(user.username, new_password)
+
+    user.password_hash = hash_password(new_password)
+    db.commit()
+    code = issue_recovery_code(db, user)
+    revoked = revoke_user_sessions(db, user.id)
+
+    from app.services import audit
+    audit.log_event(
+        db, "admin_reset_password", actor="admin", user_id=user.id, target_type="user",
+        target_id=user.id, target_name=user.username,
+        summary=f"管理员重置了 {user.username} 的密码",
+        detail={"sessions_revoked": revoked},
+    )
+    return code
+
+
 # ---------------------------------------------------------------- 初始化向导（首个管理员）
 
 def need_bootstrap(db: Session) -> bool:
@@ -73,12 +209,15 @@ def need_bootstrap(db: Session) -> bool:
 
 
 def bootstrap(db: Session, username: str, password: str,
-              display_name: str = "") -> Tuple[str, dict]:
+              display_name: str = "") -> Tuple[str, dict, str]:
     """初始化向导：把 id 最小的既有用户升格为首个管理员并签发会话。
 
     旧数据全部挂在 user#1 上（files/nodes/notes 外键），直接升格原行
     即可完成「承接」，不需要搬数据；若库中已有多行用户，按 id 最小者升格
     并在审计里留痕（共享知识：多用户行的处置约定）。
+
+    返回值第三项是**一次性恢复码明文** —— 忘记密码时唯一的自助出口，
+    调用方必须把它展示给用户并要求保存（库里只有哈希，丢了只能找管理员重置）。
     """
     if not need_bootstrap(db):
         raise AppError("系统已完成初始化，请直接登录", status_code=403,
@@ -118,13 +257,14 @@ def bootstrap(db: Session, username: str, password: str,
         detail={"promoted_user_id": user.id, "other_user_rows": len(users) - 1},
     )
     token = issue_session(db, user.id)
-    return token, user_public(db, user)
+    recovery_code = issue_recovery_code(db, user)
+    return token, user_public(db, user), recovery_code
 
 
 # ---------------------------------------------------------------- 注册 / 登录 / 登出
 
-def register(db: Session, username: str, password: str) -> Tuple[str, dict]:
-    """注册普通用户并签发会话"""
+def register(db: Session, username: str, password: str) -> Tuple[str, dict, str]:
+    """注册普通用户并签发会话，返回 (令牌, 用户信息, 一次性恢复码)。"""
     if not settings.REGISTRATION_OPEN:
         raise AppError("当前未开放注册", status_code=403, code="registration_closed",
                        hint="请联系管理员在 backend/.env 打开 REGISTRATION_OPEN。")
@@ -143,7 +283,8 @@ def register(db: Session, username: str, password: str) -> Tuple[str, dict]:
                     target_type="user", target_id=user.id, target_name=username,
                     summary=f"新用户注册：{username}")
     token = issue_session(db, user.id)
-    return token, user_public(db, user)
+    recovery_code = issue_recovery_code(db, user)
+    return token, user_public(db, user), recovery_code
 
 
 def login(db: Session, request: Optional[Request],

@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MVP 矩阵可视化：旋转立方体</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='4' y='4' width='16' height='16' fill='none' stroke='%2322d3ee' stroke-width='2'/%3E%3Crect x='8' y='8' width='12' height='12' fill='none' stroke='%23334c7f' stroke-width='2'/%3E%3Cline x1='4' y1='4' x2='8' y2='8' stroke='%2322d3ee' stroke-width='2'/%3E%3Cline x1='20' y1='4' x2='16' y2='8' stroke='%2322d3ee' stroke-width='2'/%3E%3Cline x1='4' y1='20' x2='8' y2='16' stroke='%2322d3ee' stroke-width='2'/%3E%3Cline x1='20' y1='20' x2='16' y2='16' stroke='%2322d3ee' stroke-width='2'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#0f172a; --panel:#1e293b; --panel2:#16233c; --border:#334155;
+    --text:#e2e8f0; --sub:#94a3b8; --dim:#64748b;
+    --accent:#22d3ee; --ok:#4ade80; --warn:#facc15; --danger:#f87171;
+    --mono:'Consolas','Menlo','Courier New',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:'Segoe UI','PingFang SC','Microsoft YaHei',system-ui,sans-serif;
+    min-height:100vh; padding:18px clamp(12px,3vw,32px) 28px;
+  }
+  .wrap{max-width:1180px;margin:0 auto}
+  header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+  header h1{font-size:22px;font-weight:700;letter-spacing:.3px}
+  header h1 span{color:var(--accent)}
+  header .tag{font-size:13px;color:var(--sub)}
+  header .eq{margin-left:auto;font-family:var(--mono);font-size:14px;color:var(--accent);background:var(--panel);border:1px solid var(--border);padding:6px 12px;border-radius:8px;font-variant-numeric:tabular-nums}
+  .layout{display:flex;gap:16px;align-items:stretch}
+  .stage{
+    flex:1.35;min-width:0;background:var(--panel);border:1px solid var(--border);
+    border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px;
+  }
+  .stage canvas{width:100%;display:block;border-radius:8px;background:radial-gradient(120% 120% at 50% 30%,#1c2b46 0%,#0b1526 70%);aspect-ratio:1/1}
+  .stage .hint{font-size:13px;color:var(--dim);line-height:1.6;padding:0 4px}
+  .stage .hint b{color:var(--sub);font-weight:600}
+  .side{
+    flex:1;min-width:320px;display:flex;flex-direction:column;gap:12px;
+  }
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px 16px}
+  .card h2{font-size:14px;font-weight:700;color:var(--accent);margin-bottom:10px;letter-spacing:.4px}
+  .card h2 small{font-weight:400;color:var(--dim);margin-left:8px;font-size:12px}
+  /* controls */
+  .ctl-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+  .ctl-row label{font-size:13px;color:var(--sub);min-width:64px}
+  .ctl-row input[type=range]{flex:1;min-width:120px;accent-color:var(--accent)}
+  .ctl-row .val{font-family:var(--mono);font-size:13px;color:var(--text);min-width:56px;text-align:right;font-variant-numeric:tabular-nums}
+  .btn{
+    background:var(--panel2);border:1px solid var(--border);color:var(--text);
+    border-radius:8px;padding:11px 16px;min-height:44px;font-size:13px;cursor:pointer;transition:border-color .15s,background .15s;
+  }
+  .btn:hover{border-color:var(--accent)}
+  .btn.on{background:rgba(34,211,238,.14);border-color:var(--accent);color:var(--accent)}
+  .btn-row{display:flex;gap:8px;flex-wrap:wrap}
+  /* vertex picker */
+  .vtx{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;margin:6px 0 4px}
+  .vtx button{
+    min-height:44px;border-radius:8px;border:1.5px solid var(--border);cursor:pointer;
+    background:var(--panel2);font-family:var(--mono);font-size:12px;color:var(--sub);transition:all .12s;
+  }
+  .vtx button i{display:block;width:10px;height:10px;border-radius:50%;margin:0 auto 3px}
+  .vtx button.on{border-color:var(--accent);color:var(--text)}
+  /* table */
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:5px 8px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+  th{color:var(--dim);font-weight:600;font-size:12px}
+  td:first-child{color:var(--sub)}
+  td.mono{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--text)}
+  td .stage-name{color:var(--sub)}
+  tr:last-child td{border-bottom:none}
+  .ndc-col{color:var(--accent)}
+  .screen-col{color:var(--ok)}
+  .out{color:var(--danger)}
+  /* matrix */
+  .mat{font-family:var(--mono);font-size:13px;line-height:1.75;color:var(--sub);overflow-x:auto;white-space:nowrap}
+  .mat b{color:var(--accent);font-weight:600}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--dim);margin-top:10px}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+  .formula{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-family:var(--mono);font-size:13px;color:var(--sub);line-height:1.7;margin-top:8px;overflow-x:auto}
+  .formula b{color:var(--warn)}
+  .formula .ac{color:var(--accent)}
+  .status{font-size:13px;color:var(--dim);line-height:1.6;margin-top:8px}
+  .status .sep{margin:0 6px;color:var(--border)}
+  @media (max-width:860px){
+    .layout{flex-direction:column}
+    .side{min-width:0}
+    header .eq{margin-left:0}
+    .vtx{grid-template-columns:repeat(4,1fr)}
+  }
+  @media (prefers-reduced-motion:reduce){ .stage canvas{animation:none} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>MVP 矩阵可视化 <span>· 旋转立方体</span></h1>
+    <span class="tag">手写矩阵验证推导 · 无需任何库</span>
+    <span class="eq">gl_Position = P · V · M · v</span>
+  </header>
+
+  <div class="layout">
+
+    <!-- ===== 左侧：WebGL 画布 ===== -->
+    <section class="stage">
+      <canvas id="glCanvas" aria-label="WebGL 旋转立方体"></canvas>
+      <div class="hint">
+        <b>立方体 6 个面 6 种颜色</b>，带简单方向光（明暗面便于观察旋转）。
+        <b>拖动「速度」</b>改变角速度，<b>点击顶点编号</b>在右侧观察该顶点的完整坐标变换流水线。
+      </div>
+    </section>
+
+    <!-- ===== 右侧：数值面板 ===== -->
+    <aside class="side">
+
+      <div class="card">
+        <h2>控制<small>自动旋转中</small></h2>
+        <div class="ctl-row">
+          <label for="speed">角速度</label>
+          <input type="range" id="speed" min="0" max="240" step="5" value="60">
+          <span class="val" id="speedVal">60°/s</span>
+        </div>
+        <div class="btn-row">
+          <button class="btn" id="btnPause" type="button">暂停</button>
+          <button class="btn" id="btnReset" type="button">重置角度</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>追踪顶点<small>8 个角点，选一个看流水线</small></h2>
+        <div class="vtx" id="vtxRow"></div>
+        <div class="status">
+          当前角度：<span class="mono" id="angX" style="font-family:var(--mono);color:var(--text)">θx=0.0°</span><span class="sep">|</span><span id="angY" style="font-family:var(--mono);color:var(--text)">θy=0.0°</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>顶点变换流水线<small id="pipeSub">顶点 #0（+1,+1,+1）</small></h2>
+        <table id="pipeTable">
+          <thead><tr><th style="width:34%">阶段</th><th>坐标（列向量，w 分量）</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="legend">
+          <span><i style="background:var(--accent)"></i>NDC（除以 w 后）</span>
+          <span><i style="background:var(--ok)"></i>屏幕像素</span>
+          <span><i style="background:var(--danger)"></i>视锥外</span>
+        </div>
+        <div class="formula">
+          <b>P</b> = [ f/a ·x , f·y , A·z+B , w=−z ] &nbsp;&nbsp; f=1/tan(fov/2)
+          <br>近 n=0.1 · 远 f=100 · fov=45° · 相机 eye=(0,0,5)
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>透视投影矩阵 P（手写，列优先）<small>A=(f+n)/(n−f)，B=2fn/(n−f)</small></h2>
+        <div class="mat" id="pMat"></div>
+      </div>
+
+      <div class="card">
+        <h2>推导速查</h2>
+        <div class="formula">
+          M = T·R<sub>y</sub>·R<sub>x</sub>（先缩放→旋转→平移，本 demo 无缩放）
+          <br>V：相机搬到原点，视线朝 <span class="ac">−z</span>，up=+y
+          <br>x_ndc = f·x / (aspect·(−z)) &nbsp;·&nbsp; z_ndc = <span class="ac">−A − B/z</span>（非线性！）
+        </div>
+        <div class="status" style="color:var(--sub)">观察 z_ndc 随旋转的变化：深度是 1/z 的函数，近处精度高、远处精度低（z-fighting 的根因）。</div>
+      </div>
+
+    </aside>
+  </div>
+</div>
+
+<!-- ===== 脚本核心（矩阵手算 + WebGL 渲染 + 流水线面板）===== -->
+<script>
+"use strict";
+
+/* ============ 1. 手写矩阵库（column-major，与 WebGL 一致） ============ */
+function m4Identity(){ return [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]; }
+
+// 矩阵乘法 c = a·b（列优先：第 c 列第 r 行 = index c*4+r）
+function m4Mul(a,b){
+  const o=new Array(16);
+  for(let c=0;c<4;c++)for(let r=0;r<4;r++){
+    o[c*4+r] = a[0*4+r]*b[c*4+0] + a[1*4+r]*b[c*4+1] + a[2*4+r]*b[c*4+2] + a[3*4+r]*b[c*4+3];
+  }
+  return o;
+}
+
+// 绕 X 轴旋转（弧度）
+function m4RotX(t){
+  const c=Math.cos(t), s=Math.sin(t);
+  return [1,0,0,0,  0,c,s,0,  0,-s,c,0,  0,0,0,1];   // 行优先: [1 0 0 0; 0 c -s 0; 0 s c 0; 0 0 0 1]
+}
+// 绕 Y 轴旋转（弧度）
+function m4RotY(t){
+  const c=Math.cos(t), s=Math.sin(t);
+  return [c,0,-s,0,  0,1,0,0,  s,0,c,0,  0,0,0,1];   // 行优先: [c 0 s 0; 0 1 0 0; -s 0 c 0; 0 0 0 1]
+}
+function m4Trans(tx,ty,tz){
+  return [1,0,0,0,  0,1,0,0,  0,0,1,0,  tx,ty,tz,1];
+}
+
+// 透视投影矩阵 —— 逐项来自推导：
+//   f = 1/tan(fovy/2)；A = (f+n)/(n−f)；B = 2·f·n/(n−f)
+//   行优先: [f/a 0 0 0; 0 f 0 0; 0 0 A B; 0 0 -1 0]  → w_clip = −z
+function m4Perspective(fovy, aspect, near, far){
+  const f = 1/Math.tan(fovy/2);
+  const A = (far+near)/(near-far);
+  const B = 2*far*near/(near-far);
+  return [f/aspect,0,0,0,  0,f,0,0,  0,0,A,-1,  0,0,B,0];
+}
+
+// 视图矩阵：相机 eye=(0,0,5) 看向原点，up=(0,1,0)
+// 由推导构建正交基 f / s / u，V 的行 = 基向量，平移列 = −dot(基, E)
+function m4View(eye, target, up){
+  const fx=target[0]-eye[0], fy=target[1]-eye[1], fz=target[2]-eye[2];
+  const fl=Math.hypot(fx,fy,fz)||1;
+  const f=[fx/fl, fy/fl, fz/fl];                      // 前向
+  // s = normalize(cross(f, up))
+  let sx=f[1]*up[2]-f[2]*up[1], sy=f[2]*up[0]-f[0]*up[2], sz=f[0]*up[1]-f[1]*up[0];
+  const sl=Math.hypot(sx,sy,sz)||1; sx/=sl; sy/=sl; sz/=sl;
+  const u=[sx*f[2]-sz*f[1], sz*f[0]-sx*f[2], sx*f[1]-sy*f[0]];  // u = cross(s, f)
+  const de=-(sx*eye[0]+sy*eye[1]+sz*eye[2]);
+  const due=-(u[0]*eye[0]+u[1]*eye[1]+u[2]*eye[2]);
+  const dfe= f[0]*eye[0]+f[1]*eye[1]+f[2]*eye[2];
+  // 行优先: [s 0; u 0; −f dfe; 0 1]
+  return [sx, u[0], -f[0], 0,   sy, u[1], -f[1], 0,   sz, u[2], -f[2], 0,   de, due, dfe, 1];
+}
+
+// 矩阵 × 列向量（w 分量参与）
+function m4MulV(m, v){
+  return [
+    m[0]*v[0]+m[4]*v[1]+m[8]*v[2]+m[12]*v[3],
+    m[1]*v[0]+m[5]*v[1]+m[9]*v[2]+m[13]*v[3],
+    m[2]*v[0]+m[6]*v[1]+m[10]*v[2]+m[14]*v[3],
+    m[3]*v[0]+m[7]*v[1]+m[11]*v[2]+m[15]*v[3]
+  ];
+}
+const fmt = (x)=> (Math.abs(x)<1e-6?0:x).toFixed(4);
+
+/* ============ 2. WebGL 初始化 ============ */
+const canvas = document.getElementById('glCanvas');
+const gl = canvas.getContext('webgl', {antialias:true});
+if(!gl){
+  document.querySelector('.stage .hint').innerHTML =
+    '<b style="color:var(--danger)">WebGL 不可用</b>：请使用 Chrome / Edge / Firefox 等支持 WebGL 的浏览器打开本文件。';
+  throw new Error('WebGL not supported');
+}
+
+function compile(type, src){
+  const sh=gl.createShader(type);
+  gl.shaderSource(sh, src); gl.compileShader(sh);
+  if(!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh));
+  return sh;
+}
+function link(vs, fs){
+  const p=gl.createProgram();
+  gl.attachShader(p,vs); gl.attachShader(p,fs); gl.linkProgram(p);
+  if(!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  return p;
+}
+
+const VS_SRC = [
+'attribute vec3 aPos;',
+'attribute vec3 aColor;',
+'attribute vec3 aNormal;',
+'uniform mat4 uMVP;',
+'uniform mat3 uN;',
+'varying vec3 vColor;',
+'varying vec3 vN;',
+'void main(){',
+'  gl_Position = uMVP * vec4(aPos, 1.0);',
+'  vColor = aColor;',
+'  vN = uN * aNormal;',
+'}'
+].join('\n');
+
+const FS_SRC = [
+'precision mediump float;',
+'varying vec3 vColor;',
+'varying vec3 vN;',
+'void main(){',
+'  vec3 L = normalize(vec3(0.45, 0.85, 0.35));',
+'  float diff = max(dot(normalize(vN), L), 0.0);',
+'  vec3 col = vColor * (0.35 + 0.65 * diff);',
+'  gl_FragColor = vec4(col, 1.0);',
+'}'
+].join('\n');
+
+const prog = link(compile(gl.VERTEX_SHADER, VS_SRC), compile(gl.FRAGMENT_SHADER, FS_SRC));
+gl.useProgram(prog);
+const uMVP = gl.getUniformLocation(prog,'uMVP');
+const uN   = gl.getUniformLocation(prog,'uN');
+
+/* ============ 3. 立方体几何（24 顶点 + 36 索引，6 面 6 色） ============ */
+const FACE_COLORS = [
+  [0.957,0.243,0.369],  // 红  +z
+  [0.984,0.573,0.235],  // 橙  -z
+  [0.980,0.800,0.082],  // 黄  +x
+  [0.290,0.875,0.501],  // 绿  -x
+  [0.133,0.827,0.933],  // 青  +y
+  [0.655,0.486,0.980]   // 紫  -y
+];
+const FACE_NORMALS = [
+  [0,0,1],[0,0,-1],[1,0,0],[-1,0,0],[0,1,0],[0,-1,0]
+];
+const FACE_VERTS = [
+  [[ 1,-1, 1],[ 1, 1, 1],[-1, 1, 1],[-1,-1, 1]],   // +z
+  [[-1,-1,-1],[-1, 1,-1],[ 1, 1,-1],[ 1,-1,-1]],   // -z
+  [[ 1,-1,-1],[ 1, 1,-1],[ 1, 1, 1],[ 1,-1, 1]],   // +x
+  [[-1,-1, 1],[-1, 1, 1],[-1, 1,-1],[-1,-1,-1]],   // -x
+  [[ 1, 1, 1],[ 1, 1,-1],[-1, 1,-1],[-1, 1, 1]],   // +y
+  [[-1,-1,-1],[-1,-1, 1],[ 1,-1, 1],[ 1,-1,-1]]    // -y
+];
+
+const verts=[]; const idx=[];
+for(let fi=0; fi<6; fi++){
+  const base = fi*4;
+  for(let vi=0; vi<4; vi++){
+    verts.push(...FACE_VERTS[fi][vi], ...FACE_COLORS[fi], ...FACE_NORMALS[fi]);
+  }
+  idx.push(base, base+1, base+2,  base, base+2, base+3);
+}
+const vbo = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verts), gl.STATIC_DRAW);
+const ibo = gl.createBuffer();
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx), gl.STATIC_DRAW);
+
+const STRIDE = 9;
+function attrib(name, size, offset){
+  const loc = gl.getAttribLocation(prog, name);
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc, size, gl.FLOAT, false, STRIDE*4, offset*4);
+}
+attrib('aPos', 3, 0);
+attrib('aColor', 3, 3);
+attrib('aNormal', 3, 6);
+
+/* ============ 4. 状态与控件 ============ */
+const VERTICES = [
+  [1,1,1],[1,1,-1],[1,-1,1],[1,-1,-1],
+  [-1,1,1],[-1,1,-1],[-1,-1,1],[-1,-1,-1]
+];
+let selVtx = 0;
+let paused = false;
+let angleY = 0, timeT = 0;
+const speedEl = document.getElementById('speed');
+const speedVal = document.getElementById('speedVal');
+const btnPause = document.getElementById('btnPause');
+const btnReset = document.getElementById('btnReset');
+const vtxRow = document.getElementById('vtxRow');
+const pipeSub = document.getElementById('pipeSub');
+const tbody = document.querySelector('#pipeTable tbody');
+const pMatEl = document.getElementById('pMat');
+const angXEl = document.getElementById('angX');
+const angYEl = document.getElementById('angY');
+
+// 顶点选择按钮
+VERTICES.forEach((v,i)=>{
+  const b=document.createElement('button');
+  b.type='button';
+  b.innerHTML = '<i></i>' + i;
+  b.title = '顶点 #'+i+'（'+v.map(x=>x>0?'+'+x:x).join(',')+'）';
+  b.addEventListener('click', ()=>{ selVtx=i; refreshPicker(); updatePanel(); });
+  vtxRow.appendChild(b);
+});
+function refreshPicker(){
+  [...vtxRow.children].forEach((b,i)=> b.classList.toggle('on', i===selVtx));
+}
+refreshPicker();
+
+btnPause.addEventListener('click', ()=>{
+  paused=!paused;
+  btnPause.textContent = paused ? '继续' : '暂停';
+  btnPause.classList.toggle('on', paused);
+});
+btnReset.addEventListener('click', ()=>{ angleY=0; timeT=0; });
+speedEl.addEventListener('input', ()=> speedVal.textContent = speedEl.value + '°/s');
+
+/* ============ 5. 渲染循环（每帧手动算 MVP） ============ */
+function resize(){
+  const dpr = window.devicePixelRatio||1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if(canvas.width !== Math.round(w*dpr) || canvas.height !== Math.round(h*dpr)){
+    canvas.width = Math.round(w*dpr);
+    canvas.height = Math.round(h*dpr);
+  }
+  gl.viewport(0,0,canvas.width,canvas.height);
+}
+window.addEventListener('resize', resize);
+
+let lastT = performance.now();
+function frame(now){
+  requestAnimationFrame(frame);
+  const dt = Math.min((now-lastT)/1000, 0.05); lastT = now;
+  if(!paused){
+    const spd = parseFloat(speedEl.value);
+    angleY += spd*dt * Math.PI/180;
+    timeT  += dt;
+  }
+  resize();
+
+  const angleX = 0.5*Math.sin(timeT*0.8);           // 俯仰缓慢摆动，突出立体感
+  // 模型矩阵：M = T · Ry(angleY) · Rx(angleX)（旋转后平移到世界位置）
+  const Rx = m4RotX(angleX), Ry = m4RotY(angleY);
+  const M = m4Mul(m4Trans(0,0,0), m4Mul(Ry, Rx));
+  const V = m4View([0,0,5],[0,0,0],[0,1,0]);
+  const aspect = canvas.width/Math.max(1,canvas.height);
+  const P = m4Perspective(45*Math.PI/180, aspect, 0.1, 100);
+  const MVP = m4Mul(P, m4Mul(V, M));
+
+  gl.clearColor(0.043,0.086,0.149,1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST);
+  gl.uniformMatrix4fv(uMVP, false, MVP);
+  // 法线矩阵：取 M 的旋转部分（无缩放时即法线变换）
+  gl.uniformMatrix3fv(uN, false, [M[0],M[1],M[2], M[4],M[5],M[6], M[8],M[9],M[10]]);
+  gl.drawElements(gl.TRIANGLES, idx.length, gl.UNSIGNED_SHORT, 0);
+
+  // 数值面板（每帧同步，演示"看数值变化"）
+  angXEl.textContent = 'θx=' + (angleX*180/Math.PI).toFixed(1) + '°';
+  angYEl.textContent = 'θy=' + (angleY*180/Math.PI).toFixed(1) + '°';
+  renderPipeline(M, V, P, MVP);
+}
+requestAnimationFrame(frame);
+
+/* ============ 6. 流水线数值面板 ============ */
+function renderPipeline(M, V, P, MVP){
+  const v = VERTICES[selVtx];
+  const vModel = [v[0], v[1], v[2], 1];
+  const vWorld = m4MulV(M, vModel);
+  const vView  = m4MulV(V, vWorld);
+  const vClip  = m4MulV(P, vView);
+  const w = vClip[3];
+  const inside = w > 0 && Math.abs(vClip[0])<=w && Math.abs(vClip[1])<=w && Math.abs(vClip[2])<=w;
+  const ndc = inside ? [vClip[0]/w, vClip[1]/w, vClip[2]/w] : null;
+  const screen = ndc ? [
+    Math.round((ndc[0]*0.5+0.5)*canvas.width),
+    Math.round((1-(ndc[1]*0.5+0.5))*canvas.height)
+  ] : null;
+
+  pipeSub.textContent = '顶点 #'+selVtx+'（'+v.map(x=>x>0?'+'+x:x).join(',')+'）';
+  const rows = [
+    ['模型空间', 'M₀·v', vModel, false],
+    ['世界空间', 'M·v',  vWorld, false],
+    ['相机空间', 'V·M·v', vView, false],
+    ['裁剪空间', 'P·V·M·v', vClip, false]
+  ];
+  let html='';
+  for(const [name, tag, vec, o] of rows){
+    html += '<tr><td><span class="stage-name">'+name+'</span></td>'+
+            '<td class="mono">('+vec.slice(0,3).map(fmt).join(', ')+', '+fmt(vec[3])+')</td></tr>';
+  }
+  if(inside){
+    html += '<tr><td><span class="stage-name">NDC（÷w）</span></td>'+
+            '<td class="mono ndc-col">('+ndc.map(fmt).join(', ')+')</td></tr>';
+    html += '<tr><td><span class="stage-name">屏幕像素</span></td>'+
+            '<td class="mono screen-col">('+screen[0]+', '+screen[1]+') @ '+canvas.width+'×'+canvas.height+'</td></tr>';
+  } else {
+    html += '<tr><td><span class="stage-name">NDC（÷w）</span></td>'+
+            '<td class="mono out">视锥外（w='+fmt(w)+'）</td></tr>';
+  }
+  tbody.innerHTML = html;
+
+  // 透视矩阵数值（列优先展示，与推导逐项对应）
+  const f=1/Math.tan(45*Math.PI/180/2);
+  const a=canvas.width/Math.max(1,canvas.height), n=0.1, fa=100;
+  const A=(fa+n)/(n-fa), B=2*fa*n/(n-fa);
+  pMatEl.innerHTML =
+    '<b>'+fmt(f/a)+'</b> &nbsp;0&nbsp; &nbsp;0&nbsp; &nbsp;0<br>'+
+    '0 &nbsp;<b>'+fmt(f)+'</b>&nbsp; &nbsp;0&nbsp; &nbsp;0<br>'+
+    '0 &nbsp;0 &nbsp;<b>'+fmt(A)+'</b> <b>'+fmt(B)+'</b><br>'+
+    '0 &nbsp;0 &nbsp;<b style="color:var(--warn)">−1</b> 0<br>'+
+    '<div style="margin-top:4px;color:var(--dim)">f='+fmt(f)+' · aspect='+a.toFixed(2)+' · A=(f+n)/(n−f) · B=2fn/(n−f) · w=−z</div>';
+}
+
+function updatePanel(){
+  // 初始绘制一帧，保证面板非空
+}
+updatePanel();
+</script>
+</body>
+</html>

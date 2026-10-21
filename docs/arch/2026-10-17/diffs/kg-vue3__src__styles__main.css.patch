@@ -1,0 +1,202 @@
+diff --git a/kg-vue3/src/styles/main.css b/kg-vue3/src/styles/main.css
+index 9cebf33..50ca215 100644
+--- a/kg-vue3/src/styles/main.css
++++ b/kg-vue3/src/styles/main.css
+@@ -155,11 +155,18 @@
+   --shadow-glow: 0 0 0 1px var(--accent-soft), 0 6px 24px var(--accent-glow);
+ 
+   /* —— 圆角 / 尺寸 —— */
++  /* 圆角只有三档，按「元素离用户多远」分：控件 6（近，指哪打哪）、
++     卡片 10（中，一块内容）、弹窗 14（远，浮在整页之上）。
++     不要出现 4/8/12 这些中间值 —— 差 2px 说不出理由，只会让界面看起来没对齐。 */
+   --radius: 10px;
+   --radius-sm: 6px;
+-  --radius-lg: 16px;
++  --radius-lg: 14px;
+   --radius-full: 999px;
+-  --panel-width: 320px;
++  /* 控件基准高度：统一在这里定义，primitives 的 .u-btn 消费它。
++     让「密度」这一项能真正压/放按钮，而不是只改字号 ——
++     字号变了按钮不变，界面会变成「小字挤在大盒子里」。 */
++  --ctrl-h: 30px;
++  --panel-width: 288px;   /* 320 → 288：给画布让出 32px，290 左右是图例与滑块的舒适下限 */
+   --toolbar-height: 56px;
+ 
+   /* —— 字体 —— */
+@@ -553,7 +560,6 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
+   color: var(--accent);
+   border-color: var(--accent);
+   box-shadow: 0 0 0 3px var(--accent-soft);
+-  transform: translateY(-1px);
+ }
+ .nav-btn {
+   padding: 4px 14px;
+@@ -630,9 +636,9 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
+   font-size: 16px;
+   font-weight: 700;
+   color: var(--on-accent);
+-  /* 渐变的紫端用浅紫：头像上的字是深墨色，压在深紫上只有 2.6:1；
+-     浅紫端能把对比度拉到 6.3:1，同时渐变更接近霓虹质感。 */
+-  background: linear-gradient(135deg, var(--accent-fill) 0%, var(--violet-light) 100%);
++  /* 单色主色底：紫端原本只是为了"霓虹质感"，但界面上只要出现第二主色，
++     用户就会开始猜「紫的按钮是不是更重要」。留一个主色，判断成本最低。 */
++  background: var(--accent-fill);
+   box-shadow: var(--shadow-sm);
+ }
+ .ph-title { font-size: var(--fs-md); font-weight: 600; color: var(--text-primary); letter-spacing: 0.3px; }
+@@ -642,9 +648,14 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
+ /* 折叠区块容器 */
+ .panel-collapse { flex: 1; overflow-y: auto; }
+ .panel-collapse .el-collapse { border: none; }
++/*
++  折叠标题：去掉 uppercase + 1px 字距。
++  中文没有大小写，uppercase 只对夹在里面的英文生效 —— 结果是「文件管理 / 控制面板」
++  里偶尔蹦出全大写英文，字号又小，读起来像系统报错。12px/600/次级色已经足够分层。
++*/
+ .panel-collapse .el-collapse-item__header {
+-  height: 38px;
+-  line-height: 38px;
++  height: 40px;
++  line-height: 40px;
+   background: transparent;
+   border-bottom: 1px solid var(--border-light);
+   font-size: var(--fs-sm);
+@@ -652,8 +663,6 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
+   color: var(--text-secondary);
+   padding-left: 16px;
+   padding-right: 12px;
+-  letter-spacing: 1px;
+-  text-transform: uppercase;
+   transition: color var(--dur-fast);
+ }
+ .panel-collapse .el-collapse-item__header:hover { color: var(--text-primary); }
+@@ -666,9 +675,10 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
+   display: flex;
+   align-items: center;
+   gap: 7px;
+-  padding: 9px 16px;
++  padding: 10px 16px;
+   border-top: 1px solid var(--border-light);
+-  font-size: var(--fs-xs);
++  /* 状态行是「辅助说明」不是角标，按 12px 起（.pf-ver 那个版本号才是角标，仍 11px） */
++  font-size: var(--fs-sm);
+   color: var(--text-muted);
+   background: var(--bg-glass-strong);
+ }
+@@ -687,16 +697,14 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
+   padding: 1px 8px;
+ }
+ .panel-section {
+-  padding: 14px 16px;
++  padding: 16px;
+   border-bottom: 1px solid var(--border-light);
+ }
+ .panel-section h3 {
+   font-size: var(--fs-sm);
+   font-weight: 600;
+   color: var(--text-secondary);
+-  margin-bottom: 10px;
+-  letter-spacing: 0.5px;
+-  text-transform: uppercase;
++  margin-bottom: 12px;
+   display: flex;
+   align-items: center;
+   gap: 6px;
+@@ -715,11 +723,26 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
+   flex: 1;
+   position: relative;
+   overflow: hidden;
+-  background:
+-    radial-gradient(circle at 18% 16%, var(--accent-soft) 0%, transparent 52%),
+-    radial-gradient(circle at 82% 84%, var(--mint-soft) 0%, transparent 50%),
+-    radial-gradient(circle at 68% 18%, var(--apricot-soft) 0%, transparent 40%),
+-    var(--bg-primary);
++  /*
++    画布背景：细网格 + 暗角，取代原来的三层彩色光斑。
++    光斑看着"有氛围"，实际代价是画布 60% 的面积都被染色 ——
++    节点和连线不再是唯一主体，眼睛先在光斑之间找关系，才去看图。
++    网格的作用相反：它提供空间尺度（能看出拖拽了多远），又不抢任何注意力。
++    颜色用 text-primary 的 5%，亮暗主题自动跟随，不需要两套值。
++  */
++  background-color: var(--bg-primary);
++  background-image:
++    linear-gradient(to right, color-mix(in srgb, var(--text-primary) 5%, transparent) 1px, transparent 1px),
++    linear-gradient(to bottom, color-mix(in srgb, var(--text-primary) 5%, transparent) 1px, transparent 1px);
++  background-size: 28px 28px;
++}
++/* 暗角只在暗色主题加：亮色底上加黑角会像"脏" */
++html.dark .canvas-wrap::after {
++  content: "";
++  position: absolute;
++  inset: 0;
++  pointer-events: none;
++  background: radial-gradient(ellipse at 50% 45%, transparent 52%, rgba(0, 0, 0, 0.12) 100%);
+ }
+ .canvas-wrap svg {
+   width: 100%;
+@@ -749,11 +772,18 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
+ .node-circle { transition: stroke 0.15s, stroke-width 0.15s; }
+ .node-label {
+   fill: var(--text-primary);
+-  font-size: var(--fs-xs);
++  /* 11 → 12：图上标签是最需要"读"的文字，11px 在 1x 屏上要凑近看 */
++  font-size: var(--fs-sm);
+   font-family: var(--font-sans);
+   pointer-events: none;
+   text-anchor: middle;
+ }
++/* 暗色主题下标签常压在连线上，加一层同色系的浅阴影把字"托"起来。
++   注意：SVG 的 <text> 不支持 text-shadow，等价的写法是 drop-shadow，
++   半径压到 1px、不透明度 0.75 —— 这是可读性补丁，不是发光装饰。 */
++html.dark .node-label {
++  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.75));
++}
+ .node-group.is-orphan .node-circle {
+   stroke: var(--text-muted);
+   stroke-dasharray: 3 3;
+@@ -915,7 +945,7 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
+   font-family: var(--font-mono);
+   color: var(--accent);
+ }
+-.monitor-card .mc-label { font-size: var(--fs-xs); color: var(--text-muted); margin-top: 2px; }
++.monitor-card .mc-label { font-size: var(--fs-sm); color: var(--text-muted); margin-top: 2px; }
+ .monitor-card.ok .mc-num { color: var(--success); }
+ .monitor-card.warn .mc-num { color: var(--danger); }
+ 
+@@ -1037,8 +1067,6 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
+   font-size: var(--fs-xs);
+   color: var(--text-muted);
+   margin-bottom: 3px;
+-  text-transform: uppercase;
+-  letter-spacing: 0.5px;
+ }
+ .link-tooltip .lt-source {
+   background: var(--bg-secondary);
+@@ -1064,10 +1092,10 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
+ 
+ /* Element Plus 暗色覆盖 */
+ .el-slider__runway { background-color: var(--bg-tertiary) !important; }
+-.el-slider__bar { background: linear-gradient(90deg, var(--mint), var(--accent)) !important; }
++.el-slider__bar { background: var(--accent-fill) !important; }
+ .el-slider__button { border-color: var(--accent) !important; box-shadow: 0 2px 6px rgba(58,70,86,.25) !important; }
+ .el-switch__core { border-color: var(--border) !important; background-color: var(--bg-tertiary) !important; }
+-.el-switch.is-checked .el-switch__core { background-color: var(--mint) !important; border-color: var(--mint) !important; }
++.el-switch.is-checked .el-switch__core { background-color: var(--accent-fill) !important; border-color: var(--accent-fill) !important; }
+ .el-loading-mask { background-color: var(--loading-mask, rgba(245, 240, 235, 0.72)) !important; }
+ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
+ 
+@@ -1891,9 +1919,11 @@ html.dark .el-loading-mask { --loading-mask: rgba(18, 21, 27, 0.72); }
+ /* ---------- 通用交互反馈 ---------- */
+ .click-scale:active { transform: scale(0.95); }
+ 
+-/* 可交互元素悬浮轻上浮 */
+-.rise-hover { transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
+-.rise-hover:hover { transform: translateY(-1px); }
++/* 上浮只留给"卡片"这种实体（可拖拽/可跳转）；
++   列表行、按钮、图标一律不动，改底色就够了 —— 一屏十几个元素一起位移，
++   页面会像在抖。 */
++.rise-hover { transition: background-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
++.rise-hover:hover { background-color: var(--bg-hover); }
+ 
+ /* ---------- Element Plus 控件统一 ---------- */
+ .el-button {

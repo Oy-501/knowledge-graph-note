@@ -1,4 +1,4 @@
-import { createApp } from 'vue'
+﻿import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import piniaPersist from 'pinia-plugin-persistedstate'
 import ElementPlus from 'element-plus'
@@ -8,9 +8,19 @@ import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 
 import App from './App.vue'
 import './styles/main.css'
+// 原语层：卡片 / 按钮 / 标签 / 分节标题的唯一实现。新组件从这里取，
+// 不要再手写 .my-card / .xx-btn —— 39 个卡片类名、59 个按钮类名就是这么长出来的。
+import './styles/primitives.css'
 // 素材层：真实纹理与摄影背景（来源与许可证见 src/assets/CREDITS.md）
+import './styles/premium.css'
 import './styles/texture.css' // 注释此行即可去掉所有素材，回到纯令牌视觉
 import './styles/ai-ui.css' // AI 交互增强层（悬停/聚焦/过渡/动效），注释此行即可整体回退
+// 身份层：展示字 / 朱砂印章 / 编辑式栏号。必须是最后一层 ——
+// 它要覆盖上面三层里的标题与导航样式。注释此行即可回到原视觉。
+import './styles/identity.css'
+// 模块令牌：每个页签一个 --mark（只落在标记位）。放在最后，只定义变量，
+// 不覆盖任何组件的具体样式，所以顺序上永远不会和上面的层打架。
+import './styles/modules.css'
 import { reportClientError, installGlobalErrorHooks } from './utils/errorReporter'
 
 const app = createApp(App)

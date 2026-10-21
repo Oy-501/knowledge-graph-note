@@ -7,6 +7,8 @@ from typing import Optional, List, Any
 from datetime import datetime
 from app.database import get_db
 from app.models.models import Note, NoteNode
+from app.services.errors import clamp_paging
+from app.services.search import search_notes
 from app.services.validator import validate_content, summarize, split_sentence_ranges
 
 router = APIRouter()
@@ -222,19 +224,35 @@ def delete_note(note_id: int, user_id: int = 1, db: Session = Depends(get_db)):
 
 
 @router.get("")
-def list_notes(user_id: int = 1, archived: Optional[bool] = None, db: Session = Depends(get_db)):
-    """获取笔记列表"""
+def list_notes(user_id: int = 1, archived: Optional[bool] = None,
+               limit: Optional[int] = None, offset: int = 0,
+               db: Session = Depends(get_db)):
+    """获取笔记列表。
+
+    `limit` 缺省仍返回全量（前端 store 是整表加载，改了会牵动太多地方），
+    但补上 `total`：分页与否，前端都得知道「总共有多少篇」。
+    要全文检索请用 `/api/notes/search` —— 这里的 `content` 只有前 200 字。
+    """
     query = db.query(Note).filter_by(user_id=user_id)
     if archived is not None:
         query = query.filter_by(archived=archived)
 
-    notes = query.order_by(Note.updated_at.desc()).all()
+    total = query.count()
+    query = query.order_by(Note.updated_at.desc())
+    if limit is not None:
+        safe_limit, safe_offset = clamp_paging(limit, offset, max_limit=500, default_limit=100)
+        query = query.offset(safe_offset).limit(safe_limit)
+
+    notes = query.all()
     return {
+        "total": total,
+        "count": len(notes),
         "notes": [
             {
                 "id": n.id,
                 "title": n.title,
                 "content": n.content[:200] if n.content else "",
+                "content_length": len(n.content or ""),
                 "tags": n.tags or [],
                 "linked_files": n.linked_files or [],
                 "linked_nodes": n.linked_nodes or [],
@@ -249,6 +267,22 @@ def list_notes(user_id: int = 1, archived: Optional[bool] = None, db: Session = 
             for n in notes
         ]
     }
+
+
+@router.get("/search")
+def search_notes_endpoint(q: str = "", user_id: int = 1, limit: int = 20, offset: int = 0,
+                          db: Session = Depends(get_db)):
+    """笔记全文检索：标题 / 正文 / 标签。
+
+    为什么单独一个接口：列表接口为了轻量只回 `content[:200]`，
+    前端就在那 200 字上做 `includes` —— 第 201 字之后的内容永远搜不到。
+    这里做真正的全文匹配，并返回命中处的上下文片段。
+    """
+    key = (q or "").strip()
+    if not key:
+        return {"ok": True, "keyword": "", "total": 0, "notes": []}
+    rows, total = search_notes(db, key, user_id=user_id, limit=limit, offset=offset)
+    return {"ok": True, "keyword": key, "total": total, "notes": rows}
 
 
 @router.get("/{note_id}")

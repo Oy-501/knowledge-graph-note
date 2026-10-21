@@ -4,7 +4,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -26,10 +26,15 @@ def _public(summary: dict) -> dict:
     return {k: v for k, v in summary.items() if k not in ("_raw_links", "node_index")}
 
 
+# 学习主线条数的合法区间。上限刻意压到 12：主线是「把网拉成线」，
+# 条数一多就互相重合，反而讲不清任何一件事（构造逻辑里也有重合度闸门）。
+MAX_PATHS_MIN, MAX_PATHS_MAX = 1, 12
+
+
 class SummaryOptions(BaseModel):
     user_id: int = 1
-    group_by: str = "level"      # level | domain
-    max_paths: int = 6
+    group_by: str = Field("level", pattern="^(level|domain)$")   # level | domain
+    max_paths: int = Field(6, ge=MAX_PATHS_MIN, le=MAX_PATHS_MAX)
     title: str = "知识图谱总结"
 
 
@@ -48,17 +53,21 @@ def build(options: SummaryOptions = None, db: Session = Depends(get_db)):
 
 
 @router.get("/mermaid")
-def get_mermaid(user_id: int = 1, group_by: str = "level",
+def get_mermaid(user_id: int = 1,
+                group_by: str = Query("level", pattern="^(level|domain)$"),
+                max_paths: int = Query(6, ge=MAX_PATHS_MIN, le=MAX_PATHS_MAX),
                 db: Session = Depends(get_db)):
     """只取总结流程图（Mermaid 源码）"""
-    summary, mermaid = _build(db, user_id, group_by, 6)
+    summary, mermaid = _build(db, user_id, group_by, max_paths)
     return {"ok": True, "mermaid": mermaid, "node_count": summary["overview"].get("node_count", 0)}
 
 
 @router.get("/ai-digest")
-def get_ai_digest(user_id: int = 1, db: Session = Depends(get_db)):
+def get_ai_digest(user_id: int = 1,
+                  max_paths: int = Query(6, ge=MAX_PATHS_MIN, le=MAX_PATHS_MAX),
+                  db: Session = Depends(get_db)):
     """AI 可读摘要（纯文本，直接投喂大模型）"""
-    summary, _ = _build(db, user_id, "level", 6)
+    summary, _ = _build(db, user_id, "level", max_paths)
     return {"ok": True, "digest": to_ai_digest(summary)}
 
 
@@ -66,12 +75,15 @@ def get_ai_digest(user_id: int = 1, db: Session = Depends(get_db)):
 def download(
     fmt: str = Query("md", pattern="^(md|docx|pptx|mermaid|mmd|digest|json)$"),
     user_id: int = 1,
-    group_by: str = "level",
+    group_by: str = Query("level", pattern="^(level|domain)$"),
+    # 导出必须和页面上看到的用**同一套参数**。以前这里写死 6：
+    # 用户把「主线数」调到 3，预览是 3 条，导出的 PPT 却是 6 条。
+    max_paths: int = Query(6, ge=MAX_PATHS_MIN, le=MAX_PATHS_MAX),
     title: str = "知识图谱总结",
     db: Session = Depends(get_db),
 ):
     """导出总结：Markdown / Word / PPTX / Mermaid / AI 摘要 / JSON"""
-    summary, mermaid = _build(db, user_id, group_by, 6)
+    summary, mermaid = _build(db, user_id, group_by, max_paths)
 
     if fmt == "json":
         path = exporter.export_path("知识图谱总结", "json")

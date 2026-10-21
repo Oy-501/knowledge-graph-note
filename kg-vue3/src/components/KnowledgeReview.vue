@@ -190,7 +190,7 @@ const recentNodes = computed(() => {
   line-height: 1.2;
 }
 .kr-label {
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   color: var(--text-muted);
   margin-top: 3px;
 }
@@ -232,7 +232,7 @@ const recentNodes = computed(() => {
   white-space: nowrap;
 }
 .kr-item-meta {
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   color: var(--text-muted);
 }
 .kr-btn {
@@ -265,4 +265,7 @@ const recentNodes = computed(() => {
   color: var(--text-muted);
   font-size: var(--fs-xs);
 }
+
+/* 复习条目的操作按钮是"要点的字"，11px 太小；序号与度数是角标，保持原样 */
+.kr-btn { font-size: var(--fs-sm); }
 </style>

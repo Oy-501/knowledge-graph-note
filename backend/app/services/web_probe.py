@@ -89,13 +89,46 @@ def _parse_generic(page: str, limit: int) -> List[Dict]:
 
 
 def _parse_fulltext(page: str, limit: int) -> List[Dict]:
-    """最后兜底：把整页文本当作一条结果（supports() 仍能做关键词命中判断）"""
+    """最后兜底：把整页文本当作一条结果（下游精确匹配仍可命中）"""
     text = _strip_tags(page)
     return [{"title": text[:200], "url": "", "snippet": text[:600]}] if text else []
 
 
+# Bing 的结果在 <li class="b_algo"> 里；通用解析会先抓到页首导航，
+# 真实结果被截断（实测：CNKI / 万方等站点名占满了配额）。
+_BING_BLOCK = re.compile(
+    r'<li[^>]*class="[^"]*b_algo[^"]*"[^>]*>(.*?)'
+    r'(?=<li[^>]*class="[^"]*b_algo|<div[^>]*class="b_pag|</ol>)',
+    re.S | re.I)
+
+
+def _parse_bing(page: str, limit: int) -> List[Dict]:
+    """Bing 专用解析：只取 b_algo 结果块，标题 + 摘要 + 真实 URL。"""
+    out, seen = [], set()
+    for m in _BING_BLOCK.finditer(page):
+        block = m.group(1)
+        hm = re.search(r'<h2[^>]*>\s*<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>',
+                       block, re.S | re.I)
+        if not hm:
+            continue
+        url = html.unescape(hm.group(1))
+        title = _strip_tags(hm.group(2))
+        if not title or title in seen:
+            continue
+        pm = re.search(r'<p[^>]*>(.*?)</p>', block, re.S | re.I)
+        seen.add(title)
+        out.append({
+            "title": title[:120],
+            "url": url,
+            "snippet": (_strip_tags(pm.group(1)) if pm else "")[:240],
+        })
+        if len(out) >= limit:
+            break
+    return out
+
+
 _PROVIDERS = [
-    ("bing", "https://cn.bing.com/search?q={q}&ensearch=0", _parse_generic),
+    ("bing", "https://cn.bing.com/search?q={q}&ensearch=0", _parse_bing),
     ("sogou", "https://www.sogou.com/web?query={q}", _parse_generic),
     ("so", "https://www.so.com/s?q={q}", _parse_generic),
     ("baidu", "https://www.baidu.com/s?wd={q}", _parse_generic),

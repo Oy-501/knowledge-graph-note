@@ -1,23 +1,47 @@
 <template>
   <div class="lg-view">
-    <div class="lg-card" :class="{ 'is-ready': ready }">
-      <!-- 品牌 -->
-      <header class="lg-brand">
-        <span class="lg-mark" aria-hidden="true">
-          <svg viewBox="0 0 32 32" width="32" height="32" fill="none">
-            <path d="M9 11.5 L23 8 M9 11.5 L16 24 M23 8 L16 24 M9 11.5 L23 20.5"
-                  stroke="currentColor" stroke-width="1.3" stroke-linecap="round" opacity=".38" />
-            <circle cx="9" cy="11.5" r="3.4" fill="currentColor" />
-            <circle cx="23" cy="8" r="2.4" fill="currentColor" opacity=".62" />
-            <circle cx="16" cy="24" r="3.0" fill="currentColor" opacity=".82" />
-            <circle cx="23" cy="20.5" r="2.1" fill="currentColor" opacity=".45" />
-          </svg>
-        </span>
-        <div class="lg-brand-text">
-          <h1 class="lg-title">{{ headline.title }}</h1>
-          <p class="lg-sub">{{ headline.sub }}</p>
+    <div class="lg-layout">
+      <!--
+        左栏：身份与价值主张。
+        登录页是产品的第一屏，只放一张表单卡等于放弃了这一屏 ——
+        这里用印章 + 衬线主张 + 参数表，把「这是什么系统」一次说清楚。
+        窄屏不隐藏，只压缩（见文件末尾的媒体查询）：隐藏会让移动端彻底失去品牌。
+      -->
+      <aside class="lg-intro">
+        <div class="lg-seal-row">
+          <span class="lg-seal" aria-hidden="true">谱</span>
+          <span class="lg-kicker">KG-NOTES · 知识图谱笔记</span>
         </div>
-      </header>
+        <h1 class="lg-display">知识<br />应该<em>连</em>起来。</h1>
+        <p class="lg-lede">
+          上传文档，自动抽取知识点、锚定知识库、按四个维度建立关联，
+          再把网状的知识收敛成一条可执行的学习主线。
+        </p>
+        <dl class="lg-meta">
+          <div><dt>关联模型</dt><dd>α / β / γ / δ 四维</dd></div>
+          <div><dt>导出</dt><dd>MD · DOCX · PPTX · MMD</dd></div>
+          <div><dt>存储</dt><dd>SQLite / PostgreSQL</dd></div>
+        </dl>
+      </aside>
+
+      <div class="lg-card" :class="{ 'is-ready': ready }">
+        <!-- 品牌 -->
+        <header class="lg-brand">
+          <span class="lg-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" width="32" height="32" fill="none">
+              <path d="M9 11.5 L23 8 M9 11.5 L16 24 M23 8 L16 24 M9 11.5 L23 20.5"
+                    stroke="currentColor" stroke-width="1.3" stroke-linecap="round" opacity=".38" />
+              <circle cx="9" cy="11.5" r="3.4" fill="currentColor" />
+              <circle cx="23" cy="8" r="2.4" fill="currentColor" opacity=".62" />
+              <circle cx="16" cy="24" r="3.0" fill="currentColor" opacity=".82" />
+              <circle cx="23" cy="20.5" r="2.1" fill="currentColor" opacity=".45" />
+            </svg>
+          </span>
+          <div class="lg-brand-text">
+            <h2 class="lg-title">{{ headline.title }}</h2>
+            <p class="lg-sub">{{ headline.sub }}</p>
+          </div>
+        </header>
 
       <!-- 后端连不上：不给表单，直接说清楚怎么回事 -->
       <div v-if="auth.probeError" class="lg-blocker">
@@ -82,7 +106,24 @@
             />
           </label>
 
-          <label v-if="mode !== 'login'" class="lg-field">
+          <!-- 恢复码：忘记密码时的新凭证。归一大写由后端处理，
+               这里只做 trim —— 用户抄写时常带空格，但不该在输入框里被悄悄改写 -->
+          <label v-if="mode === 'reset'" class="lg-field">
+            <span class="lg-label">恢复码</span>
+            <input
+              v-model.trim="form.recoveryCode"
+              class="lg-input lg-input-code"
+              type="text"
+              name="recovery-code"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="ABCD-EFGH-JKMN-PQRS"
+              :disabled="busy"
+            />
+            <span class="lg-help">注册或初始化时显示的那串字符，大小写与连字符都不影响。</span>
+          </label>
+
+          <label v-if="mode === 'bootstrap' || mode === 'register'" class="lg-field">
             <span class="lg-label">
               显示名称
               <em class="lg-optional">可选</em>
@@ -99,7 +140,7 @@
           </label>
 
           <label class="lg-field">
-            <span class="lg-label">密码</span>
+            <span class="lg-label">{{ mode === 'reset' ? '新密码' : '密码' }}</span>
             <span class="lg-input-wrap">
               <input
                 ref="pwdRef"
@@ -136,7 +177,7 @@
           </label>
 
           <label v-if="mode !== 'login'" class="lg-field">
-            <span class="lg-label">确认密码</span>
+            <span class="lg-label">{{ mode === 'reset' ? '确认新密码' : '确认密码' }}</span>
             <input
               v-model="form.confirm"
               class="lg-input"
@@ -155,15 +196,23 @@
           </button>
         </form>
 
-        <!-- 登录 / 注册 切换：只有开放注册时才显示 -->
-        <footer v-if="auth.registrationOpen" class="lg-foot">
+        <!--
+          底部入口：三种形态各有一组。
+          「忘记密码」**不受注册开关影响** —— 注册关了不代表已有账号不想改密码。
+        -->
+        <footer v-if="mode !== 'bootstrap'" class="lg-foot">
           <template v-if="mode === 'login'">
-            <span class="lg-foot-text">还没有账号？</span>
-            <button type="button" class="lg-link" @click="switchMode('register')">注册一个</button>
+            <button type="button" class="lg-link lg-link-muted"
+                    @click="switchMode('reset')">忘记密码？</button>
+            <template v-if="auth.registrationOpen">
+              <span class="lg-foot-sep" aria-hidden="true">·</span>
+              <span class="lg-foot-text">还没有账号？</span>
+              <button type="button" class="lg-link" @click="switchMode('register')">注册一个</button>
+            </template>
           </template>
           <template v-else>
-            <span class="lg-foot-text">已经有账号了？</span>
-            <button type="button" class="lg-link" @click="switchMode('login')">去登录</button>
+            <span class="lg-foot-text">已有账号？</span>
+            <button type="button" class="lg-link" @click="switchMode('login')">返回登录</button>
           </template>
         </footer>
 
@@ -171,11 +220,15 @@
           <template v-if="mode === 'bootstrap'">
             密码只保存在本机后端（bcrypt 哈希），不会上传到任何地方。
           </template>
+          <template v-else-if="mode === 'reset'">
+            重置成功后，旧密码与旧恢复码都会失效，并会展示一枚新的恢复码。
+          </template>
           <template v-else>
             登录后本机记住会话，{{ auth.sessionTtlDays }} 天内不用重复登录。
           </template>
         </p>
       </template>
+      </div>
     </div>
   </div>
 </template>
@@ -193,6 +246,7 @@
  * 直接用用户自己设置的背景，看起来和应用是一体的，而不是另一个系统。
  */
 import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
+import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/store/authStore'
 
 const auth = useAuthStore()
@@ -205,7 +259,7 @@ const capsOn = ref(false)
 const userRef = ref(null)
 const pwdRef = ref(null)
 
-const form = reactive({ username: '', password: '', confirm: '', displayName: '' })
+const form = reactive({ username: '', password: '', confirm: '', displayName: '', recoveryCode: '' })
 
 // 探测完成前不渲染表单：否则会先闪一下「登录」，再跳成「初始化」
 const ready = computed(() => auth.ready)
@@ -214,23 +268,31 @@ const headline = computed(() => {
   if (!ready.value) return { title: '知识图谱笔记', sub: '正在检查登录状态…' }
   if (mode.value === 'bootstrap') return { title: '初始化系统', sub: '创建你的管理员账号，然后开始使用' }
   if (mode.value === 'register') return { title: '注册账号', sub: '创建一个普通账号用于查看数据' }
+  if (mode.value === 'reset') return { title: '重置密码', sub: '用注册时保存的恢复码换一个新密码' }
   return { title: '登录', sub: '登录后继续整理你的知识图谱' }
 })
 
 const submitText = computed(() => (
   mode.value === 'bootstrap' ? '创建管理员账号'
     : mode.value === 'register' ? '注册并登录'
-      : '登录'
+      : mode.value === 'reset' ? '重置密码'
+        : '登录'
 ))
 
 const busyText = computed(() => (
   mode.value === 'bootstrap' ? '正在创建…'
     : mode.value === 'register' ? '正在注册…'
-      : '正在登录…'
+      : mode.value === 'reset' ? '正在重置…'
+        : '正在登录…'
 ))
 
 const canSubmit = computed(() => {
-  if (!form.username || !form.password) return false
+  if (!form.username) return false
+  if (mode.value === 'reset') {
+    // 恢复码必须填：它是重置的唯一凭证
+    return !!form.recoveryCode && form.password.length >= 6 && form.password === form.confirm
+  }
+  if (!form.password) return false
   if (mode.value !== 'login' && form.password !== form.confirm) return false
   if (mode.value !== 'login' && form.password.length < 6) return false
   return true
@@ -258,6 +320,7 @@ function switchMode(next) {
   error.value = null
   form.password = ''
   form.confirm = ''
+  form.recoveryCode = ''
   nextTick(() => userRef.value?.focus?.())
 }
 
@@ -291,10 +354,23 @@ async function submit() {
 
   // 本地先做一遍校验，省一次必然失败的往返（后端的校验仍然保留）
   if (!form.username) { error.value = { message: '请填写用户名' }; return }
-  if (!form.password) { error.value = { message: '请填写密码' }; return }
-  if (mode.value !== 'login') {
-    if (form.password.length < 6) { error.value = { message: '密码至少 6 位' }; return }
-    if (form.password !== form.confirm) { error.value = { message: '两次输入的密码不一致', hint: '请确认「确认密码」与上面完全一致。' }; return }
+
+  if (mode.value === 'reset') {
+    if (!form.recoveryCode.trim()) {
+      error.value = { message: '请填写恢复码', hint: '恢复码是注册或初始化时显示的那串字符，形如 ABCD-EFGH-JKMN-PQRS。' }
+      return
+    }
+    if (form.password.length < 6) { error.value = { message: '新密码至少 6 位' }; return }
+    if (form.password !== form.confirm) {
+      error.value = { message: '两次输入的新密码不一致', hint: '请确认「确认新密码」与上面完全一致。' }
+      return
+    }
+  } else {
+    if (!form.password) { error.value = { message: '请填写密码' }; return }
+    if (mode.value !== 'login') {
+      if (form.password.length < 6) { error.value = { message: '密码至少 6 位' }; return }
+      if (form.password !== form.confirm) { error.value = { message: '两次输入的密码不一致', hint: '请确认「确认密码」与上面完全一致。' }; return }
+    }
   }
 
   busy.value = true
@@ -307,6 +383,19 @@ async function submit() {
       })
     } else if (mode.value === 'register') {
       await auth.register({ username: form.username, password: form.password })
+    } else if (mode.value === 'reset') {
+      await auth.resetPassword({
+        username: form.username,
+        recoveryCode: form.recoveryCode,
+        newPassword: form.password,
+      })
+      // 重置后**不自动登录**：让用户用新密码自己登一次，
+      // 这样「新密码到底能不能用」当场就被验证了。
+      const username = form.username
+      switchMode('login')
+      form.username = username
+      ElMessage.success('密码已重置，请用新密码登录')
+      return
     } else {
       await auth.login({ username: form.username, password: form.password })
     }
@@ -332,22 +421,120 @@ async function submit() {
   min-height: 0;
   overflow-y: auto;
   display: flex;
-  padding: 28px 20px 40px;
+  padding: 32px 24px 48px;
 }
 
-/* ===== 卡片 ===== */
-.lg-card {
-  width: 100%;
-  max-width: 396px;
+/* ===== 双栏骨架：左引言 / 右表单 ===== */
+.lg-layout {
   /*
    * 用 margin:auto 居中，**不要**用 align-items:center ——
-   * 这是 flex 居中一个很常见的坑：当卡片比容器高时（窗口小、或初始化表单字段多，
+   * 这是 flex 居中一个很常见的坑：当内容比容器高时（窗口小、或初始化表单字段多，
    * 必然发生），align-items:center 会把溢出部分顶到容器上方，
    * 而滚动条只能往下滚 → **卡片顶部永远看不到**（品牌和标题被切掉）。
    * margin:auto 在空间充足时同样居中，空间不足时退化成正常文档流，能滚到顶。
    * 实测：566px 高的窗口里卡片 672px，用 align-items 时顶部被裁掉约 106px。
    */
   margin: auto;
+  width: 100%;
+  max-width: 1060px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(360px, 0.92fr);
+  gap: clamp(36px, 5.5vw, 80px);
+  align-items: center;
+}
+
+/* ===== 左栏：身份与主张 ===== */
+.lg-intro { min-width: 0; }
+
+.lg-seal-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+/* 印章：与导航栏同一枚，登录页放大到 40px 作为版面锚点 */
+.lg-seal {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  background: var(--seal);
+  color: var(--seal-ink);
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 23px;
+  line-height: 1;
+  border-radius: 2px;
+  transform: rotate(-3deg);
+  position: relative;
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.35);
+}
+.lg-seal::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border: 1px solid color-mix(in srgb, var(--seal-ink) 55%, transparent);
+}
+.lg-kicker {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.16em;
+  color: var(--text-muted);
+}
+
+.lg-display {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(34px, 4.4vw, 54px);
+  font-weight: 700;
+  line-height: 1.16;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+.lg-display em {
+  font-style: normal;
+  color: var(--seal);
+}
+
+.lg-lede {
+  margin: 18px 0 0;
+  max-width: 30em;
+  font-size: var(--fs-base);
+  line-height: 1.85;
+  color: var(--text-secondary);
+}
+
+/* 参数表：编辑排版的「刊头信息」写法 —— 发丝线分隔、等宽标签 */
+.lg-meta {
+  margin: 28px 0 0;
+  border-top: 1px solid var(--rule);
+}
+.lg-meta > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border-light);
+}
+.lg-meta dt {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+.lg-meta dd {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== 卡片 ===== */
+.lg-card {
+  width: min(100%, 400px);
+  margin: 0 auto;
   padding: 24px 24px 20px;
   /* 半透明 + 毛玻璃：与全站「视图透明、面板半透明」的约定一致。
      0.92 而不是更低，是为了保住表单文字的对比度（见 main.css 的 --surface-* 说明） */
@@ -355,6 +542,7 @@ async function submit() {
   backdrop-filter: blur(20px) saturate(1.25);
   -webkit-backdrop-filter: blur(20px) saturate(1.25);
   border: 1px solid var(--border-light);
+  border-top: 2px solid var(--seal);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   /* 入场：轻微上浮。响应 prefers-reduced-motion，见文件末尾 */
@@ -388,10 +576,11 @@ async function submit() {
 .lg-brand-text { min-width: 0; }
 .lg-title {
   margin: 0;
+  font-family: var(--font-display);
   font-size: var(--fs-xl);
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
-  letter-spacing: 0.01em;
+  letter-spacing: 0.02em;
 }
 .lg-sub {
   margin: 3px 0 0;
@@ -478,6 +667,18 @@ async function submit() {
   font-style: normal;
   font-size: var(--fs-xs);
   color: var(--text-faint);
+}
+/* 恢复码输入：等宽 + 字距，和它最终用来核对的形态保持一致 */
+.lg-input-code {
+  font-family: var(--font-mono);
+  letter-spacing: 0.08em;
+}
+.lg-help {
+  display: block;
+  margin-top: 5px;
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  line-height: 1.6;
 }
 .lg-input-wrap { position: relative; display: block; }
 
@@ -591,6 +792,14 @@ async function submit() {
   text-align: center;
 }
 .lg-foot-text { font-size: var(--fs-sm); color: var(--text-muted); }
+.lg-foot-sep { margin: 0 8px; color: var(--text-faint); }
+/* 「忘记密码？」是次要入口：不与「注册」抢视线，但必须一眼能找到 */
+.lg-link-muted {
+  margin-left: 0;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.lg-link-muted:hover { color: var(--accent-fill); }
 .lg-link {
   margin-left: 5px;
   padding: 2px 4px;
@@ -615,10 +824,27 @@ async function submit() {
 
 .lg-blocker { display: flex; flex-direction: column; gap: 4px; }
 
+/* 窄屏：单栏。左栏**不隐藏**，压缩成「印章 + 一句话」——
+   隐藏会让移动端彻底失去品牌，只剩一张匿名表单。 */
+@media (max-width: 980px) {
+  .lg-layout {
+    grid-template-columns: 1fr;
+    max-width: 440px;
+    gap: 20px;
+    align-items: start;
+  }
+  .lg-seal-row { margin-bottom: 10px; }
+  .lg-seal { width: 32px; height: 32px; font-size: 18px; }
+  .lg-display { font-size: 28px; line-height: 1.3; }
+  .lg-lede, .lg-meta { display: none; }
+  .lg-card { margin: 0 auto; }
+}
+
 /* 窄屏：卡片贴边一点，别浪费横向空间 */
 @media (max-width: 460px) {
   .lg-view { padding: 18px 12px 28px; }
   .lg-card { padding: 22px 18px 18px; }
+  .lg-display { font-size: 24px; }
 }
 
 /*

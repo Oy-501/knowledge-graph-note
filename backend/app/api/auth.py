@@ -1,4 +1,4 @@
-"""认证接口：初始化向导 / 登录 / 注册 / 登出 / 当前用户 / 修改密码。
+"""认证接口：初始化向导 / 登录 / 注册 / 忘记密码 / 登出 / 当前用户 / 修改密码。
 
 这个文件负责把 `services/auth_service.py` 的能力暴露成 HTTP 接口。
 在此之前服务层已经写好（bcrypt 口令、会话令牌、滑动续期、失败限流），
@@ -11,8 +11,9 @@ admin.py 的守卫是「管理口令」时代的产物（校验 X-Admin-Token）
 
 安全约定
 --------
-- 匿名可达的只有 status / bootstrap / login / register 四个，
-  且各自都有独立守卫：need_bootstrap()、REGISTRATION_OPEN、失败限流。
+- 匿名可达的只有 status / bootstrap / login / register / reset-password 五个，
+  且各自都有独立守卫：need_bootstrap()、REGISTRATION_OPEN、失败限流、
+  「用户名 + 恢复码」校验（reset_limiter 单独计数）。
 - 除 status 外的都写了审计（services/auth_service 负责），
   登录成功/失败、初始化、注册都会在「后台管理 → 操作审计」里留痕。
 - 任何接口都不回显 password_hash（统一走 user_public）。
@@ -29,6 +30,7 @@ from app.database import get_db
 from app.models.models import User
 from app.services import auth_service as auth
 from app.services.errors import AppError
+from app.services.security import client_key, reset_limiter
 
 router = APIRouter()
 
@@ -52,6 +54,13 @@ class CredentialsPayload(BaseModel):
 
 class ChangePasswordPayload(BaseModel):
     old_password: str = ""
+    new_password: str = ""
+
+
+class ResetPasswordPayload(BaseModel):
+    """忘记密码：用户名 + 恢复码 + 新密码（都是空串默认，缺字段由服务层给可读提示）"""
+    username: str = ""
+    recovery_code: str = ""
     new_password: str = ""
 
 
@@ -103,12 +112,13 @@ def auth_bootstrap(payload: CredentialsPayload, db: Session = Depends(get_db)):
     承接旧数据：既有 user#1 行会被直接升格（files/nodes/notes 都挂在
     user_id=1 上），因此不需要搬数据，历史内容天然归新管理员所有。
     """
-    token, user = auth.bootstrap(db, payload.username, payload.password,
-                                payload.display_name or "")
+    token, user, recovery_code = auth.bootstrap(db, payload.username, payload.password,
+                                               payload.display_name or "")
     return {
         "ok": True,
         "token": token,
         "user": user,
+        "recovery_code": recovery_code,
         "message": "初始化完成，已以管理员身份登录",
     }
 
@@ -129,9 +139,50 @@ def auth_register(payload: CredentialsPayload, db: Session = Depends(get_db)):
 
     注册出来的是 role=user：能登录、能看数据，但**不能执行写操作**
     （写守卫要求管理员会话）。需要开通写权限请在「后台管理」调整角色。
+
+    响应里的 `recovery_code` 是**一次性**的：忘记密码时靠它自助重置。
+    库里只有哈希，这次不保存就再也没有了（只能找管理员重置）。
     """
-    token, user = auth.register(db, payload.username, payload.password)
-    return {"ok": True, "token": token, "user": user}
+    token, user, recovery_code = auth.register(db, payload.username, payload.password)
+    return {"ok": True, "token": token, "user": user, "recovery_code": recovery_code}
+
+
+@router.post("/reset-password")
+def auth_reset_password(payload: ResetPasswordPayload, request: Request,
+                        db: Session = Depends(get_db)):
+    """忘记密码：用恢复码换新密码（**匿名可访问**，失败限流保护）。
+
+    为什么需要这个接口：本应用没有邮件服务，「给你发一封重置邮件」在这里是假的。
+    恢复码是本地场景下可行的等价物 —— 注册时生成一次、用户自己保存、
+    用后立即轮换。
+
+    三条安全约束：
+      1. 失败文案不区分「用户不存在 / 恢复码错误」（否则成了用户名枚举器）；
+      2. 与登录共用失败限流器（按 用户名 + 客户端 计），防在线穷举；
+      3. 成功后吊销该用户全部会话并轮换恢复码（旧码、旧会话同时作废）。
+    """
+    key = f"reset:{client_key(request)}:{payload.username.strip().lower()}"
+    allowed, retry_after = reset_limiter.check(key)
+    if not allowed:
+        raise AppError(
+            "尝试次数过多，请稍后再试",
+            status_code=429, code="too_many_attempts",
+            hint=f"请等待 {retry_after} 秒后再试。",
+        )
+
+    try:
+        new_code = auth.reset_with_recovery(
+            db, payload.username, payload.recovery_code, payload.new_password)
+    except AppError:
+        reset_limiter.hit(key)
+        raise
+    reset_limiter.reset(key)
+
+    return {
+        "ok": True,
+        "recovery_code": new_code,
+        "message": "密码已重置，请用新密码登录。旧的恢复码已失效，这是新的恢复码。",
+    }
 
 
 @router.post("/logout")

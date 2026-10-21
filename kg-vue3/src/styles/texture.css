@@ -211,59 +211,46 @@ html:not(.dark) .app-tex-photo::after {
 }
 
 /* 图谱画布：不再自己铺实色，改为透出素材层 + 一层径向氛围光 */
-.canvas-wrap {
-  background:
-    radial-gradient(1100px 720px at 14% 8%, var(--accent-soft) 0%, transparent 58%),
-    radial-gradient(980px 680px at 86% 84%, var(--violet-soft) 0%, transparent 56%),
-    radial-gradient(720px 520px at 74% 14%, var(--amber-soft) 0%, transparent 48%),
-    color-mix(in srgb, var(--bg-primary) 42%, transparent);
-}
-/* 画布自己的极光漂移：让「图谱不是贴在死背景上」 */
-.canvas-wrap::before {
-  content: '';
-  position: absolute;
-  inset: -25% -15%;
-  pointer-events: none;
-  z-index: 0;
-  background:
-    radial-gradient(620px 420px at 28% 32%, var(--accent-glow) 0%, transparent 62%),
-    radial-gradient(540px 400px at 72% 62%, var(--violet-glow) 0%, transparent 62%);
-  filter: blur(52px);
-  opacity: 0.42;
-  animation: tex-aurora 26s var(--ease-out) infinite alternate;
-}
-@keyframes tex-aurora {
-  0%   { transform: translate3d(-3%, -2%, 0) scale(1);    opacity: 0.32; }
-  50%  { transform: translate3d(2%, 3%, 0)   scale(1.06); opacity: 0.5; }
-  100% { transform: translate3d(-1%, 2%, 0)  scale(1.02); opacity: 0.36; }
-}
+/*
+  画布背景**不在这里定义**。
+  这里原本是三团巨大的彩色径向渐变（青/紫/琥珀），画布 60% 的面积都被染色：
+  节点和连线不再是唯一主体，眼睛要先在光斑之间找关系，才去看图。
+  现在统一由 main.css 的 .canvas-wrap 给「细网格 + 暗角」——
+  注意本文件在 main.css 之后加载，所以这里必须**整块删掉**，
+  只写 background: transparent 也一样会盖掉网格。
+*/
+/*
+  画布上原本有一层「极光漂移」（两团 blur(52px) 的青色/紫色光斑，26s 来回飘）。
+  删掉的原因：那不是背景，是**第二个主体**。图谱的全部信息都靠位置与连线表达，
+  而背景在动、还带色相，眼睛会先去追光斑。净画布 = 只有网格（尺度）+ 暗角（边界）。
+*/
 .canvas-wrap > svg { position: relative; z-index: 1; }
 
 /* ============================================================
    ③ 霓虹辉光：让「可交互」这件事有物理反馈
    ============================================================ */
 
-/* 主按钮：填充面 + 同色辉光（不用 blur 滤镜，插值阴影几乎零成本） */
+/* 主按钮：实心面，悬停只提一档亮度。
+   原来的写法是「悬停时向外扩一圈 22px 的青色辉光 + 上浮 1px」——
+   辉光让按钮看起来在发光（像状态提示），上浮让整排控件跟着动。
+   可点元素的反馈应该是"更实"，不是"更亮"。 */
 .btn-primary,
 .el-button--primary:not(.is-text):not(.is-link) {
   background: var(--accent-fill);
   color: var(--on-accent);
   border-color: var(--accent-fill);
-  box-shadow: 0 0 0 0 var(--accent-glow);
-  transition: box-shadow var(--dur-base) var(--ease-out),
-              transform var(--dur-fast) var(--ease-out),
-              background var(--dur-fast) var(--ease-out);
+  box-shadow: none;
+  transition: background-color var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out),
+              filter var(--dur-fast) var(--ease-out);
 }
 .btn-primary:hover,
 .el-button--primary:not(.is-text):not(.is-link):hover {
-  background: var(--accent);
-  border-color: var(--accent);
-  transform: translateY(-1px);
-  box-shadow:
-    0 6px 22px var(--accent-glow),
-    0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+  background: var(--accent-fill);
+  border-color: var(--accent-fill);
+  filter: brightness(1.07);
 }
-.btn-primary:active { transform: translateY(0); }
+.btn-primary:active { filter: brightness(0.96); }
 
 /* 导航激活页签：底部霓虹下划线 + 弥散光 */
 .nav-tab {
@@ -271,39 +258,21 @@ html:not(.dark) .app-tex-photo::after {
   border-radius: 8px 8px 0 0;
 }
 .nav-tab.active {
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--accent) 14%, transparent) 0%,
-    transparent 100%
-  );
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
-  color: var(--accent);
+  color: var(--text-primary);
 }
-.nav-tab.active::after {
-  content: '';
-  position: absolute;
-  left: 14%; right: 14%; bottom: 0;
-  height: 2px;
-  border-radius: 2px 2px 0 0;
-  background: linear-gradient(90deg, var(--accent), var(--violet));
-  box-shadow: 0 0 12px var(--accent-glow);
-}
+/* 下划线由 identity.css 统一给（吃模块令牌 --mark），这里不再画第二条 */
 
-/* 品牌字：从旧的三色渐变（蓝绿杏）改为霓虹双色（青→紫） */
+/* 品牌字：实色。
+   渐变字（青→紫）在深底上会有一段亮度塌陷，而且品牌名是全站重复出现最多的文字，
+   让它唯一"发光"等于每一屏都在喊。身份由印章承担就够了。 */
 .app-nav-brand {
-  background: linear-gradient(96deg, var(--accent) 0%, var(--violet) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--text-primary);
   letter-spacing: 0.2px;
 }
 
-/* 面板头像：霓虹渐变方块 + 外辉光 */
+/* 面板头像：实色块 + 一级阴影（不再向外发光） */
 .ph-avatar {
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, #ffffff 26%, transparent),
-    0 6px 20px var(--accent-glow),
-    0 0 0 1px color-mix(in srgb, var(--accent) 34%, transparent);
+  box-shadow: var(--shadow-sm);
 }
 
 /* 输入类控件：聚焦时给一圈霓虹环，比只变边框更容易看见 */
@@ -317,30 +286,23 @@ select:focus-visible {
 }
 
 /* 上传区：虚线换成霓虹虚线 + 悬停弥散光 */
+/* 上传区：平面底 + 虚线边。悬停只加深底色与外圈，不做弥散光 */
 .dropzone {
-  background: linear-gradient(
-    160deg,
-    color-mix(in srgb, var(--bg-tertiary) 60%, transparent) 0%,
-    color-mix(in srgb, var(--bg-secondary) 40%, transparent) 100%
-  );
+  background: var(--surface-3);
   border: 1.5px dashed color-mix(in srgb, var(--accent) 34%, transparent);
   border-radius: var(--radius);
-  transition: all var(--dur-base) var(--ease-out);
+  transition: border-color var(--dur-fast) var(--ease-out),
+              background-color var(--dur-fast) var(--ease-out);
 }
 .dropzone:hover,
 .dropzone.dragover {
   border-color: var(--accent);
-  background: linear-gradient(
-    160deg,
-    color-mix(in srgb, var(--accent) 12%, transparent) 0%,
-    color-mix(in srgb, var(--violet) 8%, transparent) 100%
-  );
-  box-shadow: 0 0 0 4px var(--accent-soft), 0 10px 30px var(--accent-glow);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-3));
 }
 
-/* 滚动条：细霓虹 */
+/* 滚动条：实色细条（渐变在 6px 宽度上看不出走向，只会显脏） */
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, var(--accent), var(--violet));
+  background: color-mix(in srgb, var(--text-muted) 55%, transparent);
   opacity: 0.5;
   border-radius: 6px;
   border: 2px solid transparent;
@@ -375,11 +337,7 @@ select:focus-visible {
   font-weight: 600;
 }
 
-/* 知识校验/健康度等状态条：让语义色也能发光 */
-.health-indicator.healthy,
-.val-stat-value.val-passed { text-shadow: 0 0 14px color-mix(in srgb, var(--success) 45%, transparent); }
-.health-indicator.error,
-.val-stat-value.val-error { text-shadow: 0 0 14px color-mix(in srgb, var(--danger) 45%, transparent); }
+/* 知识校验/健康度：语义色已经足够区分状态，不再加发光（发光会把小字糊掉） */
 
 /* ============================================================
    ⑤ 亮色主题下的素材收敛
@@ -396,15 +354,12 @@ html:not(.dark) .control-panel {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.90) 0%, rgba(242, 244, 249, 0.92) 100%);
   box-shadow: inset -1px 0 0 rgba(8, 145, 178, 0.08), 2px 0 18px rgba(16, 23, 37, 0.05);
 }
-html:not(.dark) .canvas-wrap::before { opacity: 0.22; }
 html:not(.dark) .app-tex-grain { opacity: calc(var(--tex-grain-opacity, 0.5) * 0.6); }
-html:not(.dark) .nav-tab.active::after { box-shadow: 0 0 8px rgba(8, 145, 178, 0.35); }
 
 /* ============================================================
    ⑥ 尊重「减少动态效果」
    ============================================================ */
 @media (prefers-reduced-motion: reduce) {
-  .canvas-wrap::before { animation: none; opacity: 0.3; }
   .app-tex-photo { transition: none; }
 }
 

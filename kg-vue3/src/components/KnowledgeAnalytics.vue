@@ -419,7 +419,7 @@ const report = computed(() => {
   line-height: 1.2;
 }
 .ka-label {
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   color: var(--text-muted);
   margin-top: 3px;
 }
@@ -434,12 +434,10 @@ const report = computed(() => {
   font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--text-secondary);
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
   margin-bottom: 2px;
 }
 .ka-subtitle {
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   color: var(--text-muted);
   margin-top: 4px;
 }

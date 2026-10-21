@@ -1,0 +1,227 @@
+/* ============================================================
+   primitives.css —— 组件原语层
+   ------------------------------------------------------------
+   为什么需要这一层：
+
+   统计过一轮，组件里有 **39 个** card/panel/block/box 类名、**59 个**
+   btn/button 类名、**11 种**不同的 border-radius 取值。也就是说，
+   每加一个模块，就有人（包括我）照着上一处再手写一遍「差不多的卡片」
+   「差不多的按钮」—— 半径差 2px、阴影差一级、强调色换一个位置。
+   单看每一处都合理，放在同一屏就「突兀」：因为没有两个东西是同一个东西。
+
+   这层的职责：**同一个东西只写一次**，差异用变体表达，不新写样式。
+   个性不在这里定义 —— 个性走 modules.css 的 `--mark` 令牌（只落到标记位）。
+
+   使用约定：
+   - 新组件用原语 + 变体，不要另起一套 .my-card / .xx-btn
+   - 一个视图里 **只允许一个 loud**（实心按钮或主标记），其余 normal / quiet
+   ============================================================ */
+
+/* ---------------------------- 表面 ---------------------------- */
+/* 三级：flat（无壳，靠发丝线分段）/ 默认（半透明面）/ inset（内嵌块） */
+.u-surface {
+  background: var(--surface-1);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+}
+.u-surface--flat {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+.u-surface--inset {
+  background: var(--surface-3);
+  border-color: transparent;
+  border-radius: var(--radius-sm);
+}
+
+/* ---------------------------- 按钮 ---------------------------- */
+/*
+  五个变体，按强调从高到低：solid > seal > tonal > outline > ghost。
+  一条页面里 solid 最多一个（主操作），seal 只给「品牌级/一次性的动作」。
+  刻意不做 translateY 悬浮：那会让每颗按钮都在动，反而更吵。
+  悬浮只改底色，按压才轻微下沉 1px，动效只用来确认「按下去了」。
+*/
+.u-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  /* 基准高度走 token（main.css 的 --ctrl-h），这样「密度」调节能同时作用于
+     字号与按钮体积；写死 30px 时只会得到「小字挤在大盒子里」的错位感。 */
+  height: var(--ctrl-h, 30px);
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  line-height: 1;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out),
+              color var(--dur-fast) var(--ease-out),
+              transform var(--dur-fast) var(--ease-out);
+}
+.u-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.u-btn:active:not(:disabled) { transform: translateY(1px); }
+.u-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.u-btn--solid {
+  background: var(--accent-fill);
+  color: var(--on-accent);
+}
+.u-btn--solid:hover:not(:disabled) { filter: brightness(1.06); }
+
+.u-btn--seal {
+  background: var(--seal);
+  color: var(--seal-ink);
+}
+.u-btn--seal:hover:not(:disabled) { filter: brightness(1.06); }
+
+.u-btn--tonal {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.u-btn--tonal:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+
+.u-btn--outline {
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+.u-btn--outline:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--text-faint);
+}
+
+.u-btn--ghost { color: var(--text-secondary); }
+.u-btn--ghost:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* 文字按钮：最安静的一档，用于「导出 / 复制」这类收尾动作 */
+.u-btn--text {
+  height: auto;
+  padding: 2px 0;
+  border-radius: 0;
+  border-bottom: 1px solid transparent;
+  color: var(--text-secondary);
+}
+.u-btn--text:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-bottom-color: var(--border);
+}
+
+.u-btn--sm { height: calc(var(--ctrl-h, 30px) - 4px); padding: 0 9px; font-size: var(--fs-xs); }
+.u-btn--block { width: 100%; }
+
+/* ---------------------------- 标签 ---------------------------- */
+.u-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 8px;
+  border: 1px solid var(--border-light);
+  border-radius: 3px;
+  background: var(--surface-1);
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
+.u-chip--muted { color: var(--text-muted); }
+.u-chip--on {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* ---------------------------- 栏目眉标 ---------------------------- */
+/* 「NO. 07 —— 知识图谱总结」这一行。栏号吃模块色，是每个模块唯一的身份信号 */
+.u-kicker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.16em;
+  color: var(--text-muted);
+}
+.u-kicker__no {
+  color: var(--mark, var(--seal));
+  font-weight: 700;
+}
+.u-kicker__rule {
+  width: 26px;
+  height: 1px;
+  background: var(--mark, var(--seal));
+  opacity: 0.55;
+}
+
+/* ---------------------------- 分节标题 ---------------------------- */
+/* 栏号 + 衬线标题 + 右侧发丝线：全站统一的分节方式 */
+.u-sec-title {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin: 0 0 18px;
+}
+.u-sec-title__no {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--mark, var(--seal));
+  letter-spacing: 0.08em;
+}
+.u-sec-title h3,
+.u-sec-title__label {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: calc(var(--fs-xl) + 2px);
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.u-sec-title__note {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+/* 发丝线用**显式元素**而不是 ::after：
+   有右侧操作（缩放档、筛选器）时，线要停在操作**之前**，
+   而 ::after 只能排在最后 —— 那样线会跑到按钮右边的空白里。 */
+.u-sec-title__fill {
+  flex: 1;
+  min-width: 20px;
+  height: 1px;
+  background: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  align-self: center;
+}
+.u-sec-title__actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---------------------------- 发丝线 ---------------------------- */
+.u-rule {
+  height: 1px;
+  border: 0;
+  background: color-mix(in srgb, var(--text-primary) 12%, transparent);
+}
+
+/* ---------------------------- 强调预算 ---------------------------- */
+/*
+  页面里「响」的东西是有配额的。用法：给需要压低的块加 data-emphasis="quiet"，
+  它自己不会变好看，但**周围安静了，重点才立得住**。
+  这条规则不改变布局，只压掉颜色对比，属于随时可摘的开关。
+*/
+[data-emphasis="quiet"] {
+  --text-primary: var(--text-secondary);
+  --text-secondary: var(--text-muted);
+}

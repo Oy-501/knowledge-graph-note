@@ -707,7 +707,10 @@ function onWikilinkSync(nodeIds) {
 }
 
 // 暴露保存方法给父组件
-defineExpose({ saveNote })
+function openNote(noteId) {
+  onSelectNote(noteId)
+}
+defineExpose({ saveNote, openNote })
 </script>
 
 <style scoped>

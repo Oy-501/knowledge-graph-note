@@ -1,0 +1,303 @@
+﻿/* ============================================================
+   premium.css — 严格按墨刀稿《知识图谱应用布局重构》实现
+   主色 #1677FF / 背景 #ffffff / 分割线 #e5e7eb
+   ============================================================ */
+
+:root {
+  --md-primary: #1677FF;
+  --md-primary-hover: #4096ff;
+  --md-primary-bg: #e6f4ff;
+  --md-text: #19191A;
+  --md-text-secondary: #444d56;
+  --md-text-tertiary: #8B8C8F;
+  --md-bg: #ffffff;
+  --md-bg-subtle: #f6f8fa;
+  --md-border: #e5e7eb;
+  --md-border-strong: #d1d5db;
+}
+
+/* ---------- 顶栏 48px ---------- */
+.app-topbar {
+  height: 48px !important;
+  background: var(--md-bg) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-bottom: 1px solid var(--md-border) !important;
+  padding: 0 16px !important;
+  gap: 12px !important;
+}
+.app-topbar-brand { gap: 8px !important; }
+.app-topbar-name {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  color: var(--md-text) !important;
+}
+.app-seal {
+  width: 24px !important;
+  height: 24px !important;
+  font-size: 12px !important;
+  border-radius: 4px !important;
+}
+
+/* 搜索框 ⌘K */
+.app-search {
+  height: 30px !important;
+  max-width: 400px !important;
+  border: 1px solid var(--md-border) !important;
+  border-radius: 6px !important;
+  background: var(--md-bg-subtle) !important;
+  color: var(--md-text-tertiary) !important;
+  font-size: 13px !important;
+}
+.app-search:hover {
+  background: var(--md-bg) !important;
+  border-color: var(--md-border-strong) !important;
+}
+.app-search-kbd {
+  font-size: 11px !important;
+  color: var(--md-text-tertiary) !important;
+  border: 1px solid var(--md-border) !important;
+  border-radius: 3px !important;
+  padding: 0 5px !important;
+}
+
+/* 顶栏按钮 */
+.app-icon-btn {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 6px !important;
+  color: var(--md-text-secondary) !important;
+}
+.app-icon-btn:hover {
+  background: var(--md-bg-subtle) !important;
+  color: var(--md-text) !important;
+}
+
+/* ---------- 左导航 240px ---------- */
+.app-sidebar {
+  width: 240px !important;
+  background: var(--md-bg) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-right: 1px solid var(--md-border) !important;
+}
+.app-sidebar.is-collapsed { width: 64px !important; }
+
+.sidebar-head {
+  padding: 12px 16px 8px !important;
+}
+.sidebar-view {
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  color: var(--md-text) !important;
+}
+.sidebar-toggle {
+  width: 22px !important;
+  height: 22px !important;
+  border-radius: 4px !important;
+  color: var(--md-text-tertiary) !important;
+}
+
+/* 导航项 36px，选中左 3px 主色竖条 */
+.sidebar-nav {
+  padding: 4px 8px !important;
+  gap: 2px !important;
+}
+.nav-tab {
+  position: relative;
+  height: 36px !important;
+  padding: 0 10px !important;
+  border-radius: 6px !important;
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  color: var(--md-text-secondary) !important;
+  background: transparent !important;
+  border: none !important;
+}
+.nav-tab::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 18px;
+  background: var(--md-primary);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.nav-tab:hover {
+  background: var(--md-bg-subtle) !important;
+  color: var(--md-text) !important;
+}
+.nav-tab.active {
+  background: var(--md-primary-bg) !important;
+  color: var(--md-primary) !important;
+  font-weight: 500 !important;
+}
+.nav-tab.active::before { opacity: 1; }
+.nav-tab-glyph {
+  width: 20px !important;
+  height: 20px !important;
+  font-size: 11px !important;
+  border-radius: 4px !important;
+  background: var(--md-bg-subtle) !important;
+}
+.nav-tab.active .nav-tab-glyph {
+  background: var(--md-primary) !important;
+  color: #fff !important;
+}
+.nav-tab-key {
+  font-size: 11px !important;
+  color: var(--md-text-tertiary) !important;
+  border: none !important;
+}
+
+.sidebar-foot {
+  padding: 10px 16px !important;
+  border-top: 1px solid var(--md-border) !important;
+}
+.sidebar-mode {
+  font-size: 12px !important;
+  color: var(--md-text-tertiary) !important;
+}
+
+/* ---------- 主工作区 ---------- */
+.app-main { background: var(--md-bg) !important; }
+
+/* 280px 工具面板 */
+.control-panel {
+  width: 280px !important;
+  background: var(--md-bg) !important;
+  border-right: 1px solid var(--md-border) !important;
+}
+.panel-head {
+  padding: 14px 16px !important;
+  border-bottom: 1px solid var(--md-border) !important;
+}
+.ph-title {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: var(--md-text) !important;
+}
+.ph-stats {
+  font-size: 12px !important;
+  color: var(--md-text-tertiary) !important;
+}
+
+/* 去掉所有发光阴影 */
+* { box-shadow: none !important; }
+.app-topbar, .app-sidebar, .control-panel { box-shadow: none !important; }
+
+/* ============================================================
+   动态效果 — Linear/Notion 风格，150-200ms，ease-out
+   ============================================================ */
+
+/* 全局过渡 */
+.app-topbar, .app-sidebar, .control-panel,
+.nav-tab, .app-search, .app-icon-btn, .sidebar-toggle,
+.ph-avatar, .sidebar-head, .panel-head {
+  transition: background-color 0.15s ease-out,
+              color 0.15s ease-out,
+              border-color 0.15s ease-out,
+              box-shadow 0.15s ease-out,
+              transform 0.15s ease-out;
+}
+
+/* 导航项 hover 微位移 */
+.nav-tab {
+  transition: all 0.15s cubic-bezier(0.215, 0.61, 0.355, 1);
+}
+.nav-tab:hover {
+  transform: translateX(2px);
+}
+.nav-tab.active:hover {
+  transform: translateX(0);
+}
+
+/* 左竖条动画展开 */
+.nav-tab::before {
+  transition: opacity 0.2s ease-out,
+              height 0.2s cubic-bezier(0.215, 0.61, 0.355, 1);
+}
+.nav-tab.active::before {
+  height: 20px;
+}
+
+/* 搜索框 focus 效果 */
+.app-search {
+  transition: all 0.2s ease-out;
+}
+.app-search:hover {
+  transform: translateY(-1px);
+}
+.app-search:focus-within {
+  border-color: var(--md-primary) !important;
+  box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.1) !important;
+}
+
+/* 顶栏按钮 hover */
+.app-icon-btn {
+  transition: all 0.15s ease-out;
+}
+.app-icon-btn:hover {
+  transform: translateY(-1px);
+}
+.app-icon-btn:active {
+  transform: translateY(0);
+}
+
+/* 侧栏折叠动画 */
+.app-sidebar {
+  transition: width 0.2s cubic-bezier(0.215, 0.61, 0.355, 1);
+}
+
+/* 视图切换淡入 */
+.app-view {
+  animation: viewFadeIn 0.25s ease-out;
+}
+@keyframes viewFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 面板折叠展开动画 */
+.panel-collapse .el-collapse-item__header {
+  transition: color 0.15s ease-out;
+}
+
+/* 头像微悬浮 */
+.ph-avatar {
+  transition: transform 0.2s ease-out;
+}
+.ph-avatar:hover {
+  transform: scale(1.05);
+}
+
+/* 主按钮点击波纹 */
+.u-btn--primary {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.15s ease-out;
+}
+.u-btn--primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(22, 119, 255, 0.25);
+}
+.u-btn--primary:active {
+  transform: translateY(0);
+}
+
+/* 尊重用户减少动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

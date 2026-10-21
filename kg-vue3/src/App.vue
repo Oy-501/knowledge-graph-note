@@ -1,48 +1,41 @@
 <template>
-  <div class="app-shell" :style="appStyle">
-    <!-- 顶部导航栏（未登录时不渲染：登录页自己就是完整一屏） -->
-    <nav v-if="authed" class="app-nav">
-      <div class="app-nav-brand">知识图谱笔记</div>
-
-      <!-- 导航生成自 NAV_TABS：新增视图只需加一项，键盘快捷键自动跟随 -->
-      <div ref="tabsRef" class="app-nav-tabs" role="tablist" aria-label="主导航">
-        <button
-          v-for="(tab, i) in NAV_TABS"
-          :key="tab.key"
-          type="button"
-          role="tab"
-          class="nav-tab"
-          :class="{ active: currentView === tab.key }"
-          :aria-selected="currentView === tab.key"
-          :aria-controls="`view-${tab.key}`"
-          :data-tab-key="tab.key"
-          :title="`${tab.hint}（快捷键 Ctrl+${i + 1}）`"
-          @click="activate(tab.key)"
-        >
-          <span class="nav-tab-label">{{ tab.label }}</span>
-          <kbd class="nav-tab-key">{{ i + 1 }}</kbd>
-        </button>
+  <!-- data-module：当前页签的个性化令牌（--mark）。只影响标题菱形、
+       栏号这几个标记位，不改任何组件样式 —— 见 styles/modules.css -->
+  <div class="app-shell" :data-module="currentView" :style="appStyle">
+    <!-- 顶栏（48px）：只留产品名、全局搜索、主操作与账号。
+         8 个视图页签已移到左侧导航 —— 顶栏每矮一截，画布就高一截。 -->
+    <header v-if="authed" class="app-topbar">
+      <div class="app-topbar-brand">
+        <!-- 朱砂印章：与落地页同一枚，是贯穿产品内外的身份印记 -->
+        <span class="app-seal" aria-hidden="true">谱</span>
+        <span class="app-topbar-name">知识图谱笔记</span>
       </div>
 
-      <div class="app-nav-actions">
+      <button type="button" class="app-search" @click="paletteOpen = true"
+              title="搜索节点 / 文件 / 操作（Ctrl+K）">
+        <span class="app-search-ph">搜索节点 / 文件 / 操作…</span>
+        <kbd class="app-search-kbd">⌘K</kbd>
+      </button>
+
+      <div class="app-topbar-actions">
         <button type="button"
-          class="nav-theme-btn click-scale"
+          v-if="currentView === 'workbench'"
+          class="u-btn u-btn--outline u-btn--sm"
+          @click="onSaveWorkbench"
+        >保存</button>
+        <button type="button"
+          class="app-icon-btn"
           :title="settingsStore.isDark ? '切换到亮色模式' : '切换到暗色模式'"
           :aria-label="settingsStore.isDark ? '切换到亮色模式' : '切换到暗色模式'"
           @click="settingsStore.toggleTheme()"
         >
-          <el-icon :size="15"><Sunny v-if="!settingsStore.isDark" /><Moon v-else /></el-icon>
+          <el-icon :size="16"><Sunny v-if="!settingsStore.isDark" /><Moon v-else /></el-icon>
         </button>
-        <button type="button"
-          v-if="currentView === 'workbench'"
-          class="nav-btn nav-btn-save"
-          @click="onSaveWorkbench"
-        >保存</button>
         <!-- 账号入口：显示当前登录者，并提供改密 / 退出登录。
              没有出口用户就退不出去 —— 那等于登录功能只做了一半。 -->
         <AccountMenu />
       </div>
-    </nav>
+    </header>
 
     <!-- 全局背景层（旧版单层背景：渐变 / 纯色 / 自定义图） -->
     <div v-if="globalBg" class="app-global-bg" :style="globalBgStyle"></div>
@@ -77,7 +70,42 @@
     -->
     <LoginView v-if="!authed" />
 
-    <template v-if="authed">
+    <div v-if="authed" class="app-body">
+      <!-- 左侧导航（240px，可折叠到 64px）：8 个视图的唯一入口 -->
+      <nav class="app-sidebar" :class="{ 'is-collapsed': navCollapsed }" aria-label="主导航">
+        <div class="sidebar-head">
+          <span class="sidebar-view">{{ currentTabLabel }}</span>
+          <button type="button" class="sidebar-toggle" @click="toggleNav"
+                  :aria-label="navCollapsed ? '展开导航' : '折叠导航'"
+                  :title="navCollapsed ? '展开导航' : '折叠导航'">«</button>
+        </div>
+
+        <div ref="tabsRef" class="sidebar-nav" role="tablist">
+          <button
+            v-for="(tab, i) in NAV_TABS"
+            :key="tab.key"
+            type="button"
+            role="tab"
+            class="nav-tab"
+            :class="{ active: currentView === tab.key }"
+            :aria-selected="currentView === tab.key"
+            :aria-controls="`view-${tab.key}`"
+            :data-tab-key="tab.key"
+            :title="`${tab.hint}（Ctrl+${i + 1}）`"
+            @click="activate(tab.key)"
+          >
+            <span class="nav-tab-glyph" aria-hidden="true">{{ tab.label.slice(0, 1) }}</span>
+            <span class="nav-tab-label">{{ tab.label }}</span>
+            <kbd class="nav-tab-key">{{ i + 1 }}</kbd>
+          </button>
+        </div>
+
+        <div class="sidebar-foot">
+          <span class="sidebar-mode">{{ settingsStore.isDark ? '暗色主题' : '亮色主题' }}</span>
+        </div>
+      </nav>
+
+      <main class="app-main">
 
     <!-- 图谱视图 -->
     <div v-show="currentView === 'graph'" id="view-graph" class="app-view graph-view">
@@ -123,7 +151,7 @@
 
       <!-- 错误边界：画布崩溃时左侧面板仍可用，用户能继续操作而不是整页白屏 -->
       <ErrorBoundary name="图谱画布" @recover="activate('graph')">
-        <GraphCanvas />
+        <GraphCanvas @open-note="onOpenNoteFromGraph" />
       </ErrorBoundary>
     </div>
 
@@ -162,6 +190,13 @@
       </ErrorBoundary>
     </div>
 
+    <!-- 界面设计器（纯前端：调六个体系维度，全站实时联动） -->
+    <div v-show="currentView === 'theme'" id="view-theme" class="app-view kb-view-wrap">
+      <ErrorBoundary v-if="themeMounted" name="界面设计器" @recover="activate('graph')">
+        <ThemeStudioView />
+      </ErrorBoundary>
+    </div>
+
     <!-- 个人主页（头像 / 自定义背景 / 我的数据） -->
     <div v-show="currentView === 'profile'" id="view-profile" class="app-view kb-view-wrap">
       <ErrorBoundary v-if="profileMounted" name="个人主页" @recover="activate('graph')">
@@ -176,7 +211,21 @@
       </ErrorBoundary>
     </div>
 
-    </template>
+      </main>
+    </div>
+
+    <!-- 命令面板：⌘K / Ctrl+K 打开 -->
+    <AppCommandPalette
+      :visible="paletteOpen"
+      :items="paletteItems"
+      @close="paletteOpen = false"
+      @run="runPaletteItem"
+    />
+
+    <!-- 一次性恢复码：注册/初始化/重置密码后弹出。
+         放在登录门禁之外 —— 初始化与注册成功时 auth 已切换为已登录，
+         放在 v-if="authed" 里也能显示，但独立挂载更不容易被后续改动漏掉。 -->
+    <RecoveryCodeDialog />
   </div>
 </template>
 
@@ -192,11 +241,14 @@ import KnowledgeAnalytics from '@/components/KnowledgeAnalytics.vue'
 import KnowledgeReview from '@/components/KnowledgeReview.vue'
 import KnowledgeQA from '@/components/KnowledgeQA.vue'
 import AccountMenu from '@/components/AccountMenu.vue'
+import AppCommandPalette from '@/components/AppCommandPalette.vue'
 import LoginView from '@/components/LoginView.vue'
+import RecoveryCodeDialog from '@/components/RecoveryCodeDialog.vue'
 import { useFileStore } from '@/store/fileStore'
 import { useGraphStore } from '@/store/graphStore'
 import { useConfigStore } from '@/store/configStore'
 import { useSettingsStore } from '@/store/settingsStore'
+import { useThemeStore } from '@/store/themeStore'
 import { useAuthStore } from '@/store/authStore'
 import { setGraphStoreRef } from '@/store/groupStore'
 
@@ -204,6 +256,7 @@ const fileStore = useFileStore()
 const graphStore = useGraphStore()
 const cfg = useConfigStore()
 const settingsStore = useSettingsStore()
+const themeStore = useThemeStore()
 const auth = useAuthStore()
 
 /**
@@ -228,11 +281,41 @@ const NAV_TABS = [
   // 同样追加在末尾。规律：新页签永远排最后 —— 插中间会让后面所有页签的
   // Ctrl+N 快捷键整体后移，用了几天养成的肌肉记忆会突然失灵。
   { key: 'bgcss', label: '背景 CSS', hint: '用一句话生成响应式背景代码' },
+  { key: 'theme', label: '界面设计', hint: '自定义界面的六个体系维度' },
 ]
 
 const currentView = ref('graph')
 const workbenchRef = ref(null)
 const tabsRef = ref(null)
+
+/** 左侧导航折叠状态：localStorage 持久化；折叠只隐藏文字，不重排 DOM */
+const navCollapsed = useLocalStorage('kgn.navCollapsed', false)
+function toggleNav() {
+  navCollapsed.value = !navCollapsed.value
+}
+
+/** 左导航头部显示的当前视图名 */
+const currentTabLabel = computed(() =>
+  NAV_TABS.find(t => t.key === currentView.value)?.label || '')
+
+/** 命令面板（⌘K / Ctrl+K）：把「去哪个视图」与几个常用动作收进一个浮层 */
+const paletteOpen = ref(false)
+const paletteItems = computed(() => [
+  ...NAV_TABS.map((t, i) => ({
+    id: `view-${t.key}`, group: '视图', label: t.label,
+    hint: `Ctrl+${i + 1}`, type: 'view', payload: t.key,
+  })),
+  { id: 'act-theme', group: '操作', label: '切换亮 / 暗主题', type: 'theme' },
+  { id: 'act-upload', group: '操作', label: '上传文件', type: 'view', payload: 'graph' },
+  { id: 'act-refresh', group: '操作', label: '重新加载工作区数据', type: 'refresh' },
+])
+
+function runPaletteItem(item) {
+  paletteOpen.value = false
+  if (item.type === 'view') activate(item.payload)
+  else if (item.type === 'theme') settingsStore.toggleTheme()
+  else if (item.type === 'refresh') loadWorkspaceData()
+}
 
 // 工作台懒加载：首次切到该视图时才异步加载并挂载（拆 chunk），之后常驻保持编辑状态
 const KnowledgeWorkbench = defineAsyncComponent(() => import('@/components/KnowledgeWorkbench.vue'))
@@ -254,6 +337,10 @@ const plotMounted = ref(false)
 const BackgroundCssView = defineAsyncComponent(() => import('@/components/bgcss/BackgroundCssView.vue'))
 const bgcssMounted = ref(false)
 
+// 界面设计器：用户自定义整套界面取值（同样纯前端，懒加载）
+const ThemeStudioView = defineAsyncComponent(() => import('@/components/ThemeStudioView.vue'))
+const themeMounted = ref(false)
+
 // 个人主页 / 后台管理（同样懒加载）
 const ProfileView = defineAsyncComponent(() => import('@/components/ProfileView.vue'))
 const AdminView = defineAsyncComponent(() => import('@/components/AdminView.vue'))
@@ -266,6 +353,7 @@ watch(currentView, v => {
   if (v === 'summary') summaryMounted.value = true
   if (v === 'plot') plotMounted.value = true
   if (v === 'bgcss') bgcssMounted.value = true
+  if (v === 'theme') themeMounted.value = true
   if (v === 'profile') profileMounted.value = true
   if (v === 'admin') adminMounted.value = true
 })
@@ -284,12 +372,21 @@ function activate(key) {
 /** Ctrl/⌘ + 数字键切页签（正在输入时不劫持） */
 function onKeydown(e) {
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return
-  const num = Number(e.key)
-  if (!Number.isInteger(num) || num < 1 || num > NAV_TABS.length) return
 
   const el = document.activeElement
   const tag = (el?.tagName || '').toLowerCase()
-  if (tag === 'input' || tag === 'textarea' || tag === 'select' || el?.isContentEditable) return
+  const typing = tag === 'input' || tag === 'textarea' || tag === 'select' || el?.isContentEditable
+
+  // ⌘K / Ctrl+K：开合命令面板。编辑区里不抢键，否则会吃掉编辑器自己的快捷键
+  if (!typing && (e.key === 'k' || e.key === 'K')) {
+    e.preventDefault()
+    paletteOpen.value = !paletteOpen.value
+    return
+  }
+
+  const num = Number(e.key)
+  if (!Number.isInteger(num) || num < 1 || num > NAV_TABS.length) return
+  if (typing) return
 
   e.preventDefault()
   activate(NAV_TABS[num - 1].key)
@@ -361,6 +458,10 @@ onMounted(async () => {
   // 主题与背景是本机设置，先加载 —— 登录页要靠它显示正确的配色与背景
   await settingsStore.load()
 
+  // 主题必须在 settings 之后加载：它的 accent 派生依赖 <html> 上的暗/亮类，
+  // 而那个类是 settingsStore.load() 打的。顺序反了会得到「亮底的暗色强调」。
+  themeStore.load()
+
   // 探测登录状态；已登录（刷新页面场景）直接进应用，未登录则停在登录页
   await auth.probe()
   if (auth.isAuthed) await loadWorkspaceData()
@@ -379,5 +480,14 @@ onUnmounted(() => {
 
 function onSaveWorkbench() {
   workbenchRef.value?.saveNote()
+}
+
+function onOpenNoteFromGraph(noteId) {
+  activate('workbench')
+  // 工作台懒挂载：第一次切换到工作台时 workbenchRef 可能还没创建
+  // 用 nextTick 等挂载完成，若已挂载则立即执行
+  requestAnimationFrame(() => {
+    workbenchRef.value?.openNote?.(noteId)
+  })
 }
 </script>

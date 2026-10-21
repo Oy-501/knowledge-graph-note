@@ -114,6 +114,11 @@ class _SlidingLimiter:
 # 登录失败限流：同一「用户名|客户端IP」5 分钟内最多 10 次（防在线暴力破解）
 login_limiter = _SlidingLimiter(max_events=10, window_s=300.0)
 
+# 恢复码校验限流：与登录**分开**计数。
+# 共用一个限流器的话，别人乱试恢复码能把账号的登录额度一起耗光 ——
+# 那就成了一个「不登录也能把人锁在门外」的旁路。
+reset_limiter = _SlidingLimiter(max_events=5, window_s=300.0)
+
 # 后台管理口令失败限流：同一来源 5 分钟内最多 20 次（防在线暴力破解）
 admin_limiter = _SlidingLimiter(max_events=20, window_s=300.0)
 

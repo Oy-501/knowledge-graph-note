@@ -4,7 +4,10 @@
     <div class="nmv-header">
       <div class="nmv-header-left">
         <h3 class="nmv-title">笔记管理</h3>
-        <span class="nmv-count">共 {{ filteredNotes.length }} 篇笔记</span>
+        <span class="nmv-count">
+          共 {{ displayCount }} 篇笔记
+          <template v-if="searching"> · 正在检索全文…</template>
+        </span>
       </div>
       <div class="nmv-header-right">
         <button type="button" class="nmv-btn nmv-btn-new" @click="onNewNote">
@@ -21,7 +24,7 @@
         <input
           v-model="searchQuery"
           class="nmv-search"
-          placeholder="搜索笔记标题或内容..."
+          placeholder="搜索标题 / 正文 / 标签（全文）"
           @input="onSearch"
         />
         <button type="button" v-if="searchQuery" class="nmv-search-clear" @click="searchQuery = ''">✕</button>
@@ -165,9 +168,10 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useNoteStore } from '@/store/noteStore'
+import { noteAPI } from '@/api'
 import { useGraphStore } from '@/store/graphStore'
 import { useFileStore } from '@/store/fileStore'
 import { formatAgo } from '@/utils/format'
@@ -186,6 +190,20 @@ const fileStore = useFileStore()
 
 const searchQuery = ref('')
 const currentFilter = ref('all')
+
+/*
+ * 搜索走后端，而不是在 noteStore.notes 上做 includes。
+ * 原因：列表接口的 content 只有前 200 字（列表要轻量），
+ * 在那上面过滤等于「只搜每篇笔记的前 200 字」——写到第 201 字的内容永远搜不到。
+ * searchIds 为 null 表示「远端结果还没回来」，此时先给本地的即时结果，
+ * 避免每敲一个字列表就闪空一次。
+ */
+const searchIds = ref(null)
+const searchTotal = ref(0)
+const searching = ref(false)
+let searchTimer = null
+let searchSeq = 0
+
 const selectedIds = ref(new Set())
 const showBatchBar = computed(() => selectedIds.value.size > 0)
 
@@ -225,12 +243,18 @@ const filteredNotes = computed(() => {
 
   // 搜索过滤
   if (searchQuery.value) {
-    const q = searchQuery.value.toLowerCase()
-    notes = notes.filter(n =>
-      (n.title || '').toLowerCase().includes(q)
-        || (n.content || '').toLowerCase().includes(q)
-        || (n.tags || []).some(t => t.toLowerCase().includes(q))
-    )
+    if (searchIds.value) {
+      // 远端结果回来之后以它为准（它包含第 200 字之后的命中）
+      notes = notes.filter(n => searchIds.value.has(n.id))
+    } else {
+      // 还在一来一回的路上，先给本地即时结果，别让列表闪空
+      const q = searchQuery.value.toLowerCase()
+      notes = notes.filter(n =>
+        (n.title || '').toLowerCase().includes(q)
+          || (n.content || '').toLowerCase().includes(q)
+          || (n.tags || []).some(t => t.toLowerCase().includes(q))
+      )
+    }
   }
 
   // 状态过滤
@@ -258,6 +282,46 @@ const filteredNotes = computed(() => {
 onMounted(async () => {
   await noteStore.loadNotes()
 })
+
+/** 防抖 250ms 打后端全文检索。序号用来丢弃过期响应（快速连打时后到不一定更新）。 */
+function runSearch() {
+  clearTimeout(searchTimer)
+  const q = searchQuery.value.trim()
+  if (!q) {
+    searchIds.value = null
+    searchTotal.value = 0
+    searching.value = false
+    return
+  }
+  searching.value = true
+  // 先清掉上一次的命中集合：否则在「新结果还没回来」的空档里，
+  // 列表会拿**上一条查询**的结果去过滤，看起来像搜错了。
+  searchIds.value = null
+  searchTimer = setTimeout(async () => {
+    const seq = ++searchSeq
+    try {
+      const data = await noteAPI.search(q, { limit: 100 })
+      if (seq !== searchSeq) return          // 已经有更新的请求，丢弃这次结果
+      searchIds.value = new Set((data.notes || []).map(n => n.id))
+      searchTotal.value = data.total || 0
+    } catch (e) {
+      // 检索失败时退回本地过滤（信息不全，但比整页空着好），并说明原因
+      if (seq === searchSeq) {
+        searchIds.value = null
+        ElMessage.warning('全文检索暂不可用，已退回标题/预览匹配')
+      }
+    } finally {
+      if (seq === searchSeq) searching.value = false
+    }
+  }, 250)
+}
+
+watch(searchQuery, runSearch)
+
+/** 计数：搜索时用后端的 total（可能大于本地已载入的条数） */
+const displayCount = computed(() => (
+  searchQuery.value.trim() && searchIds.value ? searchTotal.value : filteredNotes.value.length
+))
 
 function onSearch() {}
 
@@ -802,7 +866,6 @@ async function onRefresh() {
   font-weight: 600;
   color: var(--text-muted);
   margin: 0 0 6px;
-  text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 .nmv-dialog-empty {

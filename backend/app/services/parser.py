@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import List, Dict, Tuple
 from loguru import logger
 from app.models.models import File, Node, NodeSource
+from app.services.text_role import line_role
 
 
 def parse_and_extract(file_id: int, user_id: int = 1):
@@ -21,7 +22,7 @@ def parse_and_extract(file_id: int, user_id: int = 1):
     from app.database import SessionLocal
     from app.config import settings
     from app.services.vector_engine import embed_to_db
-    from app.services.file_splitter import plan_split, piece_text, describe_plan
+    from app.services.file_splitter import plan_split, piece_text, describe_plan, validate_plan
     from app.services import audit
 
     started = _time.time()
@@ -44,6 +45,14 @@ def parse_and_extract(file_id: int, user_id: int = 1):
             max_pieces=settings.SPLIT_MAX_PIECES,
             overlap_lines=settings.SPLIT_OVERLAP_LINES,
         )
+
+        # 保底校验：覆盖全部非空行、切点不落在句中；异常写进 parse_note 供后台查看
+        cut_report = validate_plan(plan, content)
+        if not cut_report["ok"]:
+            notes.append(
+                f"切割校验警告：{len(cut_report['torn_cuts'])} 处切点落在句中、"
+                f"{len(cut_report['gaps'])} 行未被任何分片覆盖"
+            )
 
         if plan["needed"]:
             audit.log_event(
@@ -265,6 +274,8 @@ _VERB_MARKERS = [
     "基于", "通过", "利用", "采用", "引入", "降低", "提升", "解决",
     "使用", "适合", "得到", "分为", "包括", "包含", "依赖", "负责",
     "让", "把", "将", "从", "由", "使", "指", "是",
+    # 情态谓语：切出主语后，剩余部分仍会被 looks_like_clause 把关
+    "可以", "能够", "需要",
 ]
 
 # 主语尾缀清理（切分残留的修饰词）
@@ -282,6 +293,27 @@ _FRAGMENT_START = re.compile(
 
 # 主语长度上限：超过说明切出来的是一整句话而非术语
 _MAX_SUBJECT_LEN = 24
+
+# 句中状/情态词。在主语里（第 3 个字之后）出现这些字，说明切出来的仍是一个**小句**，
+# 不是知识点名称。实测的典型产物：
+#   「笔记要定期整理成知识结构」「写文章之前先想清楚读者」「Vue 的学习曲线较平缓」
+# 这三句的共同点是「主语 + 状语/情态 + 谓语」，被按首个谓语词截断后看名字像术语，
+# 实际是一整句的残骸。它们会一路污染总结的样例、枢纽榜和学习主线。
+#
+# 两个约束都是为了让术语不被误杀：
+#   · 只从第 3 个字起找 —— 「优先级」「先进先出」的「先」、「性能」「功能」的「能」
+#     都在词首/词中，不是状语的标志；
+#   · 长度门槛 ≥8 —— 「核心要素」「人工智能」这类短术语一律不判。
+# 在 test_data/kb_demo 的 36 个标题上实测：命中 3 个句子残骸，误杀 0 个真术语。
+# 「可以 / 能够」单独列出来而不是拆成单字：拆成「可」会把「高可用架构设计」
+# 这类正经术语误杀，而「可以」相邻出现在术语里几乎不可能。
+_CLAUSE_MARK = re.compile(r"[要先较会应须需就更很太才还也却则]|可以|能够")
+_CLAUSE_MIN_LEN = 8
+
+
+def looks_like_clause(name: str) -> bool:
+    """这个候选主语是不是「一整句被截断的残骸」"""
+    return len(name) >= _CLAUSE_MIN_LEN and bool(_CLAUSE_MARK.search(name[2:]))
 
 # 通用后缀：实体归一化时剥离（仅当实体为“纯英文缩写 + 中文类别词”结构）
 _EN_SUFFIX = ["架构", "技术", "模型", "机制", "方法", "算法", "框架", "语言", "网络", "结构"]
@@ -328,6 +360,9 @@ def _extract_subject(text: str) -> str:
             return ""
         if _FRAGMENT_START.match(subject):
             # 「分为三类记忆」「负责把大任务…」：谓语片段，不是知识点名
+            return ""
+        if looks_like_clause(subject):
+            # 「笔记要定期整理成知识结构」：整句被截断的残骸，不是知识点名
             return ""
         return subject
     return ""
@@ -378,11 +413,11 @@ def normalize_entity(name: str) -> Tuple[str, List[str]]:
     return name, aliases
 
 
-def extract_entity(text: str, heading: str = "") -> str:
-    """提取句子的核心实体名（优先真实主语，其次正文名词短语，标题兜底）
+def extract_entity(text: str) -> str:
+    """提取句子的核心实体名（优先真实主语，其次正文缩写/名词短语）。
 
-    取不到合适的实体名时返回空串 —— 调用方据此丢弃该行，
-    避免把章节标题或谓语片段（「负责」「一、基础概念辨析」）做成假知识点。
+    刻意**不再回落到章节标题**：标题是结构，不是内容。
+    抽不出实体就返回空串，由调用方丢弃该行。
     """
     subject = _extract_subject(text)
     if subject:
@@ -394,15 +429,14 @@ def extract_entity(text: str, heading: str = "") -> str:
     if m:
         return m[0]
 
-    # 兜底 2：标题（先清掉编号，且只接受长度适中的标题）
-    clean_heading = _clean_heading(heading)
-    if clean_heading and 2 <= len(clean_heading) <= 16:
-        return clean_heading[:50]
+    # 兜底 2（已移除）：不用章节标题当实体 —— 那正是「只看标题就当内容」的来源
 
-    # 兜底 3：正文前 2~4 个汉字组成的短语（谓语片段起手则放弃）
+    # 兜底 3：正文里的第一段汉字短语（谓语片段起手、或像整句残骸的都放弃）
     if not _FRAGMENT_START.match(text.strip(" ，,。:：、-")):
         cn = re.findall(r'[\u4e00-\u9fff]{2,}', text)
-        if cn:
+        # 这一层也要过 `looks_like_clause`：否则上游拦住的小句会从这里原样漏回来，
+        # 表现成「改了解析规则，节点数却一个没少」。
+        if cn and not looks_like_clause(cn[0]):
             return cn[0][:50]
     return ""
 
@@ -435,8 +469,12 @@ def extract_nodes_from_text(text: str, file_id: int, user_id: int,
         if not stripped:
             continue
 
-        # 标题行：记录层级标题（去掉编号前缀），不生成节点
-        if stripped.startswith("#"):
+        # 行角色：只有正文行进入抽取；标题只更新上下文，噪音直接跳过
+        next_line = lines[i + 1] if i + 1 < len(lines) else ""
+        role = line_role(stripped, next_line)
+        if role == "noise":
+            continue
+        if role == "heading":
             current_heading = _clean_heading(stripped)
             continue
 
@@ -447,7 +485,7 @@ def extract_nodes_from_text(text: str, file_id: int, user_id: int,
             continue
 
         # 提取实体（主语优先）；切不出知识点名称的行直接丢弃
-        entity = extract_entity(stripped, current_heading)
+        entity = extract_entity(stripped)
         if not entity:
             continue
         keywords = extract_keywords(stripped)

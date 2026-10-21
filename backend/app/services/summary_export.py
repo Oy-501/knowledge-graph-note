@@ -24,23 +24,39 @@ C_WHITE = (0xFF, 0xFF, 0xFF)
 
 LEVEL_RGB = {1: C_PRIMARY, 2: C_MINT, 3: C_APRICOT, 4: C_LILAC}
 
-EXPORT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
-    os.path.abspath(__file__)))), "exports")
+def export_dir() -> str:
+    """导出目录的绝对路径。
+
+    统一取 `settings.resolved_export_dir`，不在本文件里自己推 dirname ——
+    同一个项目里两处各推一次路径，迟早会推出两个目录（uploads 就这么出过事）。
+    而且测试要把产物隔离到临时目录，只能靠这一处配置改。
+    """
+    from app.config import settings
+
+    return settings.resolved_export_dir
 
 
 def _ensure_dir() -> str:
-    os.makedirs(EXPORT_DIR, exist_ok=True)
-    # 只保留最近 30 个导出文件，避免长期运行堆积
+    root = export_dir()
+    os.makedirs(root, exist_ok=True)
+    # 只保留最近 N 个导出文件，避免长期运行堆积
+    from app.config import settings
+
+    keep = max(1, int(getattr(settings, "EXPORT_KEEP", 30) or 30))
     try:
-        files = [os.path.join(EXPORT_DIR, f) for f in os.listdir(EXPORT_DIR)]
+        files = [os.path.join(root, f) for f in os.listdir(root)]
         files = [f for f in files if os.path.isfile(f)]
         files.sort(key=os.path.getmtime, reverse=True)
-        for old in files[30:]:
+        for old in files[keep:]:
             os.remove(old)
     except OSError as exc:
         # 清理旧产物失败（如文件被打开占用）不应影响导出本身
         logger.debug(f"清理旧导出产物失败：{type(exc).__name__}: {exc}")
-    return EXPORT_DIR
+    except Exception as exc:  # noqa: BLE001
+        # 本机安全删除钩子拦 os.remove 时抛的未必是 OSError；
+        # 清理失败绝不能让导出本身失败 —— 导出是这个链路唯一的交付物。
+        logger.debug(f"清理旧导出产物被拒绝：{type(exc).__name__}: {exc}")
+    return root
 
 
 def export_path(stem: str, ext: str) -> str:
@@ -70,7 +86,7 @@ def to_markdown(summary: Dict, mermaid: Optional[str] = None, title: str = "知�
         f"| 来源文件 | {ov['file_count']} | 领域数 | {ov['domain_count']} |",
         f"| 知识簇 | {ov['cluster_count']} | 孤立知识点 | {ov['isolated_count']} |",
         f"| 平均度 | {ov['avg_degree']} | 图谱密度 | {ov['density']} |",
-        f"| 知识库锚定概念 | {ov['kb_anchor_count']} | 知识库桥接 | {ov['kb_bridge_count']}（跨文件 {ov['cross_file_bridge_count']}） |",
+        f"| 知识库锚定概念 | {ov['kb_anchor_count']} | 知识库连线 | {ov['kb_bridge_count']}（跨文件 {ov['cross_file_bridge_count']}） |",
         "",
         "**关系类型分布**：" + "、".join(f"{k} {v}" for k, v in ov["relation_distribution"].items()),
         "",
@@ -122,7 +138,7 @@ def to_markdown(summary: Dict, mermaid: Optional[str] = None, title: str = "知�
         md.append("")
 
     if summary["isolated"]:
-        md += ["## 八、孤立知识点（待补全）", ""]
+        md += [f"## 八、孤立知识点（待补全，共 {ov['isolated_count']} 个，按标题去重列出）", ""]
         md.extend(f"- {n['title']}（L{n['level']} {n['level_label']}，{n['domain']}）"
                   for n in summary["isolated"][:20])
         md.append("")
@@ -214,7 +230,7 @@ def to_docx(summary: Dict, mermaid: Optional[str] = None, title: str = "知识�
         ["知识簇", ov["cluster_count"], "孤立知识点", ov["isolated_count"]],
         ["平均度", ov["avg_degree"], "图谱密度", ov["density"]],
         ["知识库锚定概念", ov["kb_anchor_count"],
-         "知识库桥接", f"{ov['kb_bridge_count']}（跨文件 {ov['cross_file_bridge_count']}）"],
+         "知识库连线", f"{ov['kb_bridge_count']}（跨文件 {ov['cross_file_bridge_count']}）"],
     ])
     p = doc.add_paragraph()
     _set_cjk(p.add_run("关系类型分布：" + "、".join(
@@ -353,6 +369,17 @@ def to_pptx(summary: Dict, mermaid: Optional[str] = None,
             add_text(s, 0.62, 0.98, 12.2, 0.34, kicker, size=11, color=C_MUTED)
         return s
 
+    def empty_section(s, why: str):
+        """某节没有数据时，把「为什么没有」写在页面上。
+
+        不加这一步的话，这一页只剩标题和一条装饰线 —— 看上去像导出坏了，
+        而不是「图谱里本来就没有这类结构」。空数据必须能自证，
+        否则拿到 PPT 的人第一反应是「工具出问题了」。
+        """
+        add_rect(s, 0.6, 1.7, 12.1, 1.5, C_WHITE, line=C_BG)
+        add_text(s, 0.95, 1.95, 11.4, 1.1, why, size=13, color=C_MUTED,
+                 line_spacing=1.5)
+
     ov = summary.get("overview", {})
 
     # ---- 1 封面 ----
@@ -402,7 +429,7 @@ def to_pptx(summary: Dict, mermaid: Optional[str] = None,
              "结构指标\n"
              f"平均度 {ov.get('avg_degree', 0)}　图谱密度 {ov.get('density', 0)}\n"
              f"知识库锚定概念 {ov.get('kb_anchor_count', 0)} 个\n"
-             f"知识库桥接 {ov.get('kb_bridge_count', 0)} 条"
+             f"知识库连线 {ov.get('kb_bridge_count', 0)} 条"
              f"（跨文件 {ov.get('cross_file_bridge_count', 0)} 条）",
              size=12, color=C_TEXT)
     add_text(s, 6.9, 4.5, 5.8, 2.2,
@@ -441,6 +468,10 @@ def to_pptx(summary: Dict, mermaid: Optional[str] = None,
     # ---- 5 核心枢纽 ----
     s = slide_with_title("核心枢纽知识点", "连接数最高的知识点 —— 先掌握它们收益最大")
     rows = summary["hubs"][:7]
+    if not rows:
+        empty_section(s, "还没有连接数 ≥ 2 的知识点。\n"
+                         "图谱的关联还很少，先上传更多文档或在「知识库」页重建知识关联，"
+                         "再回来生成总结就能看到枢纽榜。")
     if rows:
         tbl = s.shapes.add_table(len(rows) + 1, 5, Inches(0.6), Inches(1.6),
                                  Inches(12.1), Inches(0.4 * (len(rows) + 1))).table
@@ -473,6 +504,9 @@ def to_pptx(summary: Dict, mermaid: Optional[str] = None,
 
     # ---- 6 知识簇 ----
     s = slide_with_title("知识簇", "彼此连通的知识群 —— 每个簇就是一块可独立学习的模块")
+    if not summary["clusters"]:
+        empty_section(s, "还没有由 2 个以上知识点组成的连通簇。\n"
+                         "知识簇反映的是「哪些知识点互相关联成块」，关联不足时这一节自然是空的。")
     for i, c in enumerate(summary["clusters"][:6]):
         x = 0.6 + (i % 2) * 6.2
         y = 1.65 + (i // 2) * 1.85
@@ -489,6 +523,14 @@ def to_pptx(summary: Dict, mermaid: Optional[str] = None,
 
     # ---- 7 学习主线（原生流程图页） ----
     s = slide_with_title("总结流程图（学习主线）", "把网状知识拉成一条可执行的流程：按箭头方向学")
+    if not summary["paths"]:
+        # 说清门槛，否则用户只会觉得「总结坏了」。
+        # 主线刻意只走有知识依据的强关联（分数门槛 + 弱关系更高门槛），
+        # 宁可空着，也不拿时间窗推出来的弱关联凑一条假学习顺序。
+        empty_section(s, "还没有能构成学习主线的高分关联。\n"
+                         "主线只走「有知识依据的强关联」（关系为前置/理论/实现等，且分数达门槛），"
+                         "弱关联不足以支撑学习顺序，所以宁可不给。\n"
+                         "多上传几份同一主题的文档，或在「知识库」页重建知识关联，主线就会出现。")
     y = 1.7
     for pi, p in enumerate(summary["paths"][:3]):
         steps = p["steps"][:6]
@@ -557,7 +599,8 @@ def to_pptx(summary: Dict, mermaid: Optional[str] = None,
     # ---- 9 待补全与建议 ----
     s = slide_with_title("待补全与建议", "图谱的短板在哪，下一步补什么")
     left = summary["isolated"][:8]
-    add_text(s, 0.62, 1.6, 5.8, 0.35, f"孤立知识点（{len(summary['isolated'])} 个）",
+    add_text(s, 0.62, 1.6, 5.8, 0.35,
+             f"孤立知识点（{summary['overview']['isolated_count']} 个）",
              size=14, bold=True, color=C_APRICOT)
     add_text(s, 0.62, 2.0, 5.8, 4.4,
              "\n".join(f"· {n['title']}（L{n['level']} {n['domain']}）" for n in left) or "无",

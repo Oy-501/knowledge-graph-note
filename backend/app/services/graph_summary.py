@@ -58,7 +58,7 @@ _NOISY_TITLE = re.compile(
 
 
 def _looks_noisy(title: str) -> bool:
-    """粗判知识点标题是否像抽取噪音（编号开头、谓语片段、超长句子片段）
+    """粗判知识点标题是否像抽取噪音（编号开头、谓语片段、整句残骸、超长句子片段）
 
     注意：中文两字词（读者/结构/笔记）是正常术语，只有单字或空标题才算异常。
     """
@@ -69,7 +69,49 @@ def _looks_noisy(title: str) -> bool:
         return True
     if len(t) > 24 and re.search(r"[，,。；;]", t):
         return True
-    return False
+    # 「整句被截断的残骸」用抽取阶段的同一把尺子判 —— 新数据在入库时就会被拦，
+    # 但库里**已有的**节点还在，总结这一层必须也认得出，否则历史数据永远脏。
+    from app.services.parser import looks_like_clause
+
+    return looks_like_clause(t)
+
+
+def _speakable(nodes) -> List:
+    """从「用于正面呈现」的候选里剔掉疑似噪音的节点。
+
+    只影响**选取**，不影响**计数**：图谱里有多少个节点是事实，
+    但把一句残骸当成「代表知识点」或「学习主线的一步」摆进总结，就是误导。
+    负面清单（孤立点、待补全）不过滤 —— 那里需要看全，用户才能顺手改掉标题。
+    """
+    return [n for n in nodes if not _looks_noisy(n.title or n.entity)]
+
+
+def _dedup_by_title(nodes, limit: int) -> List:
+    """按标题去重后取前 limit 个节点（保持传入顺序，调用方已按度数排好）。
+
+    图谱里「同名不同 id」的节点是常态：同一概念在一份文档里出现两次，
+    或同一概念在多份文档里各被抽一次。不去重的话，枢纽榜会长成
+    「Node.js、Node.js」、层级样例长成「SQL、SQL、SQL」—— 在文档和 PPT 里
+    尤其显眼，而且会让人以为统计本身算错了。
+
+    去重的粒度是**标题**而不是 id：对读者来说同名就是同一个知识点。
+    """
+    seen, out = set(), []
+    for n in nodes:
+        title = n.title or n.entity
+        if title in seen:
+            continue
+        seen.add(title)
+        out.append(n)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _titles(nodes, limit: int, shorten: Optional[int] = None) -> List[str]:
+    picked = _dedup_by_title(nodes, limit)
+    return [_short(n.title or n.entity, shorten) if shorten else (n.title or n.entity)
+            for n in picked]
 
 
 def _node_brief(node, degree: int = 0) -> Dict:
@@ -161,7 +203,8 @@ def build_summary(db, user_id: int = 1, max_paths: int = 6, max_depth: int = 6) 
             "level": lv,
             "label": LEVEL_LABELS.get(lv, "应用实践"),
             "count": len(bucket),
-            "samples": [_short(b.title or b.entity, 20) for b in bucket[:8]],
+            # 样例按标题去重：同名节点占满样例位，等于这一层只能看到一个概念
+            "samples": _titles(_speakable(bucket), 8, shorten=20),
         })
 
     # ---- 领域分布 ----
@@ -175,24 +218,32 @@ def build_summary(db, user_id: int = 1, max_paths: int = 6, max_depth: int = 6) 
             "domain": dom,
             "count": len(bucket),
             "share": round(len(bucket) / len(nodes), 4),
-            "top_nodes": [(b.title or b.entity) for b in bucket_sorted[:5]],
+            "top_nodes": _titles(_speakable(bucket_sorted), 5),
             "avg_level": round(sum(b.level or 3 for b in bucket) / len(bucket), 2),
         })
 
     # ---- 核心枢纽 ----
     hubs = []
-    for nid, deg in degree.most_common(12):
-        if deg < 2:
+    seen_hub_titles = set()
+    for nid, deg in degree.most_common():
+        if deg < 2 or len(hubs) >= 12:
             break
         n = node_map[nid]
+        title = n.title or n.entity
+        # 同名节点只留度数最高的那个（most_common 已按度数降序），
+        # 否则枢纽榜前几名可能是同一个概念的不同副本
+        if title in seen_hub_titles:
+            continue
+        # 疑似噪音的标题不能被摆成「核心枢纽」—— 读者会以为那是重点知识
+        if _looks_noisy(title):
+            continue
+        seen_hub_titles.add(title)
         rel_types = Counter((l.relation_type or "related") for l in (out_edges[nid] + in_edges[nid]))
         hubs.append({
             **_node_brief(n, deg),
             "relation_breakdown": {RELATION_LABELS.get(k, k): v for k, v in rel_types.most_common()},
-            "connected_titles": [
-                _short(node_map[o].title or node_map[o].entity, 18)
-                for o in dict.fromkeys(undirected[nid])
-            ][:6],
+            "connected_titles": _titles(
+                [node_map[o] for o in dict.fromkeys(undirected[nid])], 6, shorten=18),
         })
 
     # ---- 连通簇（并查集） ----
@@ -220,7 +271,7 @@ def build_summary(db, user_id: int = 1, max_paths: int = 6, max_depth: int = 6) 
             "domains": [d for d, _ in dom_counter.most_common(4)],
             "file_count": len({n.file_id for n in member_nodes}),
             "top_nodes": [{"id": n.id, "title": n.title or n.entity, "degree": degree[n.id]}
-                          for n in top[:6]],
+                          for n in _dedup_by_title(_speakable(top), 6)],
         })
 
     # ---- 学习路径（把网拉成线） ----
@@ -261,7 +312,10 @@ def build_summary(db, user_id: int = 1, max_paths: int = 6, max_depth: int = 6) 
     bridges.sort(key=lambda x: -x["score"])
 
     # ---- 孤立与问题 ----
-    isolated = [_node_brief(n, 0) for n in nodes if degree[n.id] == 0]
+    # 计数用**未去重**的节点数（问的是「多少知识点没有关联」，是节点级事实）；
+    # 列表按标题去重，因为「待补全清单」把同一个概念列三遍没有意义。
+    isolated_all = [n for n in nodes if degree[n.id] == 0]
+    isolated = [_node_brief(n, 0) for n in _dedup_by_title(isolated_all, 40)]
     multi_domain_clusters = [c for c in clusters if len(c["domains"]) > 1]
 
     covered_domains = {d["domain"] for d in domains if d["domain"] != "general"}
@@ -271,9 +325,11 @@ def build_summary(db, user_id: int = 1, max_paths: int = 6, max_depth: int = 6) 
     missing = sorted(d for d in kb_domains if d not in covered_domains and d != "general")
 
     suggestions = []
-    if isolated:
+    if isolated_all:
+        example = next((n for n in isolated_all if not _looks_noisy(n.title or n.entity)),
+                       isolated_all[0])
         suggestions.append(
-            f"{len(isolated)} 个知识点没有任何关联（如「{_short(isolated[0]['title'], 16)}」），"
+            f"{len(isolated_all)} 个知识点没有任何关联（如「{_short(example.title or example.entity, 16)}」），"
             f"建议补充上下文或锚定到知识库后再重建关联。"
         )
     if missing:
@@ -322,7 +378,7 @@ def build_summary(db, user_id: int = 1, max_paths: int = 6, max_depth: int = 6) 
         "file_count": len(files),
         "domain_count": len(domains),
         "cluster_count": len(clusters),
-        "isolated_count": len(isolated),
+        "isolated_count": len(isolated_all),
         "avg_degree": round(sum(degree.values()) / max(1, len(nodes)), 2),
         "density": round(len(links) / max(1, len(nodes) * (len(nodes) - 1) / 2), 4),
         "kb_anchor_count": len(kb_anchor_counter),
@@ -343,7 +399,7 @@ def build_summary(db, user_id: int = 1, max_paths: int = 6, max_depth: int = 6) 
         "paths": paths,
         "kb_anchors": kb_anchors,
         "bridges": bridges[:40],
-        "isolated": isolated[:40],
+        "isolated": isolated,
         "suggestions": suggestions,
         "node_index": {str(n.id): _node_brief(n, degree[n.id]) for n in nodes},
     }
@@ -376,6 +432,8 @@ def _build_learning_paths(nodes, node_map, out_edges, in_edges, degree,
         for l in out_edges.get(cur_id, []):
             t = l.target_id
             if t not in node_map:
+                continue
+            if _looks_noisy(node_map[t].title or node_map[t].entity):
                 continue
             nxt = node_map[t]
             rel = l.relation_type or "related"
@@ -412,7 +470,10 @@ def _build_learning_paths(nodes, node_map, out_edges, in_edges, degree,
         lv = n.level or 3
         return (lv, len(in_edges.get(n.id, [])), -degree[n.id])
 
-    candidates = [n for n in nodes if degree[n.id] > 0]
+    # 噪音标题不参与主线：不然「DOM → JavaScript → Vue → Vue 的学习曲线较平缓」
+    # 这样的流程会出现在 PPT 上，把一句残骸当成学习目标。
+    candidates = [n for n in nodes
+                  if degree[n.id] > 0 and not _looks_noisy(n.title or n.entity)]
     candidates.sort(key=root_rank)
 
     paths, used_roots, accepted_sets = [], set(), []

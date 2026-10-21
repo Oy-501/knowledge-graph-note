@@ -30,16 +30,28 @@
   </script>
 
   <!--
-    Transformers.js 通过 CDN 全局加载，避免 Vite 打包时 onnxruntime-web 静态初始化失败。
+    Transformers.js 的 CDN 标签已移除，**不要再加回来**。原因（三条独立证据）：
 
-    必须带 defer。这是 898KB 的外部脚本，放在 <head> 且不带 defer 时是**解析阻塞**的：
-    浏览器要等它下载并执行完才继续解析，首屏被直接推后。
-    实测本机 CDN 可达也要多约 0.6s；CDN 不可达时按 TCP 超时算要卡约 21s
-    （对一个本地/桌面应用来说，首屏被第三方 CDN 拖住是不能接受的）。
-    加 defer 后不再阻塞解析；vectorEngine.js 的 getTransformers() 本来就是
-    轮询等待 window.transformers，行为不变。
+    1. 那份 CDN 产物是 **ES 模块**，当普通脚本加载必然解析失败：
+       `<script src=.../transformers.min.js>` 实测抛
+       `Uncaught SyntaxError: Unexpected token 'export'`，
+       同一个文件用 `import()` 解析则正常，且它内部**没有 UMD 包装头**。
+       解析失败 = 整个文件一行都不执行 → `window.transformers` 永远是 undefined。
+       （脚本 onload 照样会触发，所以光看「加载成功」发现不了。）
+
+    2. 就算加载成功也没有使用方：`vectorEngine.js` 只被 import 了 `cosine` 与 `jaccard`
+       两个纯数学函数；真正需要 transformers 的 `embed` / `embedBatch` / `ensureLoaded`
+       **全仓没有任何调用点**，默认导出也没人 import。
+
+    3. 代价是实打实的：每次打开页面都要下载约 898KB 的第三方脚本
+       （CDN 不可达时按 TCP 超时算会卡约 21s），换来一条必然出现的控制台异常。
+
+    移除后前端向量计算不受影响：`cosine` / `jaccard` 本来就不依赖它。
+    哪天真要在浏览器里做语义向量，正确做法是
+    `import(...)` 导入模块并**显式赋给 window**（ES 模块的导出不会自动变成全局），
+    同时把模型换成支持中文的（`Xenova/all-mpnet-base-v2` 是纯英文模型，
+    编码中文等于随机向量 —— 后端已经因为同一类问题换过模型）。
   -->
-  <script defer src="https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js"></script>
 </head>
 <body>
   <div id="app"></div>

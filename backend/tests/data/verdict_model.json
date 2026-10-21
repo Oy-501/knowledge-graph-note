@@ -1,0 +1,120 @@
+{
+  "说明": "四路证据加权判定算法的测试模型。测试（tests/test_verdict_model.py）从本文件读取用例，代码里不硬编码；改数据不必改代码，算法的「数学性质」与「具体取值」因此分得开。",
+  "决策函数": "score = clamp(Σw, 0, 1); decision = accept if (score ≥ auto_accept 且 无冲突) else (reject if score < reject_below else pending)",
+  "thresholds": {
+    "auto_accept": 0.8,
+    "reject_below": 0.35
+  },
+  "clamp": {
+    "min": 0.0,
+    "max": 1.0
+  },
+  "evidence": [
+    { "path": "rule", "condition": "标题带章节编号", "weight": -0.35, "positive": false },
+    { "path": "rule", "condition": "标题是谓语片段", "weight": -0.35, "positive": false },
+    { "path": "rule", "condition": "标题过短（<2字）", "weight": -0.4, "positive": false },
+    { "path": "rule", "condition": "标题是长句片段", "weight": -0.2, "positive": false },
+    { "path": "rule", "condition": "标题形态正常", "weight": 0.25, "positive": true },
+    { "path": "rule", "condition": "有描述文本", "weight": 0.08, "positive": true },
+    { "path": "rule", "condition": "描述过短", "weight": -0.05, "positive": false },
+    { "path": "rule", "condition": "描述含定义性句式", "weight": 0.1, "positive": true },
+    { "path": "rule", "condition": "抽取到关键词", "weight": 0.05, "positive": true },
+    { "path": "kb", "condition": "命中知识库条目", "weight": 0.3, "positive": true },
+    { "path": "kb", "condition": "描述与知识库定义一致", "weight": 0.15, "positive": true },
+    { "path": "kb", "condition": "描述与知识库定义冲突", "weight": -0.25, "positive": false },
+    { "path": "kb", "condition": "知识库中存在关系", "weight": 0.1, "positive": true },
+    { "path": "kb", "condition": "知识库无此条目", "weight": -0.05, "positive": false },
+    { "path": "graph", "condition": "已锚定知识库概念", "weight": 0.1, "positive": true },
+    { "path": "graph", "condition": "未被知识库锚定", "weight": -0.05, "positive": false },
+    { "path": "graph", "condition": "已有关联边", "weight": 0.05, "positive": true },
+    { "path": "web", "condition": "检索命中≥2条", "weight": 0.15, "positive": true },
+    { "path": "web", "condition": "检索命中1条", "weight": 0.08, "positive": true },
+    { "path": "web", "condition": "检索未命中（中性，不构成负面证据）", "weight": 0.0, "positive": true },
+    { "path": "web", "condition": "联网不可用（中性，按本地证据判定）", "weight": 0.0, "positive": true }
+  ],
+  "boundary_cases": [
+    {
+      "name": "刚好达到自动采纳线",
+      "score": 0.8,
+      "conflict": false,
+      "expect": "accept"
+    },
+    {
+      "name": "差一点没到采纳线",
+      "score": 0.799,
+      "conflict": false,
+      "expect": "pending"
+    },
+    {
+      "name": "刚好在驳回线之上",
+      "score": 0.35,
+      "conflict": false,
+      "expect": "pending"
+    },
+    {
+      "name": "刚好跌破驳回线",
+      "score": 0.349,
+      "conflict": false,
+      "expect": "reject"
+    },
+    {
+      "name": "零分",
+      "score": 0.0,
+      "conflict": false,
+      "expect": "reject"
+    },
+    {
+      "name": "满分且无冲突",
+      "score": 1.0,
+      "conflict": false,
+      "expect": "accept"
+    }
+  ],
+  "clamp_cases": [
+    {
+      "name": "负分总和被夹到下限",
+      "weights": [-0.35, -0.4, -0.25, -0.2],
+      "expect_score": 0.0,
+      "expect": "reject"
+    },
+    {
+      "name": "正分总和被夹到上限",
+      "weights": [0.25, 0.3, 0.15, 0.1, 0.15, 0.1, 0.05],
+      "expect_score": 1.0,
+      "expect": "accept"
+    }
+  ],
+  "conflict_cases": [
+    {
+      "name": "高分但冲突位被置起——不得自动入库",
+      "score": 0.95,
+      "expect": "pending"
+    },
+    {
+      "name": "满分且冲突位被置起",
+      "score": 1.0,
+      "expect": "pending"
+    },
+    {
+      "name": "低分且冲突位被置起——仍按低分驳回",
+      "score": 0.1,
+      "expect": "reject"
+    },
+    {
+      "name": "驳回线略上方且冲突位被置起——冲突不影响这一侧的边界",
+      "score": 0.35,
+      "expect": "pending"
+    },
+    {
+      "name": "驳回线略下方且冲突位被置起",
+      "score": 0.349,
+      "expect": "reject"
+    }
+  ],
+  "monotonic_weights": [0.25, 0.3, 0.15, 0.1, 0.08, 0.05, 0.05, 0.3],
+  "web_neutral": {
+    "说明": "联网不可用或未命中时必须是 0 权重且记为正面（不构成负面证据）。这条性质来自一次真实误判：正当的领域专有名词（如「Memory 记忆模块」）搜不到就被驳回。",
+    "weight": 0.0,
+    "positive": true
+  }
+}

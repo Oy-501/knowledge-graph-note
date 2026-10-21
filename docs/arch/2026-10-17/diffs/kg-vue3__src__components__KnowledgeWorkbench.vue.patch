@@ -1,0 +1,16 @@
+diff --git a/kg-vue3/src/components/KnowledgeWorkbench.vue b/kg-vue3/src/components/KnowledgeWorkbench.vue
+index c116bd0..3cb52af 100644
+--- a/kg-vue3/src/components/KnowledgeWorkbench.vue
++++ b/kg-vue3/src/components/KnowledgeWorkbench.vue
+@@ -707,7 +707,10 @@ function onWikilinkSync(nodeIds) {
+ }
+ 
+ // 暴露保存方法给父组件
+-defineExpose({ saveNote })
++function openNote(noteId) {
++  onSelectNote(noteId)
++}
++defineExpose({ saveNote, openNote })
+ </script>
+ 
+ <style scoped>

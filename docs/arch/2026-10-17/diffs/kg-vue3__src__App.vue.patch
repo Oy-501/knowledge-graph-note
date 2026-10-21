@@ -1,0 +1,129 @@
+diff --git a/kg-vue3/src/App.vue b/kg-vue3/src/App.vue
+index 334b525..66ddd38 100644
+--- a/kg-vue3/src/App.vue
++++ b/kg-vue3/src/App.vue
+@@ -1,8 +1,14 @@
+ <template>
+-  <div class="app-shell" :style="appStyle">
++  <!-- data-module：当前页签的个性化令牌（--mark）。只影响标题菱形、
++       栏号这几个标记位，不改任何组件样式 —— 见 styles/modules.css -->
++  <div class="app-shell" :data-module="currentView" :style="appStyle">
+     <!-- 顶部导航栏（未登录时不渲染：登录页自己就是完整一屏） -->
+     <nav v-if="authed" class="app-nav">
+-      <div class="app-nav-brand">知识图谱笔记</div>
++      <div class="app-nav-brand">
++        <!-- 朱砂印章：与落地页同一枚，是贯穿产品内外的身份印记 -->
++        <span class="app-seal" aria-hidden="true">谱</span>
++        <span>知识图谱笔记</span>
++      </div>
+ 
+       <!-- 导航生成自 NAV_TABS：新增视图只需加一项，键盘快捷键自动跟随 -->
+       <div ref="tabsRef" class="app-nav-tabs" role="tablist" aria-label="主导航">
+@@ -123,7 +129,7 @@
+ 
+       <!-- 错误边界：画布崩溃时左侧面板仍可用，用户能继续操作而不是整页白屏 -->
+       <ErrorBoundary name="图谱画布" @recover="activate('graph')">
+-        <GraphCanvas />
++        <GraphCanvas @open-note="onOpenNoteFromGraph" />
+       </ErrorBoundary>
+     </div>
+ 
+@@ -162,6 +168,13 @@
+       </ErrorBoundary>
+     </div>
+ 
++    <!-- 界面设计器（纯前端：调六个体系维度，全站实时联动） -->
++    <div v-show="currentView === 'theme'" id="view-theme" class="app-view kb-view-wrap">
++      <ErrorBoundary v-if="themeMounted" name="界面设计器" @recover="activate('graph')">
++        <ThemeStudioView />
++      </ErrorBoundary>
++    </div>
++
+     <!-- 个人主页（头像 / 自定义背景 / 我的数据） -->
+     <div v-show="currentView === 'profile'" id="view-profile" class="app-view kb-view-wrap">
+       <ErrorBoundary v-if="profileMounted" name="个人主页" @recover="activate('graph')">
+@@ -177,6 +190,11 @@
+     </div>
+ 
+     </template>
++
++    <!-- 一次性恢复码：注册/初始化/重置密码后弹出。
++         放在登录门禁之外 —— 初始化与注册成功时 auth 已切换为已登录，
++         放在 v-if="authed" 里也能显示，但独立挂载更不容易被后续改动漏掉。 -->
++    <RecoveryCodeDialog />
+   </div>
+ </template>
+ 
+@@ -193,10 +211,12 @@ import KnowledgeReview from '@/components/KnowledgeReview.vue'
+ import KnowledgeQA from '@/components/KnowledgeQA.vue'
+ import AccountMenu from '@/components/AccountMenu.vue'
+ import LoginView from '@/components/LoginView.vue'
++import RecoveryCodeDialog from '@/components/RecoveryCodeDialog.vue'
+ import { useFileStore } from '@/store/fileStore'
+ import { useGraphStore } from '@/store/graphStore'
+ import { useConfigStore } from '@/store/configStore'
+ import { useSettingsStore } from '@/store/settingsStore'
++import { useThemeStore } from '@/store/themeStore'
+ import { useAuthStore } from '@/store/authStore'
+ import { setGraphStoreRef } from '@/store/groupStore'
+ 
+@@ -204,6 +224,7 @@ const fileStore = useFileStore()
+ const graphStore = useGraphStore()
+ const cfg = useConfigStore()
+ const settingsStore = useSettingsStore()
++const themeStore = useThemeStore()
+ const auth = useAuthStore()
+ 
+ /**
+@@ -228,6 +249,7 @@ const NAV_TABS = [
+   // 同样追加在末尾。规律：新页签永远排最后 —— 插中间会让后面所有页签的
+   // Ctrl+N 快捷键整体后移，用了几天养成的肌肉记忆会突然失灵。
+   { key: 'bgcss', label: '背景 CSS', hint: '用一句话生成响应式背景代码' },
++  { key: 'theme', label: '界面设计', hint: '自定义界面的六个体系维度' },
+ ]
+ 
+ const currentView = ref('graph')
+@@ -254,6 +276,10 @@ const plotMounted = ref(false)
+ const BackgroundCssView = defineAsyncComponent(() => import('@/components/bgcss/BackgroundCssView.vue'))
+ const bgcssMounted = ref(false)
+ 
++// 界面设计器：用户自定义整套界面取值（同样纯前端，懒加载）
++const ThemeStudioView = defineAsyncComponent(() => import('@/components/ThemeStudioView.vue'))
++const themeMounted = ref(false)
++
+ // 个人主页 / 后台管理（同样懒加载）
+ const ProfileView = defineAsyncComponent(() => import('@/components/ProfileView.vue'))
+ const AdminView = defineAsyncComponent(() => import('@/components/AdminView.vue'))
+@@ -266,6 +292,7 @@ watch(currentView, v => {
+   if (v === 'summary') summaryMounted.value = true
+   if (v === 'plot') plotMounted.value = true
+   if (v === 'bgcss') bgcssMounted.value = true
++  if (v === 'theme') themeMounted.value = true
+   if (v === 'profile') profileMounted.value = true
+   if (v === 'admin') adminMounted.value = true
+ })
+@@ -361,6 +388,10 @@ onMounted(async () => {
+   // 主题与背景是本机设置，先加载 —— 登录页要靠它显示正确的配色与背景
+   await settingsStore.load()
+ 
++  // 主题必须在 settings 之后加载：它的 accent 派生依赖 <html> 上的暗/亮类，
++  // 而那个类是 settingsStore.load() 打的。顺序反了会得到「亮底的暗色强调」。
++  themeStore.load()
++
+   // 探测登录状态；已登录（刷新页面场景）直接进应用，未登录则停在登录页
+   await auth.probe()
+   if (auth.isAuthed) await loadWorkspaceData()
+@@ -380,4 +411,13 @@ onUnmounted(() => {
+ function onSaveWorkbench() {
+   workbenchRef.value?.saveNote()
+ }
++
++function onOpenNoteFromGraph(noteId) {
++  activate('workbench')
++  // 工作台懒挂载：第一次切换到工作台时 workbenchRef 可能还没创建
++  // 用 nextTick 等挂载完成，若已挂载则立即执行
++  requestAnimationFrame(() => {
++    workbenchRef.value?.openNote?.(noteId)
++  })
++}
+ </script>

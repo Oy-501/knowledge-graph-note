@@ -815,7 +815,7 @@ function onRestore(node) {
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   font-weight: 500;
   border-radius: 6px;
   cursor: pointer;

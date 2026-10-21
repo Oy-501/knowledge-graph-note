@@ -48,3 +48,13 @@ Thumbs.db
 
 # 临时工作目录（不随仓库上传）
 .word_tmp/
+
+# 本地工具脚本（含明文管理员密码，绝不入库）
+backend/reset_admin.py
+
+# Vite 崩溃残留的临时时间戳文件
+kg-vue3/vite.config.js.timestamp-*.mjs
+
+# 墨刀设计稿导出（626KB html + 12MB 资源，本地参考用，不入库）
+墨刀AI - 知识图谱应用布局重构.html
+墨刀AI - 知识图谱应用布局重构_files/

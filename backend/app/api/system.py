@@ -3,6 +3,7 @@
 - ``GET  /api/system/doctor``        全量体检：环境/配置/数据库/schema 漂移/知识库/依赖/磁盘
 - ``GET  /api/system/health-deep``   精简健康（给探活脚本用）
 - ``POST /api/system/client-error``  前端崩溃回收入口 → 落操作审计，后台可查
+- ``POST /api/system/summarize``     抽取式文本摘要（只取正文句，不读标题）
 
 设计原则：**每一项检查都独立 try**，任一失败只标记该行为 error/warn，
 绝不让体检本身因为环境问题而 500 —— 否则这道防线本身就不可信。
@@ -24,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import Base, engine, get_db
-from app.services.errors import safe_detail
+from app.services.errors import AppError, safe_detail
 from app.services.security import verify_admin_token
 
 router = APIRouter()
@@ -110,7 +111,16 @@ def _check_packages() -> Dict[str, Any]:
 
 
 def _check_vector_engine(db: Session) -> Dict[str, Any]:
-    """语义向量引擎：用的是真模型还是降级编码；存量向量是否需要重建。"""
+    """语义向量引擎：用的是真模型还是降级编码；存量向量是否需要重建或修复。
+
+    三类问题分开列，原因与修法都不同：
+      降级 —— 模型没装，相似度退化成字面重合；
+      损坏 —— embedding 字段存坏了，该节点 β 维恒为 0；
+      陈旧 —— 引擎换了、指纹对不上，维度不同不可比较。
+    **三者互不包含，所以全部列出而不是只报一个**：只报最高优先级那个，
+    另外两个就会一直在「一切正常」的背面躺着（陈旧曾经就是这么藏住的；
+    损坏更隐蔽 —— 它的指纹往往是好的，靠 stale 根本抓不到）。
+    """
     from app.services import vector_engine
 
     info = vector_engine.get_engine_info()
@@ -118,37 +128,35 @@ def _check_vector_engine(db: Session) -> Dict[str, Any]:
     dims = health["dims"] or {}
     dim_text = "、".join(f"{d}维×{c}" for d, c in sorted(dims.items())) or "无"
 
+    problems: List[str] = []
     if info["degraded"]:
-        return {
-            "status": WARN,
-            "detail": (
-                f"语义向量已降级为字面重合（mode={info['mode']}，原因：{info['reason'] or '未安装'}）。"
-                f"向量 {health['with_embedding']}/{health['total']} 条，维度 {dim_text}。"
-                f"影响：四维推理的 β 维认不出「换个说法说同一件事」。"
-            ),
-            "hint": "装好 sentence-transformers 后重启，再跑 `py backend/scripts/reembed.py` 重建向量。",
-        }
-
+        problems.append(
+            f"已降级为字面重合（mode={info['mode']}，原因：{info['reason'] or '未安装'}）"
+            f"，认不出「换个说法说同一件事」")
+    if health["broken"]:
+        problems.append(
+            f"{health['broken']} 条向量载荷损坏（embedding 解析不出向量）"
+            f"，这些节点的 β 维恒为 0")
     if health["stale"]:
-        return {
-            "status": WARN,
-            "detail": (
-                f"引擎 {info['signature']}（{info['dim']} 维）已就绪，但 {health['stale']}/"
-                f"{health['total']} 条向量由旧引擎产出（维度 {dim_text}）。"
-                f"维度不同不可比较，这批节点的 β 维会被跳过。"
-            ),
-            "hint": "跑 `py backend/scripts/reembed.py` 用当前引擎重建全部向量。",
-        }
-
+        problems.append(f"{health['stale']} 条向量由旧引擎产出（维度不同不可比较）")
     if health["total"] and not health["with_embedding"]:
-        return {"status": WARN, "detail": f"引擎 {info['signature']} 已就绪，但尚无节点生成过向量。",
-                "hint": "上传或重建后有向量，语义相似度才会参与打分。"}
+        problems.append("尚无节点生成过向量")
+
+    if problems:
+        head = (f"引擎 {info['signature']}（{info['dim']} 维）· 向量 "
+                f"{health['with_embedding']}/{health['total']} 条，维度 {dim_text}。")
+        # 降级时若只说「重建向量」，用户会拿降级引擎重建一遍，问题原样保留 ——
+        # 修复指引必须跟着主因走。
+        hint = ("装好 sentence-transformers 后重启，再跑 `py backend/scripts/reembed.py` 重建向量。"
+                if info["degraded"]
+                else "跑 `py backend/scripts/reembed.py` 按原文重建向量。")
+        return {"status": WARN, "detail": head + "；".join(problems) + "。", "hint": hint}
 
     return {
         "status": OK,
         "detail": (
             f"{info['signature']}（{info['dim']} 维）· 向量 {health['with_embedding']}/"
-            f"{health['total']} 条，无陈旧向量"
+            f"{health['total']} 条，无降级、无损坏、无陈旧"
         ),
     }
 
@@ -311,15 +319,19 @@ def _check_data_files(db: Session) -> Dict[str, Any]:
 
 
 def _check_export_dir() -> Dict[str, Any]:
-    # 直接复用导出服务里的目录常量，避免「体检看 A 目录、实际导出到 B 目录」
-    from app.services.summary_export import EXPORT_DIR
-    os.makedirs(EXPORT_DIR, exist_ok=True)
-    files = os.listdir(EXPORT_DIR)
-    size_mb = sum(os.path.getsize(os.path.join(EXPORT_DIR, f)) for f in files
-                  if os.path.isfile(os.path.join(EXPORT_DIR, f))) / 1024 / 1024
+    # 取导出服务真正会写的那一处目录，避免「体检看 A 目录、实际导出到 B 目录」。
+    # 现在两边都走 settings.resolved_export_dir，只有一处解析路径。
+    from app.services.summary_export import export_dir
+
+    root = export_dir()
+    os.makedirs(root, exist_ok=True)
+    files = os.listdir(root)
+    size_mb = sum(os.path.getsize(os.path.join(root, f)) for f in files
+                  if os.path.isfile(os.path.join(root, f))) / 1024 / 1024
+    keep = settings.EXPORT_KEEP
     return {"status": OK if size_mb < 500 else WARN,
             "detail": f"可写 · {len(files)} 个产物 · {size_mb:.1f}MB",
-            "hint": "产物超过 500MB 会变慢，可清理旧文件（系统自动保留最近 30 个）。"}
+            "hint": f"产物超过 500MB 会变慢，可清理旧文件（系统自动保留最近 {keep} 个）。"}
 
 
 def _check_disk() -> Dict[str, Any]:
@@ -506,3 +518,25 @@ def report_client_error(payload: ClientErrorIn, request: Request,
     )
     logger.warning(f"[{rid}] 前端错误上报：{summary}")
     return {"ok": True, "request_id": rid}
+
+
+# ------------------------------------------------------------------ 文本摘要
+
+
+class SummarizeIn(BaseModel):
+    text: str = ""
+    max_sentences: int = 5
+    max_chars: int = 600
+
+
+@router.post("/summarize")
+def summarize_text(payload: SummarizeIn):
+    """抽取式文本摘要：只取正文句，标题与噪音不进入候选（纯计算，登录即可）。"""
+    from app.services.text_summary import summarize
+
+    if len(payload.text) > 200_000:
+        raise AppError("文本过长", status_code=413, code="text_too_large",
+                       hint="单次摘要最多 20 万字符。")
+    max_sentences = max(1, min(int(payload.max_sentences or 5), 20))
+    max_chars = max(50, min(int(payload.max_chars or 600), 4000))
+    return {"ok": True, **summarize(payload.text, max_sentences, max_chars)}

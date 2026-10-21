@@ -212,12 +212,16 @@
         <!-- ============ 用户与文件 ============ -->
         <el-tab-pane label="用户与文件" name="users">
           <section class="ad-card">
-            <h3>用户</h3>
+            <div class="ad-card-head">
+              <h3>用户</h3>
+              <el-button size="small" @click="openCreateUser">新建账号</el-button>
+            </div>
             <el-table :data="users" size="small">
               <el-table-column label="用户" min-width="140">
                 <template #default="{ row }">
                   <span class="ad-user">{{ row.display_name || row.username }}</span>
                   <span class="ad-user-id">#{{ row.id }}</span>
+                  <span v-if="row.role === 'admin'" class="ad-role">管理员</span>
                 </template>
               </el-table-column>
               <el-table-column prop="files" label="文件" width="80" />
@@ -227,8 +231,60 @@
               <el-table-column label="最近活动" width="150">
                 <template #default="{ row }">{{ fmtTime(row.last_active) }}</template>
               </el-table-column>
+              <el-table-column label="操作" width="110" fixed="right">
+                <template #default="{ row }">
+                  <el-button link type="primary" size="small"
+                             @click="openResetPassword(row)">重置密码</el-button>
+                </template>
+              </el-table-column>
             </el-table>
           </section>
+
+          <!-- 新建账号 / 重置密码：两个弹窗都要把「一次性恢复码」交到使用者手上 -->
+          <el-dialog v-model="createVisible" title="新建账号" width="440px" align-center
+                     :close-on-click-modal="false">
+            <el-form label-width="76px" @submit.prevent>
+              <el-form-item label="用户名">
+                <el-input v-model.trim="createForm.username" placeholder="2~32 个字符"
+                          autocomplete="off" />
+              </el-form-item>
+              <el-form-item label="初始密码">
+                <el-input v-model="createForm.password" type="password" show-password
+                          placeholder="至少 6 位" autocomplete="new-password" />
+              </el-form-item>
+              <el-form-item label="角色">
+                <el-radio-group v-model="createForm.role">
+                  <el-radio-button label="user">普通（只读）</el-radio-button>
+                  <el-radio-button label="admin">管理员（可写）</el-radio-button>
+                </el-radio-group>
+              </el-form-item>
+            </el-form>
+            <p class="ad-hint">
+              创建成功后会显示一枚恢复码，请转交给该账号的使用者保存 ——
+              他忘记密码时靠它自助重置。
+            </p>
+            <template #footer>
+              <el-button @click="createVisible = false">取消</el-button>
+              <el-button type="primary" :loading="creating" @click="submitCreateUser">创建</el-button>
+            </template>
+          </el-dialog>
+
+          <el-dialog v-model="resetVisible" width="440px" align-center
+                     :title="`重置密码：${resetTarget?.display_name || resetTarget?.username || ''}`"
+                     :close-on-click-modal="false">
+            <el-input v-model="resetPasswordValue" type="password" show-password
+                      placeholder="新密码（至少 6 位）" autocomplete="new-password" />
+            <p class="ad-hint">
+              重置后该用户的<strong>全部登录会话立即失效</strong>，需要用新密码重新登录；
+              同时会签发一枚新的恢复码。
+            </p>
+            <template #footer>
+              <el-button @click="resetVisible = false">取消</el-button>
+              <el-button type="primary" :loading="resetting" @click="submitResetPassword">
+                确认重置
+              </el-button>
+            </template>
+          </el-dialog>
           <section class="ad-card">
             <h3>文件与解析情况</h3>
             <el-table :data="adminFiles" size="small">
@@ -363,7 +419,7 @@
  * AdminView.vue
  * 后台管理：口令闸门 + 概览 + 候选知识点审阅（含证据链）+ 操作审计（含依据明细）+ 用户与文件。
  */
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, reactive } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { adminAPI, systemAPI } from '@/api/index'
 import AppEmpty from '@/components/AppEmpty.vue'
@@ -376,6 +432,71 @@ const auth = useAuthStore()
 const tab = ref('overview')
 const loading = ref(false)
 const busy = ref('')
+
+// ---- 账号管理（新建 / 重置密码）----
+// 两者成功后都返回一次性恢复码，交给全局的 RecoveryCodeDialog 展示 ——
+// 不在这里再造一套「显示密钥」的界面，同一件事只应有一个呈现方式。
+const createVisible = ref(false)
+const creating = ref(false)
+const createForm = reactive({ username: '', password: '', role: 'user' })
+const resetVisible = ref(false)
+const resetting = ref(false)
+const resetTarget = ref(null)
+const resetPasswordValue = ref('')
+
+function openCreateUser() {
+  createForm.username = ''
+  createForm.password = ''
+  createForm.role = 'user'
+  createVisible.value = true
+}
+
+async function submitCreateUser() {
+  if (creating.value) return
+  if (!createForm.username || !createForm.password) {
+    ElMessage.warning('请填写用户名与初始密码')
+    return
+  }
+  creating.value = true
+  try {
+    const data = await adminAPI.createUser({ ...createForm })
+    createVisible.value = false
+    ElMessage.success(`账号「${data.user?.username || createForm.username}」已创建`)
+    auth.showRecovery(data.recovery_code, 'admin_create')
+    await refreshAll()
+  } catch (e) {
+    // 用户名重复是这里最常见的情况，后端已经给了可读的提示，直接透出
+    ElMessage.error(e?.fullMessage || e?.message || '创建失败')
+  } finally {
+    creating.value = false
+  }
+}
+
+function openResetPassword(row) {
+  resetTarget.value = row
+  resetPasswordValue.value = ''
+  resetVisible.value = true
+}
+
+async function submitResetPassword() {
+  if (resetting.value || !resetTarget.value) return
+  if ((resetPasswordValue.value || '').length < 6) {
+    ElMessage.warning('新密码至少 6 位')
+    return
+  }
+  resetting.value = true
+  try {
+    const data = await adminAPI.resetUserPassword(resetTarget.value.id, resetPasswordValue.value)
+    resetVisible.value = false
+    ElMessage.success('密码已重置，该用户的旧会话已失效')
+    auth.showRecovery(data.recovery_code, 'admin_reset')
+    await refreshAll()
+  } catch (e) {
+    ElMessage.error(e?.fullMessage || e?.message || '重置失败')
+  } finally {
+    resetting.value = false
+  }
+}
 
 // 系统自检
 const doctor = ref(null)
@@ -689,6 +810,24 @@ onMounted(() => {
 .ad-stage.auto { color: var(--text-muted); }
 .ad-user { font-size: var(--fs-sm); color: var(--text-primary); }
 .ad-user-id { font-size: var(--fs-xs); color: var(--text-muted); margin-left: 6px; }
+/* 卡片头：标题与操作按钮同一行，按钮靠右 */
+.ad-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.ad-card-head h3 { margin: 0; }
+/* 角色徽标：管理员要在用户列表里一眼可见（权限差异很大） */
+.ad-role {
+  margin-left: 8px;
+  padding: 1px 6px;
+  font-size: var(--fs-xs);
+  color: var(--seal);
+  border: 1px solid color-mix(in srgb, var(--seal) 45%, transparent);
+  border-radius: 3px;
+}
 
 .ad-detail :deep(.el-descriptions) { margin-bottom: 8px; }
 .ad-score { margin-left: 8px; font-weight: 700; color: var(--accent); }

@@ -81,8 +81,11 @@ export const useSummaryStore = defineStore('summary', () => {
         digest: '知识图谱AI摘要.md',
         json: `${docTitle.value}.json`
       }
+      // maxPaths 要一起带上：导出与预览必须是同一套参数。
+      // 之前这里漏了，后端又写死 6 —— 把主线数调到 3 再导出 PPT，出来还是 6 条。
       const blob = await summaryAPI.download(fmt, {
         groupBy: groupBy.value,
+        maxPaths: maxPaths.value,
         title: docTitle.value
       })
       saveBlob(blob, names[ext] || `${docTitle.value}.${ext}`)

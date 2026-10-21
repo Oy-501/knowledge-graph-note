@@ -20,8 +20,9 @@ from app.models.models import (
     AuditLog, File, KnowledgeBase, KnowledgeCandidate, Link, Node, User, UserProfile,
 )
 from app.services import audit as audit_svc
-from app.services.errors import clamp_paging, escape_like
+from app.services.errors import AppError, clamp_paging, escape_like
 from app.services import knowledge_verifier
+from app.services.kb_index import build_relations_from_entries
 
 router = APIRouter()
 
@@ -54,6 +55,13 @@ def require_admin(x_admin_token: Optional[str] = Header(default=None, alias="X-A
     from app.services.security import (admin_limiter, admin_token_configured,
                                        client_key, verify_admin_token)
 
+    # 会话通道的三种结果。区分它们是为了最后能给出**正确的状态码**：
+    # 没登录 → 401；登录了但不是管理员 → 403。
+    # 曾经这里一律回 401，于是已登录的普通用户点开后台看到的是
+    # 「请在登录页登录管理员账号」—— 而他明明登录着，真正的问题是权限不够。
+    # 401 与 403 混用也是这个项目明文禁止的（见 test_auth_guard）。
+    session_state = None        # None=无有效会话 | "admin"=管理员 | "other"=登录了但非管理员
+
     # ---- ① 登录会话（要求管理员角色）----
     if request is not None:
         try:
@@ -64,9 +72,12 @@ def require_admin(x_admin_token: Optional[str] = Header(default=None, alias="X-A
                     db, request.headers.get(auth_service.SESSION_HEADER))
                 if session is not None:
                     user = db.query(User).filter_by(id=session.user_id).first()
-                    if user is not None and not user.is_disabled \
-                            and (user.role or "user") == "admin":
-                        return True
+                    if user is not None:
+                        # 只取需要的两个标量：db 马上要关，之后碰 ORM 对象会炸
+                        is_admin = (user.role or "user") == "admin"
+                        if is_admin and not user.is_disabled:
+                            return True
+                        session_state = "other"
             finally:
                 db.close()
         except Exception as exc:  # noqa: BLE001 — 会话通道异常按「未通过」处理，继续看口令
@@ -90,10 +101,24 @@ def require_admin(x_admin_token: Optional[str] = Header(default=None, alias="X-A
         if (x_admin_token or "").strip():
             admin_limiter.hit(key)
 
-    raise HTTPException(
+    # -- 两条通道都没过：按「有没有有效会话」区分 403 与 401 --
+    if session_state == "other":
+        # 已登录但权限不够。**不能回 401**：使用者会以为会话过期，
+        # 于是退出重登一遍，回来还是同一个错误 —— 提示必须指向真正的原因。
+        raise AppError(
+            "当前账号不是管理员，无法进入后台管理。",
+            status_code=403,
+            code="admin_required",
+            hint="你已登录，不需要重新登录；需要权限请让管理员在后台调整账号角色。",
+        )
+
+    # 没有任何有效凭证（含会话过期）→ 401 session_required。
+    # 与写守卫同码，前端才能走「会话失效 → 清本地状态 → 回登录页」那条既有流程。
+    raise AppError(
+        "需要管理员身份",
         status_code=401,
-        detail="需要管理员身份：请在登录页登录管理员账号"
-               "（脚本调用可改用 X-Admin-Token 头）。",
+        code="session_required",
+        hint="请在登录页登录管理员账号；脚本调用可改用 X-Admin-Token 头。",
     )
 
 
@@ -307,12 +332,18 @@ def bulk_review(payload: BulkReviewPayload, _: bool = Depends(require_admin),
         return {"ok": False, "message": "没有匹配的候选"}
 
     changed = []
+    ingested_any = False
     for c in rows:
+        if c.status == "merged":
+            continue      # 已并入同一实体的入库结果，不重复裁决也不二次入库
         if payload.action == "accept":
             c.status = "accepted"
             c.verdict_decision = "accept"
             if payload.ingest:
-                knowledge_verifier._ingest_to_kb(db, c)
+                # 批量入库先落条目，关系等循环结束统一重建一次
+                entry_id = knowledge_verifier._ingest_to_kb(db, c, defer_relations=True)
+                if entry_id:
+                    ingested_any = True
         elif payload.action == "reject":
             c.status = "rejected"
             c.verdict_decision = "reject"
@@ -325,6 +356,8 @@ def bulk_review(payload: BulkReviewPayload, _: bool = Depends(require_admin),
         c.review_note = payload.note
         changed.append(c.entity)
     db.commit()
+    if ingested_any:
+        build_relations_from_entries(db)
 
     audit_svc.log_event(
         db, "review", actor="admin", user_id=1, target_type="candidate",
@@ -347,6 +380,7 @@ class VerifyPayload(BaseModel):
     limit: int = 50
     use_web: Optional[bool] = None
     auto_ingest: bool = True
+    force: bool = False        # 为真时连人工裁过的也一起重判
 
 
 @router.post("/candidates/verify")
@@ -364,11 +398,15 @@ def verify_candidates(payload: VerifyPayload, _: bool = Depends(require_admin),
         return {"ok": False, "message": "没有匹配的候选"}
 
     stats = knowledge_verifier.verify_batch(
-        db, rows, use_web=payload.use_web, auto_ingest=payload.auto_ingest)
+        db, rows, use_web=payload.use_web, auto_ingest=payload.auto_ingest,
+        skip_human=not payload.force)
+    skipped = stats.get("skipped_human", 0)
     audit_svc.log_event(
         db, "verdict", actor="admin", user_id=1, target_type="candidate",
-        summary=f"重跑智能判定 {stats['total']} 条：采纳 {stats['accept']} / 待审 {stats['pending']} / 驳回 {stats['reject']}",
-        detail={"stats": stats, "use_web": payload.use_web,
+        summary=(f"重跑智能判定 {stats['total']} 条：采纳 {stats['accept']} / "
+                 f"待审 {stats['pending']} / 驳回 {stats['reject']}"
+                 + (f"（跳过 {skipped} 条人工裁决）" if skipped else "")),
+        detail={"stats": stats, "use_web": payload.use_web, "force": payload.force,
                 "thresholds": {"auto_accept": settings.VERDICT_AUTO_ACCEPT,
                                "reject_below": settings.VERDICT_REJECT_BELOW}},
     )
@@ -471,6 +509,8 @@ def list_users(_: bool = Depends(require_admin), db: Session = Depends(get_db)):
                 .order_by(AuditLog.id.desc()).first())
         out.append({
             "id": uid, "username": u.username,
+            "role": u.role or "user",
+            "is_disabled": bool(u.is_disabled),
             "display_name": (profiles.get(uid).display_name if profiles.get(uid) else "") or u.username,
             "avatar_url": profiles.get(uid).avatar_url if profiles.get(uid) else "",
             "files": db.query(File).filter_by(user_id=uid).count(),
@@ -481,6 +521,43 @@ def list_users(_: bool = Depends(require_admin), db: Session = Depends(get_db)):
             "created_at": u.created_at.isoformat() if u.created_at else None,
         })
     return {"ok": True, "users": out}
+
+
+class CreateUserPayload(BaseModel):
+    username: str = ""
+    password: str = ""
+    role: str = "user"
+
+
+class AdminResetPasswordPayload(BaseModel):
+    new_password: str = ""
+
+
+@router.post("/users")
+def create_user(payload: CreateUserPayload, _: bool = Depends(require_admin),
+                db: Session = Depends(get_db)):
+    """管理员新建账号（注册入口关闭时的唯一开户路径）。
+
+    返回的 `recovery_code` 只出现这一次 —— 请转交给该账号的使用者保存，
+    他忘记密码时靠这串码自助重置。
+    """
+    from app.services import auth_service
+    user, recovery_code = auth_service.create_user(
+        db, payload.username, payload.password, payload.role or "user")
+    return {"ok": True, "user": user, "recovery_code": recovery_code}
+
+
+@router.post("/users/{user_id}/password")
+def reset_user_password(user_id: int, payload: AdminResetPasswordPayload,
+                        _: bool = Depends(require_admin),
+                        db: Session = Depends(get_db)):
+    """管理员重置指定用户的密码（用户连恢复码也丢了时的兜底）。
+
+    重置后该用户的**全部会话立即失效**，并签发一枚新的恢复码。
+    """
+    from app.services import auth_service
+    recovery_code = auth_service.admin_reset_password(db, user_id, payload.new_password)
+    return {"ok": True, "recovery_code": recovery_code}
 
 
 @router.get("/stats/verdicts")

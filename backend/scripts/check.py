@@ -657,11 +657,15 @@ def check_security() -> None:
     # ---- 认证实现（失效安全 / 纵深防御）----
     # 用**行为**验证而不是字符串匹配：字符串匹配会被文档注释里的示例代码骗过
     # （本轮就踩到了 —— 新 require_admin 的 docstring 里引用了旧的错误写法）。
+    # 「被拒绝」要认两种异常：HTTPException 与 AppError。后台守卫抛的是
+    # AppError（带结构化错误码），只认 HTTPException 会把「正确拒绝」误报成
+    # 「无法验证」—— 行为验证依赖具体异常类型，实现一换异常基类就误报。
     auth_problems = []
     try:
         from app.config import settings as _s
         from app.api.admin import require_admin
         from fastapi import HTTPException as _HTTPException
+        from app.services.errors import AppError as _AppError
 
         original = _s.ADMIN_TOKEN
         try:
@@ -669,7 +673,7 @@ def check_security() -> None:
             try:
                 require_admin(x_admin_token=None, request=None)
                 auth_problems.append("口令未配置时后台仍然放行（fail-open）")
-            except _HTTPException:
+            except (_HTTPException, _AppError):
                 pass                 # 被拒绝 → 符合失效安全
         finally:
             _s.ADMIN_TOKEN = original
@@ -678,7 +682,7 @@ def check_security() -> None:
         try:
             require_admin(x_admin_token="definitely-wrong-token", request=None)
             auth_problems.append("错误口令被放行")
-        except _HTTPException:
+        except (_HTTPException, _AppError):
             pass
     except Exception as exc:  # noqa: BLE001
         auth_problems.append(f"认证守卫无法验证：{type(exc).__name__}: {exc}")

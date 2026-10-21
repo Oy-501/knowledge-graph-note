@@ -1,0 +1,185 @@
+diff --git a/kg-vue3/src/components/NodeDetailDrawer.vue b/kg-vue3/src/components/NodeDetailDrawer.vue
+index 617640d..00bddb8 100644
+--- a/kg-vue3/src/components/NodeDetailDrawer.vue
++++ b/kg-vue3/src/components/NodeDetailDrawer.vue
+@@ -147,6 +147,44 @@
+             </div>
+           </div>
+ 
++          <!-- 笔记引用（反向链接）：哪些笔记写过这个知识点 -->
++          <div class="drawer-section">
++            <h4>笔记引用（{{ noteRefs.loading ? '…' : noteRefs.linked.length + noteRefs.mentioned.length }} 篇）</h4>
++            <div v-if="noteRefs.loading" class="empty-hint">正在查找写到这里的地方…</div>
++            <div v-else-if="noteRefs.error" class="empty-hint">{{ noteRefs.error }}</div>
++            <template v-else>
++              <div v-if="!noteRefs.linked.length && !noteRefs.mentioned.length" class="empty-hint">
++                还没有笔记写到这个知识点
++              </div>
++              <!-- 显式关联：用户说过要连的 -->
++              <div
++                v-for="nr in noteRefs.linked"
++                :key="'l' + nr.id"
++                class="note-ref"
++                @click="openNote(nr)"
++              >
++                <div class="note-ref-head">
++                  <span class="note-ref-title">{{ nr.title }}</span>
++                  <span class="note-ref-badge is-linked">已关联</span>
++                </div>
++                <div class="note-ref-snippet">{{ nr.snippet || '（无正文）' }}</div>
++              </div>
++              <!-- 正文提到但没连：补齐关联最快的地方 -->
++              <div
++                v-for="nr in noteRefs.mentioned"
++                :key="'m' + nr.id"
++                class="note-ref"
++                @click="openNote(nr)"
++              >
++                <div class="note-ref-head">
++                  <span class="note-ref-title">{{ nr.title }}</span>
++                  <span class="note-ref-badge">提到 · 未关联</span>
++                </div>
++                <div class="note-ref-snippet">{{ nr.snippet || '（无正文）' }}</div>
++              </div>
++            </template>
++          </div>
++
+           <!-- 学习路径 -->
+           <div class="drawer-section">
+             <h4>学习路径（前置知识链）</h4>
+@@ -231,7 +269,7 @@
+ </template>
+ 
+ <script setup>
+-import { computed } from 'vue'
++import { ref, computed, watch } from 'vue'
+ import { LEVEL_COLORS, SEMANTIC } from '@/utils/palette'
+ import { ElMessage } from 'element-plus'
+ import { useGraphStore } from '@/store/graphStore'
+@@ -241,6 +279,7 @@ import { getLevelInfo } from '@/utils/mdParser'
+ import { getNodeValidationStatus, getCredibility } from '@/utils/noteValidator'
+ import { buildLearningPath, groupByLevel, toLearningPathMarkdown, downloadText } from '@/utils/learningPath'
+ import { endpointId } from '@/utils/graph'
++import { knowledgeAPI } from '@/api'
+ import KnowledgeTimeline from './KnowledgeTimeline.vue'
+ 
+ const props = defineProps({
+@@ -250,11 +289,43 @@ const props = defineProps({
+   allNodes: { type: Array, default: () => [] }
+ })
+ 
+-defineEmits(['close'])
++const emit = defineEmits(['close', 'open-note'])
+ 
+ const graphStore = useGraphStore()
+ const groupStore = useGroupStore()
+ 
++/*
++ * 反向链接：打开抽屉时按节点 id 拉一次「哪些笔记写过它」。
++ * 分两段展示 —— 已关联 / 提到但没连。后者不是凑数：
++ * 它把「知识已经在笔记里、只是没连」的那部分捞出来，是补关联最快的地方。
++ */
++const noteRefs = ref({ loading: false, error: '', linked: [], mentioned: [] })
++
++watch(
++  () => [props.visible, props.node?.id],
++  async ([visible, id]) => {
++    if (!visible || !id) return
++    noteRefs.value = { loading: true, error: '', linked: [], mentioned: [] }
++    try {
++      const data = await knowledgeAPI.nodeNotes(id)
++      noteRefs.value = {
++        loading: false,
++        error: '',
++        linked: data.linked || [],
++        mentioned: data.mentioned || []
++      }
++    } catch (e) {
++      // 反向链接是辅助信息，失败不该让整个抽屉报错
++      noteRefs.value = { loading: false, error: '笔记引用加载失败，稍后可重试', linked: [], mentioned: [] }
++    }
++  },
++  { immediate: true }
++)
++
++function openNote(nr) {
++  emit('open-note', nr.id)
++}
++
+ const levelInfo = computed(() => {
+   const lv = props.node?.level
+   if (!lv) return null
+@@ -440,7 +511,6 @@ function onExportLearningPath() {
+   font-size: var(--fs-sm);
+   font-weight: 600;
+   color: var(--text-secondary);
+-  text-transform: uppercase;
+   letter-spacing: 0.5px;
+   margin-bottom: 8px;
+   padding-bottom: 6px;
+@@ -684,6 +754,65 @@ function onExportLearningPath() {
+   transform: scale(0.97);
+ }
+ 
++/* 反向链接 */
++.note-ref {
++  background: var(--bg-secondary);
++  border: 1px solid var(--border-light);
++  border-radius: var(--radius);
++  padding: 10px 12px;
++  margin-bottom: 8px;
++  cursor: pointer;
++  transition: background var(--dur-fast) var(--ease-out),
++              border-color var(--dur-fast) var(--ease-out),
++              transform var(--dur-fast) var(--ease-out);
++}
++.note-ref:hover {
++  background: var(--bg-tertiary);
++  border-color: var(--border);
++  transform: translateY(-1px);
++}
++.note-ref-head {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  margin-bottom: 4px;
++}
++.note-ref-title {
++  font-size: var(--fs-sm);
++  font-weight: 500;
++  color: var(--text-primary);
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++  flex: 1;
++  margin-right: 8px;
++}
++.note-ref-badge {
++  font-size: var(--fs-xs);
++  color: var(--text-muted);
++  background: var(--bg-tertiary);
++  border: 1px solid var(--border-light);
++  padding: 1px 6px;
++  border-radius: var(--radius-full);
++  white-space: nowrap;
++  flex-shrink: 0;
++}
++.note-ref-badge.is-linked {
++  color: var(--accent-light);
++  border-color: rgba(126, 176, 255, 0.35);
++  background: rgba(126, 176, 255, 0.1);
++}
++.note-ref-snippet {
++  font-size: var(--fs-xs);
++  color: var(--text-secondary);
++  line-height: 1.45;
++  overflow: hidden;
++  text-overflow: ellipsis;
++  display: -webkit-box;
++  -webkit-line-clamp: 2;
++  -webkit-box-orient: vertical;
++}
++
+ /* 过渡动画 */
+ .drawer-slide-enter-active,
+ .drawer-slide-leave-active {

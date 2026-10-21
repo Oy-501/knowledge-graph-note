@@ -311,10 +311,21 @@ export const knowledgeAPI = {
     return res.data
   },
 
-  /** 搜索知识库 */
+  /** 搜索知识库 / 节点 / 笔记（别名与定义也参与匹配） */
   async search(keyword, limit = 20) {
     const res = await api.get('/knowledge/search', {
       params: { keyword, limit }
+    })
+    return res.data
+  },
+
+  /**
+   * 反向链接：哪些笔记写过这个知识点。
+   * `linked` 是显式关联，`mentioned` 是正文提到但没连 —— 后者是补齐关联最快的地方。
+   */
+  async nodeNotes(nodeId, { userId = 1, limit = 30 } = {}) {
+    const res = await api.get(`/knowledge/node/${nodeId}/notes`, {
+      params: { user_id: userId, limit }
     })
     return res.data
   }
@@ -394,6 +405,18 @@ export const noteAPI = {
   /** 获取笔记列表 */
   async list(filters = {}) {
     const res = await api.get('/notes', { params: filters })
+    return res.data
+  },
+
+  /**
+   * 全文检索：标题 / 正文 / 标签。
+   * 与 list 的区别：list 的 content 只有前 200 字（列表要轻量），
+   * 在上面做搜索等于「只搜每篇笔记的前 200 字」。
+   */
+  async search(q, { userId = 1, limit = 30, offset = 0 } = {}) {
+    const res = await api.get('/notes/search', {
+      params: { q, user_id: userId, limit, offset }
+    })
     return res.data
   },
 
@@ -529,21 +552,31 @@ export const summaryAPI = {
   },
 
   /** 只取 Mermaid 流程图源码 */
-  async mermaid(groupBy = 'level') {
-    const res = await api.get('/summary/mermaid', { params: { group_by: groupBy } })
+  async mermaid(groupBy = 'level', maxPaths = 6) {
+    const res = await api.get('/summary/mermaid', {
+      params: { group_by: groupBy, max_paths: maxPaths }
+    })
     return res.data
   },
 
   /** AI 可读摘要（纯文本） */
-  async aiDigest() {
-    const res = await api.get('/summary/ai-digest')
+  async aiDigest(maxPaths = 6) {
+    const res = await api.get('/summary/ai-digest', { params: { max_paths: maxPaths } })
     return res.data
   },
 
-  /** 导出文件下载地址：fmt = md | docx | pptx | mermaid | digest | json */
-  downloadUrl(fmt = 'md', { groupBy = 'level', title = '知识图谱总结' } = {}) {
+  /**
+   * 导出文件下载地址：fmt = md | docx | pptx | mermaid | digest | json
+   *
+   * maxPaths 必须一起带上：导出与页面上看到的要**同一套参数**。
+   * 曾经这里没带，后端又写死 6 —— 用户把主线数调到 3，预览是 3 条、
+   * 导出的 PPT 却是 6 条。
+   */
+  downloadUrl(fmt = 'md', { groupBy = 'level', maxPaths = 6, title = '知识图谱总结' } = {}) {
     const base = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api'
-    const qs = new URLSearchParams({ fmt, group_by: groupBy, title, user_id: '1' })
+    const qs = new URLSearchParams({
+      fmt, group_by: groupBy, max_paths: String(maxPaths), title, user_id: '1'
+    })
     return `${base}/summary/download?${qs.toString()}`
   },
 
@@ -553,6 +586,7 @@ export const summaryAPI = {
       params: {
         fmt,
         group_by: options.groupBy || 'level',
+        max_paths: options.maxPaths ?? 6,
         title: options.title || '知识图谱总结'
       },
       responseType: 'blob'
@@ -661,6 +695,17 @@ export const authAPI = {
     })
     return res.data
   },
+
+  /**
+   * 忘记密码：用恢复码换新密码（匿名可调，不需要会话）。
+   * 成功后返回一枚**新的**恢复码，旧码与旧会话同时作废。
+   */
+  async resetPassword({ username, recoveryCode, newPassword }) {
+    const res = await api.post('/auth/reset-password', {
+      username, recovery_code: recoveryCode, new_password: newPassword,
+    })
+    return res.data
+  },
 }
 
 // ==================== 后台管理 API ====================
@@ -721,6 +766,20 @@ export const adminAPI = {
 
   async users() {
     const res = await api.get('/admin/users')
+    return res.data
+  },
+
+  /** 新建账号（注册关闭时的唯一开户路径）；返回一次性恢复码 */
+  async createUser({ username, password, role = 'user' }) {
+    const res = await api.post('/admin/users', { username, password, role })
+    return res.data
+  },
+
+  /** 重置某个用户的密码；返回该用户的新一次性恢复码 */
+  async resetUserPassword(userId, newPassword) {
+    const res = await api.post(`/admin/users/${userId}/password`, {
+      new_password: newPassword,
+    })
     return res.data
   },
 

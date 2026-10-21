@@ -4,7 +4,8 @@
   ① 知识库一致性 —— 是否命中知识库条目（规范名/别名）、定义是否与知识库矛盾、是否有关系桥接
   ② 图谱证据     —— 该知识点在文档里的锚定强度、是否已建立关联
   ③ 文本质量规则 —— 标题是否像术语（长度/编号/谓语片段）、描述是否含定义性句式
-  ④ 联网证据     —— 抓公开搜索页，看检索结果是否支持该知识点存在（不可用时标注「未联网」）
+  ④ 联网存在性   —— 抓公开搜索页做多源确认：confirmed 保底、contradicted 否决、
+                    不可用或未命中保持中性（不构成负面证据）
 
 分级策略（用户已确认）：
   score ≥ VERDICT_AUTO_ACCEPT 且无冲突 → accept（可选自动入知识库）
@@ -199,7 +200,12 @@ def verify_candidate(db, candidate, kb=None, use_web: Optional[bool] = None,
             from app.services import web_probe
             if web_budget is not None:
                 web_budget["left"] = web_budget.get("left", 0) - 1
-            query = f"{entity} {candidate.domain or ''}".strip()
+            # 引号强制精确短语：中文长词不加引号会被搜索引擎拆成泛词。
+            # 实测「检索增强生成」不加引号会退化成「检索」的通用结果。
+            safe_entity = (entity or "").replace('"', " ").strip()
+            query = f'"{safe_entity}"'
+            if candidate.domain and candidate.domain not in ("general", "通用"):
+                query += f" {candidate.domain}"
             result = web_probe.search_web(
                 query, timeout=settings.VERDICT_WEB_TIMEOUT,
                 cache_ttl=settings.VERDICT_WEB_CACHE_TTL)
@@ -212,28 +218,45 @@ def verify_candidate(db, candidate, kb=None, use_web: Optional[bool] = None,
                 })
             else:
                 v.web_status = "ok"
-                support = web_probe.supports(entity, result["results"])
-                if support["hits"] >= 2:
-                    v.add("web", 0.15,
-                          f"公开检索有 {support['hits']} 条结果提及该概念（{result['provider']}）",
-                          source=result["provider"],
-                          url=(support["samples"][0]["url"] if support["samples"] else ""))
-                elif support["hits"] == 1:
-                    v.add("web", 0.08, f"公开检索有 1 条结果提及该概念（{result['provider']}）",
-                          source=result["provider"],
-                          url=(support["samples"][0]["url"] if support["samples"] else ""))
+                from app.services import web_existence
+                existence = web_existence.check_existence(entity, description, result)
+                status = existence["status"]
+                top_url = (result.get("results") or [{}])[0].get("url", "")
+
+                # 权重沿用原来的三档（0.15 / 0.08 / 0.0），保持权重表同步；
+                # 存在性状态另记一条 weight=0 的结构化证据。
+                if status == "confirmed":
+                    v.add("web", 0.15, existence["reason"],
+                          source=result["provider"], url=top_url)
+                    # 保底：确认存在就不该因本地证据不足被驳回，至少进待审
+                    v.score = max(v.score, settings.VERDICT_WEB_EXISTENCE_FLOOR)
+                elif status == "probable":
+                    v.add("web", 0.08, existence["reason"],
+                          source=result["provider"], url=top_url)
+                elif status == "contradicted":
+                    v.add("web", 0.0, existence["reason"],
+                          source=result["provider"], positive=False)
+                    v.conflict = True   # 有否定证据时不得自动入库
+                    # 检索到的否定措辞可能误判，交人工核实而不是自动驳回
+                    v.score = max(v.score, settings.VERDICT_REJECT_BELOW)
                 else:
-                    # 「搜不到」不等于「不存在」（大量领域内专有名词搜不到），
-                    # 因此只作为中性记录，不作为负面证据
-                    v.add("web", 0.0,
-                          f"公开检索未直接命中该概念（{result['provider']} 返回 "
-                          f"{len(result['results'])} 条但不含该词）—— 不构成负面证据，交给人工判断",
-                          source=result["provider"])
-                # 把命中的样例摘要一并留证，便于人工复核
-                for s in support["samples"]:
-                    v.evidence.append({"type": "web-sample", "weight": 0, "positive": True,
-                                       "detail": s["snippet"] or s["title"],
-                                       "source": result["provider"], "url": s["url"]})
+                    v.add("web", 0.0, existence["reason"], source=result["provider"])
+
+                v.evidence.append({
+                    "type": "web-existence", "weight": 0,
+                    "positive": status != "contradicted",
+                    "detail": (f"存在性判定：{status}（独立来源 "
+                               f"{len(existence['domains'])} 个，一致性 "
+                               f"{existence['consistency']:.2f}）"),
+                    "source": result["provider"], "url": top_url,
+                })
+                # 命中样例留证，便于人工复核
+                for s in (result.get("results") or [])[:3]:
+                    v.evidence.append({
+                        "type": "web-sample", "weight": 0, "positive": True,
+                        "detail": (s.get("snippet") or s.get("title") or "")[:200],
+                        "source": result["provider"], "url": s.get("url", ""),
+                    })
         except Exception as exc:
             v.web_status = "unavailable"
             v.evidence.append({"type": "web", "weight": 0, "positive": True,
@@ -246,8 +269,13 @@ def verify_candidate(db, candidate, kb=None, use_web: Optional[bool] = None,
 
 
 def apply_verdict(db, candidate, verdict: Dict, auto_ingest: bool = True,
-                  actor: str = "system", write_audit: bool = True) -> Dict:
-    """把判定结果写回候选记录；accept 时（可选）自动入知识库"""
+                  actor: str = "system", write_audit: bool = True,
+                  defer_relations: bool = False) -> Dict:
+    """把判定结果写回候选记录；accept 时（可选）自动入知识库
+
+    defer_relations=True 时不逐条重建知识库关系，交给批量循环结束后统一做一次 ——
+    原来每条新条目都全量重建，批量采纳两百条就把同一件事做两百遍。
+    """
     from datetime import datetime
     from app.models.models import KnowledgeBase, KnowledgeCandidate
 
@@ -262,7 +290,7 @@ def apply_verdict(db, candidate, verdict: Dict, auto_ingest: bool = True,
     if verdict["decision"] == "accept":
         candidate.status = "accepted"
         if auto_ingest and not verdict.get("conflict"):
-            ingested = _ingest_to_kb(db, candidate)
+            ingested = _ingest_to_kb(db, candidate, defer_relations=defer_relations)
     elif verdict["decision"] == "reject":
         candidate.status = "rejected"
     else:
@@ -293,7 +321,7 @@ def apply_verdict(db, candidate, verdict: Dict, auto_ingest: bool = True,
     return {"decision": verdict["decision"], "ingested_kb_entry_id": ingested}
 
 
-def _ingest_to_kb(db, candidate) -> Optional[int]:
+def _ingest_to_kb(db, candidate, defer_relations: bool = False) -> Optional[int]:
     """把通过判定的候选知识点写入知识库（幂等：已存在则只补别名/关系）"""
     from app.models.models import KnowledgeBase
     from app.services.kb_index import build_relations_from_entries, normalize_key
@@ -310,6 +338,9 @@ def _ingest_to_kb(db, candidate) -> Optional[int]:
             existing.aliases = aliases
             db.commit()
         candidate.kb_entry_id = existing.id
+        if not defer_relations and changed:
+            build_relations_from_entries(db)
+        _merge_twins(db, candidate, existing.id)
         return existing.id
 
     entry = KnowledgeBase(
@@ -328,25 +359,73 @@ def _ingest_to_kb(db, candidate) -> Optional[int]:
     db.flush()
     candidate.kb_entry_id = entry.id
     db.commit()
-    build_relations_from_entries(db)
+    if not defer_relations:
+        build_relations_from_entries(db)
+    _merge_twins(db, candidate, entry.id)
     return entry.id
 
 
+def _merge_twins(db, candidate, kb_entry_id: Optional[int]) -> int:
+    """同一实体被多个分片抽出时，把其余还开着的候选标记为 merged 并回填条目 id。
+
+    跨阶段的重复原本会一直占着待审队列：管理员看到的是同一条知识重复十几遍，
+    既没法一眼看出总数，也容易误以为自己判过的那一条没生效。
+    """
+    from app.models.models import KnowledgeCandidate
+    try:
+        twins = (db.query(KnowledgeCandidate)
+                 .filter(KnowledgeCandidate.entity == candidate.entity,
+                         KnowledgeCandidate.id != candidate.id,
+                         KnowledgeCandidate.status == "open")
+                 .all())
+        for t in twins:
+            t.status = "merged"
+            t.verdict_stage = "human"
+            t.reviewed_by = "system"
+            t.review_note = f"并入同一实体的入库结果（候选 #{candidate.id}）"
+            if kb_entry_id:
+                t.kb_entry_id = kb_entry_id
+        if twins:
+            db.commit()
+        return len(twins)
+    except Exception as exc:
+        logger.warning(f"合并重复候选失败：{exc}")
+        return 0
+
+
 def verify_batch(db, candidates: List, use_web: Optional[bool] = None,
-                 auto_ingest: bool = True) -> Dict:
-    """批量判定（含联网预算控制，避免整批卡在网络上）"""
-    from app.services.kb_index import load_index
+                 auto_ingest: bool = True, skip_human: bool = True) -> Dict:
+    """批量判定（含联网预算控制，避免整批卡在网络上）
+
+    skip_human：跳过已经人工裁过的条目。管理员在后台点「重跑判定」时，
+    机器不该把人判过的推翻 —— 真要覆盖得显式传 force（见 api/admin.py）。
+    """
+    from app.services.kb_index import load_index, build_relations_from_entries
 
     kb = load_index(db)
     budget = {"left": settings.VERDICT_MAX_WEB_CALLS if settings.VERDICT_USE_WEB else 0}
     stats = {"total": len(candidates), "accept": 0, "reject": 0, "pending": 0,
-             "web_ok": 0, "web_unavailable": 0}
+             "web_ok": 0, "web_unavailable": 0, "skipped_human": 0, "skipped_merged": 0}
+    ingested_any = False
     for c in candidates:
+        if skip_human and getattr(c, "verdict_stage", None) == "human":
+            stats["skipped_human"] += 1
+            continue
+        if getattr(c, "status", None) == "merged":
+            stats["skipped_merged"] += 1
+            continue
         verdict = verify_candidate(db, c, kb=kb, use_web=use_web, web_budget=budget)
-        apply_verdict(db, c, verdict, auto_ingest=auto_ingest)
+        res = apply_verdict(db, c, verdict, auto_ingest=auto_ingest,
+                            defer_relations=True)
         stats[verdict["decision"]] = stats.get(verdict["decision"], 0) + 1
+        if res.get("ingested_kb_entry_id"):
+            ingested_any = True
         if verdict.get("web_status") == "ok":
             stats["web_ok"] += 1
         elif verdict.get("web_status") == "unavailable":
             stats["web_unavailable"] += 1
+
+    # 批量结束统一重建一次，代替「每条都重建一遍」
+    if ingested_any and auto_ingest:
+        build_relations_from_entries(db)
     return stats

@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>知识图谱笔记 —— 把散落的笔记，连成可以走的路</title>
+  <meta name="description" content="基于知识图谱的智能笔记系统：上传文档，自动抽取知识点、锚定知识库、四维关联，一键生成学习主线并导出 Word / PPT。课程设计交付页面。" />
+
+  <!-- 字体：preconnect + 按需字重 + font-display: swap；
+       离线时回退本地宋体/黑体，编辑感不丢 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,900&family=Noto+Serif+SC:wght@700;900&family=Noto+Sans+SC:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23c13b2a'/%3E%3Ccircle cx='10' cy='22' r='3' fill='%23f5f1e8'/%3E%3Ccircle cx='22' cy='10' r='3' fill='%23f5f1e8'/%3E%3Cline x1='10' y1='22' x2='22' y2='10' stroke='%23f5f1e8' stroke-width='2'/%3E%3C/svg%3E" />
+
+  <link rel="stylesheet" href="styles/tokens.css" />
+  <link rel="stylesheet" href="styles/base.css" />
+  <link rel="stylesheet" href="styles/components.css" />
+</head>
+
+<body class="grain">
+  <a class="skip-link" href="#main">跳到正文</a>
+
+  <!-- ============================ 刊头 ============================ -->
+  <header class="masthead rise">
+    <div class="measure masthead-inner">
+      <div class="masthead-cell">
+        <span class="seal" aria-hidden="true">谱</span>
+        <span class="wordmark">知识图谱笔记</span>
+      </div>
+      <div class="masthead-cell">
+        <span class="masthead-meta">KG-NOTES · 课程设计</span>
+        <span class="masthead-meta">VOL.2026</span>
+        <a class="masthead-enter" data-app-link href="http://127.0.0.1:5173"
+           target="_blank" rel="noopener">进入项目 <span aria-hidden="true">↗</span></a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+
+    <!-- ============================ 首屏 ============================ -->
+    <section class="hero">
+      <div class="measure hero-grid">
+        <div class="hero-copy">
+          <div class="hero-eyebrow rise">
+            <span class="rule" aria-hidden="true"></span>
+            <span class="kicker">智能笔记 · 知识图谱 · 课程设计</span>
+          </div>
+
+          <h1 class="hero-title">
+            <span class="line"><span>笔记越攒越多，</span></span>
+            <span class="line"><span>知识要靠<em class="em">连</em>，</span></span>
+            <span class="line"><span>才越走越清。</span></span>
+          </h1>
+
+          <p class="hero-sub rise">
+            一款基于知识图谱的智能笔记系统：上传文档，系统自动抽取知识点、
+            锚定到知识库、按四个维度建立关联，最后把网状的知识收敛成一条
+            可执行的学习主线 —— 并一键导出为 Word 与 PPT。
+          </p>
+
+          <div class="hero-actions rise">
+            <a class="btn" data-app-link href="http://127.0.0.1:5173"
+               target="_blank" rel="noopener">
+              <span>进入项目</span><span aria-hidden="true">↗</span>
+            </a>
+            <a class="btn btn--ghost" href="#mechanism"><span>查看工作机制</span></a>
+          </div>
+          <p class="hero-hint rise">
+            本项目需先在项目根目录运行 <code>启动服务.bat</code>；
+            地址可用 <code>?app=…</code> 覆盖。
+          </p>
+        </div>
+
+        <div class="hero-graph">
+          <div class="hero-graph-canvas">
+            <svg id="heroGraph" preserveAspectRatio="xMidYMid meet"></svg>
+          </div>
+          <p class="graph-caption rise">FIG.1 —— 散点收敛为学习主线</p>
+        </div>
+      </div>
+
+      <div class="hero-meta rise">
+        <div>抽取 · 锚定 · 关联 · 收敛</div>
+        <div>四维关联模型 <span class="num">α · β · γ · δ</span></div>
+        <div>导出 <span class="num">MD / DOCX / PPTX / MMD</span></div>
+      </div>
+    </section>
+
+    <!-- ============================ 跑马灯分隔 ============================ -->
+    <div class="ticker" aria-hidden="true">
+      <div class="ticker-track">
+        <span>知识库锚定 <i class="dot">◆</i> 语义向量 <i class="dot">◆</i> 智能切割 <i class="dot">◆</i> 学习主线 <i class="dot">◆</i> 一键导出 <i class="dot">◆</i> 操作审计 <i class="dot">◆</i> </span>
+      </div>
+    </div>
+
+    <!-- ============================ 01 问题 ============================ -->
+    <section class="section" id="problem">
+      <div class="measure">
+        <div class="section-head" data-reveal>
+          <span class="section-no">01</span>
+          <h2 class="section-title">问题
+            <span class="en">The Problem With Notes</span>
+          </h2>
+        </div>
+
+        <div class="problem-grid">
+          <div class="problem-copy">
+            <p class="dropcap" data-reveal>
+              笔记软件解决的是"记下来"，不是"连起来"。文档一份份上传，
+              知识点一条条累积，但它们之间是什么关系 —— 谁先谁后、谁支撑谁、
+              谁和谁其实在讲同一件事 —— 全要靠人脑维护。记得越多，这张脑内的网越乱。
+            </p>
+            <p data-reveal data-reveal-delay="90">
+              更棘手的是"换个说法就断链"：昨天的笔记写"索引失效"，今天的文档写
+              "对列使用函数导致无法命中索引" —— 字面完全不同，说的却是同一件事。
+              只靠关键词匹配的系统在这里全部失守。
+            </p>
+            <p data-reveal data-reveal-delay="180">
+              本系统的回答是：<strong>让知识库做知识的权威源</strong>。文档先锚定到
+              知识库里的概念，再由概念空间决定关联；没有被知识库覆盖的内容不参与连线 ——
+              宁可少连，不乱连。
+            </p>
+          </div>
+
+          <blockquote class="pullquote" data-reveal data-reveal-delay="120">
+            “没有知识依据的关联，宁可不给。”
+            <footer>—— 设计准则 · 知识边界</footer>
+          </blockquote>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ 02 机制 ============================ -->
+    <section class="section" id="mechanism" style="background: var(--paper-deep);">
+      <div class="measure">
+        <div class="section-head" data-reveal>
+          <span class="section-no">02</span>
+          <h2 class="section-title">四维关联模型
+            <span class="en">Four-Dimensional Linking</span>
+          </h2>
+        </div>
+
+        <div class="dims" data-reveal>
+          <div class="dim">
+            <span class="dim-greek">α</span>
+            <span class="dim-name">关键词重合</span>
+            <p class="dim-desc">Jaccard 相似度计算字面证据。最直接，也最容易被"换说法"击穿。</p>
+            <span class="dim-tag">LEXICAL</span>
+          </div>
+          <div class="dim">
+            <span class="dim-greek">β</span>
+            <span class="dim-name">语义向量</span>
+            <p class="dim-desc">多语编码器把知识点嵌入向量空间，"索引失效"与"无法命中索引"在此相遇。</p>
+            <span class="dim-tag">SEMANTIC</span>
+          </div>
+          <div class="dim">
+            <span class="dim-greek">γ</span>
+            <span class="dim-name">知识库桥接</span>
+            <p class="dim-desc">两个知识点若锚定到同一个知识库概念，经概念搭桥关联 —— 知识的权威裁决。</p>
+            <span class="dim-tag">CURATED</span>
+          </div>
+          <div class="dim">
+            <span class="dim-greek">δ</span>
+            <span class="dim-name">拓扑邻近</span>
+            <p class="dim-desc">图谱结构自身的近邻信号：常与谁相连，往往就与谁相关。</p>
+            <span class="dim-tag">TOPOLOGICAL</span>
+          </div>
+        </div>
+
+        <p class="rule-note" data-reveal>
+          知识边界 —— 未被知识库覆盖的内容不参与关联，这是刻意的设计，不是缺陷
+        </p>
+      </div>
+    </section>
+
+    <!-- ============================ 03 流水线 ============================ -->
+    <section class="section" id="pipeline">
+      <div class="measure">
+        <div class="section-head" data-reveal>
+          <span class="section-no">03</span>
+          <h2 class="section-title">从文档到主线
+            <span class="en">The Pipeline</span>
+          </h2>
+        </div>
+
+        <div class="pipeline" data-reveal>
+          <div class="step">
+            <div class="step-no">1</div>
+            <div class="step-name">上传</div>
+            <p class="step-desc">Markdown / TXT，限额读取与格式校验在入口完成。</p>
+          </div>
+          <div class="step">
+            <div class="step-no">2</div>
+            <div class="step-name">智能切割</div>
+            <p class="step-desc">大文件按语义边界切片，切割方案先预演、可审计。</p>
+          </div>
+          <div class="step">
+            <div class="step-no">3</div>
+            <div class="step-name">抽取</div>
+            <p class="step-desc">抽出知识点实体，句子残骸在抽取层就被拦下。</p>
+          </div>
+          <div class="step">
+            <div class="step-no">4</div>
+            <div class="step-name">锚定</div>
+            <p class="step-desc">别名归一 + 最长匹配，把知识点钉到知识库概念上。</p>
+          </div>
+          <div class="step">
+            <div class="step-no">5</div>
+            <div class="step-name">关联</div>
+            <p class="step-desc">α/β/γ/δ 四维打分，预算与剪枝控制推理开销。</p>
+          </div>
+          <div class="step">
+            <div class="step-no">6</div>
+            <div class="step-name">总结</div>
+            <p class="step-desc">层级、领域、枢纽、知识簇、学习主线一次算清。</p>
+          </div>
+          <div class="step">
+            <div class="step-no">7</div>
+            <div class="step-name">导出</div>
+            <p class="step-desc">Markdown / Word / PPT / Mermaid / AI 摘要。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ 04 证据 ============================ -->
+    <section class="section stats" id="evidence">
+      <div class="measure">
+        <div class="section-head" data-reveal>
+          <span class="section-no">04</span>
+          <h2 class="section-title">工程证据
+            <span class="en">Evidence, Not Claims</span>
+          </h2>
+        </div>
+
+        <div class="stats-grid" data-reveal>
+          <div class="stat">
+            <div class="stat-value">215<span class="unit">条</span></div>
+            <div class="stat-label">自动化测试</div>
+            <p class="stat-desc">契约、边界、引擎、旅程、真实 TCP 五层覆盖，全量 47 秒跑完。</p>
+          </div>
+          <div class="stat">
+            <div class="stat-value">20<span class="unit">项</span></div>
+            <div class="stat-label">反向验证</div>
+            <p class="stat-desc">每项故意破坏一个被守护的不变量，确认测试真的会红 —— 杜绝"永远绿灯"。</p>
+          </div>
+          <div class="stat">
+            <div class="stat-value">59<span class="unit">req/s</span></div>
+            <div class="stat-label">吞吐上限</div>
+            <p class="stat-desc">单进程实测峰值；瓶颈定位在 GIL 而非数据库，有据可查。</p>
+          </div>
+          <div class="stat">
+            <div class="stat-value">3.0<span class="unit">ms</span></div>
+            <div class="stat-label">单条编码</div>
+            <p class="stat-desc">语义向量编码实测均值（批 96），中文按字切词有实证测试守着。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ 05 架构 ============================ -->
+    <section class="section" id="arch">
+      <div class="measure">
+        <div class="section-head" data-reveal>
+          <span class="section-no">05</span>
+          <h2 class="section-title">技术架构
+            <span class="en">Architecture</span>
+          </h2>
+        </div>
+
+        <div class="arch" data-reveal>
+          <div class="arch-layer">
+            <span class="arch-role">Shell</span>
+            <span class="arch-name">Electron<span class="sub">桌面外壳：窗口、托盘、本地唤起</span></span>
+            <span class="arch-note">main.js / preload.js</span>
+          </div>
+          <div class="arch-layer">
+            <span class="arch-role">Frontend</span>
+            <span class="arch-name">Vue 3 + Vite<span class="sub">图谱画布、工作台、总结页、后台</span></span>
+            <span class="arch-note">Pinia · Element Plus</span>
+          </div>
+          <div class="arch-layer">
+            <span class="arch-role">Backend</span>
+            <span class="arch-name">FastAPI<span class="sub">解析、锚定、关联、总结、导出、审计</span></span>
+            <span class="arch-note">66 个端点 · 写守卫 · 请求追踪</span>
+          </div>
+          <div class="arch-layer">
+            <span class="arch-role">Storage</span>
+            <span class="arch-name">SQLite / PostgreSQL<span class="sub">双模自动探测，列级迁移治理</span></span>
+            <span class="arch-note">21 张表 · 外键级联清理</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ 06 产物 ============================ -->
+    <section class="section" id="outputs" style="background: var(--paper-deep);">
+      <div class="measure">
+        <div class="section-head" data-reveal>
+          <span class="section-no">06</span>
+          <h2 class="section-title">一键导出
+            <span class="en">Deliverables</span>
+          </h2>
+        </div>
+
+        <div class="outputs" data-reveal>
+          <div class="out-chip">
+            <div class="out-fmt">.md</div>
+            <div class="out-name">结构化总结</div>
+          </div>
+          <div class="out-chip">
+            <div class="out-fmt">.docx</div>
+            <div class="out-name">汇报文档</div>
+          </div>
+          <div class="out-chip">
+            <div class="out-fmt">.pptx</div>
+            <div class="out-name">演示文稿</div>
+          </div>
+          <div class="out-chip">
+            <div class="out-fmt">.mmd</div>
+            <div class="out-name">流程图源码</div>
+          </div>
+          <div class="out-chip">
+            <div class="out-fmt">.txt</div>
+            <div class="out-name">AI 可读摘要</div>
+          </div>
+        </div>
+
+        <p class="outputs-note" data-reveal data-reveal-delay="90">
+          PPT 的流程图页用原生形状与箭头绘制，不贴图 —— 在任何机器上打开都不糊、
+          可继续编辑；导出的参数与页面预览严格一致，主线选几条就导出几条。
+        </p>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ============================ 页脚 ============================ -->
+  <footer class="colophon">
+    <div class="measure colophon-inner">
+      <div class="masthead-cell">
+        <span class="seal" aria-hidden="true">谱</span>
+        <span class="wordmark" style="font-size: var(--fs-1);">知识图谱笔记</span>
+      </div>
+      <div class="colophon-meta">
+        基于知识图谱的智能笔记系统 · 课程设计报告配套页 · MMXXVI
+      </div>
+    </div>
+  </footer>
+
+  <script src="scripts/main.js"></script>
+</body>
+</html>

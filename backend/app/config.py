@@ -91,6 +91,12 @@ class Settings(BaseSettings):
     VERDICT_WEB_CACHE_TTL: int = 900    # 搜索结果缓存（秒）
     VERDICT_MAX_WEB_CALLS: int = 30     # 单批判定最多联网几次（避免整批卡住）
 
+    # ---- 联网存在性确认（保底层）----
+    # 多源精确命中才算"确认存在"；确认后分数不得低于 floor（至少进待审，不被误驳）
+    VERDICT_WEB_EXISTENCE_FLOOR: float = 0.35
+    VERDICT_WEB_MIN_DOMAINS: int = 2           # 至少几个独立域名才算多源
+    VERDICT_WEB_DESC_CONSISTENCY: float = 0.25 # 描述与检索摘要的最低一致度
+
     # ---- 认证与会话 ----
     SESSION_TTL_DAYS: int = 7           # 会话有效期（天）；每次鉴权命中滑动续期
     # 是否开放注册入口（登录页会出现「注册」页签）。
@@ -108,6 +114,8 @@ class Settings(BaseSettings):
     # 日常使用登录页就不再需要它了。留着请改成强口令，不用可以置空。
     ADMIN_TOKEN: str = "kg-admin"
     UPLOAD_DIR: str = "./uploads"       # 头像/背景图等用户上传文件目录
+    EXPORT_DIR: str = "./exports"       # 图谱总结导出产物目录（只保留最近 N 个）
+    EXPORT_KEEP: int = 30               # 导出产物保留个数
     MAX_IMAGE_MB: int = 5               # 图片上传上限
     AUDIT_KEEP_ROWS: int = 20000        # 审计日志保留条数（超出清理最旧的）
 
@@ -158,6 +166,16 @@ class Settings(BaseSettings):
     def db_is_sqlite(self) -> bool:
         return self.resolved_database_url.startswith("sqlite")
 
+    @staticmethod
+    def _under_backend(path: str) -> str:
+        """把相对路径按 backend/ 解析成绝对路径。
+
+        刻意不用 `path.lstrip("./")` —— lstrip 剥的是**字符集**不是前缀，
+        `"../data/kg.db"` 会被剥成 `"data/kg.db"`，悄悄指向另一个文件。
+        `normpath(join(...))` 既剥掉 `./`，也正确保留 `../` 的语义。
+        """
+        return os.path.normpath(os.path.join(BACKEND_DIR, path))
+
     @property
     def resolved_upload_dir(self) -> str:
         """上传目录的**绝对路径**（单一事实来源）。
@@ -170,7 +188,20 @@ class Settings(BaseSettings):
         root = self.UPLOAD_DIR
         if os.path.isabs(root):
             return root
-        return os.path.join(BACKEND_DIR, root.lstrip("./"))
+        return self._under_backend(root)
+
+    @property
+    def resolved_export_dir(self) -> str:
+        """导出产物目录的**绝对路径**（与 upload_dir 同理，不让 cwd 参与决策）。
+
+        除了统一路径来源，还有一个实际作用：**测试要靠它隔离**。
+        不改这里，跑一次导出用例就会往正式产物目录里塞文件，
+        而产物目录是按 mtime 只保留最近 N 个的 —— 测试文件会把用户的导出挤掉。
+        """
+        root = self.EXPORT_DIR
+        if os.path.isabs(root):
+            return root
+        return self._under_backend(root)
 
     @property
     def resolved_model_dir(self) -> str:
@@ -178,7 +209,7 @@ class Settings(BaseSettings):
         root = self.VECTOR_CACHE_DIR
         if os.path.isabs(root):
             return root
-        return os.path.join(BACKEND_DIR, root.lstrip("./"))
+        return self._under_backend(root)
 
     @property
     def resolved_sqlite_path(self) -> str:
@@ -194,7 +225,7 @@ class Settings(BaseSettings):
         path = self.SQLITE_PATH
         if os.path.isabs(path):
             return path
-        return os.path.join(BACKEND_DIR, path.lstrip("./"))
+        return self._under_backend(path)
 
     class Config:
         # 用绝对路径指向 backend/.env：否则从其他目录启动时读不到配置，

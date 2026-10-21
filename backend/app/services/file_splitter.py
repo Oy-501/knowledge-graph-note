@@ -9,6 +9,8 @@
      重复抽出的知识点由 merge_same_entity（同文件同实体合并）自然去重。
   4. **分片可追溯**：每片带 index / 起止行号 / 标题路径 / 字符数，写入 Node.chunk_index，
      后台与审计里能还原「这个知识点来自原文第几片、第几行」。
+  5. **句中不落刀（保底）**：切点优先取句末标点之后；若仍落在句中，向后回退到最近收句处。
+     `validate_plan` 可对方案做覆盖率与撕裂校验，撕裂切点会记在片的 `torn` 字段。
 
 切割是纯计算，不落盘；解析时按片循环，进度与审计都按片记录。
 """
@@ -18,6 +20,27 @@ from typing import Dict, List, Optional
 from loguru import logger
 
 HEADING = re.compile(r"^(#{1,6})\s+(.*)$")
+_SENT_END = re.compile(r"[。！？；!?;.]$")
+
+
+def _is_sentence_end(line: str) -> bool:
+    return bool(_SENT_END.search((line or "").strip()))
+
+
+def _safe_cut(lines: List[str], end: int, total: int, max_extra: int = 50) -> int:
+    """切点若落在句子中间，向后移到最近的完整收句处。
+
+    这是「切了也不丢知识点」的保底：结构边界找不到时，
+    宁可让这一片多包含几行，也不把一句话从中间劈开。
+    """
+    limit = min(total, end + max_extra)
+    while end < limit:
+        nxt = lines[end].strip() if end < total else ""
+        prev = lines[end - 1].strip() if end > 0 else ""
+        if not nxt or HEADING.match(nxt) or not prev or _is_sentence_end(prev):
+            break
+        end += 1
+    return end
 
 
 def _heading_path(stack: List[tuple]) -> str:
@@ -63,10 +86,13 @@ def plan_split(text: str, target_lines: int = 6000, target_chars: int = 400_000,
     # 先找出所有可落刀的边界（标题行之前 / 空行之后），记录行号（0-based）
     cut_candidates: List[int] = []
     for i, line in enumerate(lines):
-        if HEADING.match(line.strip()):
+        stripped = line.strip()
+        if HEADING.match(stripped):
             cut_candidates.append(i)          # 在标题行之前切
-        elif not line.strip() and i + 1 < len(lines):
+        elif not stripped and i + 1 < len(lines):
             cut_candidates.append(i + 1)      # 在空行之后切（开新段落）
+        elif _is_sentence_end(stripped) and i + 1 < len(lines):
+            cut_candidates.append(i + 1)      # 句子结束后开新句
     if not cut_candidates:
         cut_candidates = list(range(0, total_lines, max(1, target_lines)))
 
@@ -106,8 +132,17 @@ def plan_split(text: str, target_lines: int = 6000, target_chars: int = 400_000,
                         break
                 if end is None:
                     end = target_end
+            # 保底：切点落在句中时向后移到收句处
+            end = _safe_cut(lines, end, total_lines)
 
         heading_path = heading_at[min(start, total_lines)]
+
+        # 切点是否仍落在句中（只有超长段落且无标点时才会发生）
+        torn = (end < total_lines
+                and bool(lines[end].strip())
+                and not HEADING.match(lines[end].strip())
+                and bool(lines[end - 1].strip())
+                and not _is_sentence_end(lines[end - 1].strip()))
 
         # 判断切点性质（末尾片没有"下一个切点"）
         if end >= total_lines:
@@ -116,6 +151,8 @@ def plan_split(text: str, target_lines: int = 6000, target_chars: int = 400_000,
             cut_kind = "标题边界"
         elif not lines[end].strip():
             cut_kind = "段落边界"
+        elif _is_sentence_end(lines[end - 1].strip()):
+            cut_kind = "句子边界"
         else:
             cut_kind = "行数兜底"
 
@@ -127,6 +164,7 @@ def plan_split(text: str, target_lines: int = 6000, target_chars: int = 400_000,
             "chars": sum(len(l) + 1 for l in lines[start:end]),
             "heading_path": heading_path,
             "reason": cut_kind,
+            "torn": torn,
         })
         if end >= total_lines:
             break
@@ -151,6 +189,34 @@ def piece_text(text: str, piece: Dict, with_context: bool = True) -> str:
     if with_context and piece.get("heading_path"):
         return f"{piece['heading_path']}\n\n{body}"
     return body
+
+
+def validate_plan(plan: Dict, text: str) -> Dict:
+    """校验切割方案：覆盖率、句子完整、空片。
+
+    返回 {ok, gaps, torn_cuts, empty_pieces, pieces}。
+    gaps 只统计非空行 —— 空行本来就不承载知识点。
+    """
+    lines = (text or "").split("\n")
+    total = len(lines)
+    pieces = plan.get("pieces", [])
+
+    covered = set()
+    for p in pieces:
+        covered.update(range(max(0, p["start"] - 1), min(total, p["end"])))
+    gaps = [i + 1 for i in range(total) if i not in covered and lines[i].strip()]
+
+    # 最后一片到文末，不存在"切点"，不参与撕裂检查
+    torn = [p["end"] for p in pieces[:-1] if p.get("torn")]
+    empty = [p["index"] for p in pieces if p.get("lines", 0) <= 0]
+
+    return {
+        "ok": not gaps and not torn and not empty,
+        "gaps": gaps[:20],
+        "torn_cuts": torn[:20],
+        "empty_pieces": empty,
+        "pieces": len(pieces),
+    }
 
 
 def describe_plan(plan: Dict) -> str:
