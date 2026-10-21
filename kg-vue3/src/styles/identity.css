@@ -18,7 +18,7 @@
 :root {
   /* 展示字：系统里已有的衬线（宋体系），不引外链字体 —— 桌面端离线可用。
      只用于 ≥18px 的标题与品牌，小字仍走黑体（宋体小字在 1x 屏上发虚）。 */
-  --font-display: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", serif;
+  --font-display: "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "STSong", "SimSun", serif;
 
   /* 身份色：朱砂。亮色底用偏深的朱砂保证对比 */
   --seal: #b8362a;

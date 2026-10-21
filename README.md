@@ -65,12 +65,18 @@ YR/
 ## Quick Start
 
 ### Local dev
+
 ```bash
+# 一键启动（Windows / macOS / Linux 通用，同时起前后端）
+python scripts/dev.py
+# macOS / Linux 也可：bash start.sh
+
+# 或手动分别启动：
 # 1. Backend (port 8080)
 cd backend
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 cp .env.example .env        # adjust ADMIN_TOKEN etc.
-py -m uvicorn app.main:app --port 8080
+python -m uvicorn app.main:app --port 8080   # Windows 可用 py 代替 python
 
 # 2. Frontend (port 5173)
 cd kg-vue3
@@ -87,6 +93,21 @@ npm start
 ```
 
 > 注：根目录 `legacy/` 为旧版 Electron 桌面壳（已非主线，仅存档）。当前主线为 `backend/` + `kg-vue3/`。
+
+### 跨平台兼容（Windows / macOS / Linux）
+
+| 项 | Windows | macOS / Linux | 处理方式 |
+|---|---|---|---|
+| Python 命令 | `py` / `python` | `python3` | `scripts/dev.py` 用当前解释器，无需关心 |
+| 一键启动 | `启动服务.bat` | `bash start.sh` | 两者都调用 `scripts/dev.py` |
+| npm | `npm.cmd` | `npm` | 启动器自动探测 |
+| torch 安装 | 先装 CPU 版 `pip install torch --index-url https://download.pytorch.org/whl/cpu` | 直接 `pip install -r requirements.txt` | 避免 Windows 拉到约 2.5GB CUDA 包 |
+| 中文字体 | 微软雅黑 | PingFang / Noto Sans CJK SC | CSS 已内置三平台回退 |
+| 路径 | — | — | 后端统一 `pathlib` + `settings.resolved_*`，无盘符硬编码 |
+| 换行 | CRLF | LF | 解析按行处理，`strip()` 已兼容 `\r` |
+| Electron 分发 | 需 electron-builder | 需 electron-builder | `legacy/` 仅为开发壳，未做打包 |
+
+> 改后端端口时，同步修改 `kg-vue3/.env.development` 的 `VITE_API_BASE`，否则前端仍请求旧端口。
 
 ### Docker
 ```bash
