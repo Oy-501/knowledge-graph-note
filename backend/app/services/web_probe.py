@@ -23,12 +23,14 @@ _TAG = re.compile(r"<[^>]+>")
 
 
 def _strip_tags(fragment: str) -> str:
+    """去掉 HTML 标签并压缩空白。"""
     text = _TAG.sub(" ", fragment or "")
     text = html.unescape(text)
     return re.sub(r"\s+", " ", text).strip()
 
 
 def _fetch(url: str, timeout: float) -> Optional[str]:
+    """带 UA 抓取网页内容。"""
     req = urllib.request.Request(url, headers={
         "User-Agent": _UA,
         "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
@@ -174,6 +176,7 @@ def search_web(query: str, timeout: float = 6.0, limit: int = 6,
 
 
 def clear_cache():
+    """清空检索结果缓存。"""
     _CACHE.clear()
 
 

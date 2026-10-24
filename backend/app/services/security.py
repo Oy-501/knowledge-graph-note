@@ -71,12 +71,14 @@ class _SlidingLimiter:
     """
 
     def __init__(self, max_events: int = 20, window_s: float = 300.0):
+        """初始化滑动窗口限流器。"""
         self.max_events = max_events
         self.window_s = window_s
         self._hits: Dict[str, deque] = defaultdict(deque)
         self._lock = threading.Lock()
 
     def _prune(self, key: str, now: float) -> deque:
+        """清掉窗口外的历史命中。"""
         q = self._hits[key]
         cutoff = now - self.window_s
         while q and q[0] < cutoff:
@@ -106,6 +108,7 @@ class _SlidingLimiter:
             self._hits.pop(key, None)
 
     def stats(self) -> Dict[str, int]:
+        """返回各 key 当前窗口内的命中数。"""
         with self._lock:
             now = time.monotonic()
             return {k: len(self._prune(k, now)) for k in list(self._hits) if self._hits[k]}

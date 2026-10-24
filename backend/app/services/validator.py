@@ -33,6 +33,7 @@ LEGACY_SEVERITY_MAP = {
 
 
 def normalize_severity(s) -> str:
+    """把旧版严重级别名归一化。"""
     return LEGACY_SEVERITY_MAP.get(s) or (s if s in SEVERITIES else 'major')
 
 
@@ -59,6 +60,7 @@ TYPE_ALIAS = {
 
 
 def normalize_type(t) -> str:
+    """把错误类型别名归一化。"""
     return t if t in ERROR_TYPES else TYPE_ALIAS.get(t, 'factual_error')
 
 
@@ -151,6 +153,7 @@ RELATION_DENY = re.compile(r'与.*无关|和.*没有.*关系|不属于|不是.*�
 
 
 def _escape_regex(s: str) -> str:
+    """转义正则特殊字符。"""
     return re.escape(s)
 
 

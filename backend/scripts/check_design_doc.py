@@ -1,3 +1,5 @@
+"""设计文档一致性检查：确认文档描述与代码/配置没有漂移。"""
+
 import pathlib
 import re
 

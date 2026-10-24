@@ -102,6 +102,7 @@ def reparse_all(db) -> dict:
 
 
 def main():
+    """命令行入口：构建或同步知识库。"""
     parser = argparse.ArgumentParser(description="知识库层构建工具")
     parser.add_argument("--relations-only", action="store_true", help="只推导知识库关系边")
     parser.add_argument("--check", action="store_true", help="只体检知识库与关联情况")

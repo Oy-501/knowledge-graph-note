@@ -70,6 +70,7 @@ def _check(name: str, title: str, fn: Callable[[], Dict[str, Any]]) -> Dict[str,
 
 
 def _check_runtime() -> Dict[str, Any]:
+    """体检项：运行时版本与平台。"""
     return {
         "status": OK,
         "detail": f"Python {platform.python_version()} · {platform.system()} {platform.release()} · "
@@ -232,6 +233,7 @@ def _check_uploads_dir() -> Dict[str, Any]:
 
 
 def _check_database(db: Session) -> Dict[str, Any]:
+    """体检项：数据库连通性与表数量。"""
     from sqlalchemy import text as sql_text
     db.execute(sql_text("SELECT 1"))
     dialect = engine.dialect.name
@@ -278,6 +280,7 @@ def _check_schema_drift() -> Dict[str, Any]:
 
 
 def _check_knowledge_base(db: Session) -> Dict[str, Any]:
+    """体检项：知识库条目与关系规模。"""
     from app.models.models import KnowledgeBase, KbRelation
     entries = db.query(KnowledgeBase).count()
     relations = db.query(KbRelation).count()
@@ -321,6 +324,7 @@ def _check_data_files(db: Session) -> Dict[str, Any]:
 def _check_export_dir() -> Dict[str, Any]:
     # 取导出服务真正会写的那一处目录，避免「体检看 A 目录、实际导出到 B 目录」。
     # 现在两边都走 settings.resolved_export_dir，只有一处解析路径。
+    """体检项：导出目录是否可写。"""
     from app.services.summary_export import export_dir
 
     root = export_dir()
@@ -335,6 +339,7 @@ def _check_export_dir() -> Dict[str, Any]:
 
 
 def _check_disk() -> Dict[str, Any]:
+    """体检项：磁盘剩余空间。"""
     usage = shutil.disk_usage(os.path.abspath("."))
     free_gb = usage.free / 1024 ** 3
     pct = usage.used / usage.total * 100
@@ -344,6 +349,7 @@ def _check_disk() -> Dict[str, Any]:
 
 
 def _check_frontend() -> Dict[str, Any]:
+    """体检项：前端工程文件与依赖是否齐备。"""
     fe = os.path.join(PROJECT_DIR, "kg-vue3")
     if not os.path.isdir(fe):
         return {"status": WARN, "detail": f"未找到前端目录：{fe}",

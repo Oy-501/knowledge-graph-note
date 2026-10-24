@@ -1,3 +1,4 @@
+<!-- 图谱画布：D3 力导布局、缩放拖拽、节点/连线交互。 -->
 <template>
   <div class="canvas-wrap" ref="wrapRef">
     <!-- 分组快速筛选 -->

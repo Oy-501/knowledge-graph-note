@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 from app.database import get_db
 from app.models.models import Node, Link
+from app.services.cache import api_cache
 
 router = APIRouter()
 
@@ -34,8 +35,15 @@ def get_graph(
     `POST /build` 保留（老调用方 + 传复杂 options 的场景），仍受写守卫保护；
     新调用请用本 GET。
     """
-    return _collect_graph(db, GraphOptions(
+    cache_key = f"graph:{user_id}:{group_id}:{include_discarded}"
+    cached = api_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    result = _collect_graph(db, GraphOptions(
         user_id=user_id, group_id=group_id, include_discarded=include_discarded))
+    api_cache.set(cache_key, result)
+    return result
 
 
 @router.post("/build")

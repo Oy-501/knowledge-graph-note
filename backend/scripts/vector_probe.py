@@ -42,10 +42,12 @@ UNRELATED_PAIRS = [
 
 
 def _sim(engine, a: str, b: str) -> float:
+    """用引擎计算两段文本的相似度。"""
     return engine.cosine_similarity(engine.encode(a), engine.encode(b))
 
 
 def main() -> int:
+    """命令行入口：跑向量质量探针。"""
     parser = argparse.ArgumentParser(description="语义向量质量探针")
     parser.add_argument("--tfidf", action="store_true", help="强制使用降级编码")
     parser.add_argument("--csv", default=None, help="把逐条明细写到这里")

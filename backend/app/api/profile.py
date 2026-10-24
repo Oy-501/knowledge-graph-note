@@ -32,12 +32,14 @@ _MAGIC = [
 
 
 def _upload_root() -> str:
+    """返回上传目录的绝对路径。"""
     root = settings.resolved_upload_dir
     os.makedirs(root, exist_ok=True)
     return root
 
 
 def _detect_image(raw: bytes) -> str:
+    """按文件头魔数识别图片格式，不信任扩展名。"""
     for magic, ext in _MAGIC:
         if raw.startswith(magic):
             if ext == "webp" and b"WEBP" not in raw[:16]:
@@ -69,6 +71,7 @@ async def _save_image(upload: UploadFile, kind: str) -> str:
 
 
 def _get_or_create_profile(db: Session, user_id: int) -> UserProfile:
+    """取用户档案，没有则建一条默认记录。"""
     p = db.query(UserProfile).filter_by(user_id=user_id).first()
     if not p:
         user = db.query(User).filter_by(id=user_id).first()
@@ -83,6 +86,7 @@ def _get_or_create_profile(db: Session, user_id: int) -> UserProfile:
 
 
 def _profile_dict(p: UserProfile) -> dict:
+    """把档案模型转成接口返回的字典。"""
     return {
         "user_id": p.user_id,
         "display_name": p.display_name or "",

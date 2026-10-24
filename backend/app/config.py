@@ -7,6 +7,7 @@
 
 优先级：显式设置 DATABASE_URL > DB_MODE 规则 > 自动探测结果。
 """
+import importlib.util
 import os
 import socket
 from typing import List
@@ -134,6 +135,7 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins_list(self) -> List[str]:
+        """把逗号分隔的 CORS 配置拆成列表。"""
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
 
     @property
@@ -148,11 +150,25 @@ class Settings(BaseSettings):
         # 2) 强制 / 自动探测 PostgreSQL
         if mode in ("auto", "postgres"):
             if _pg_reachable(self.POSTGRES_HOST, self.POSTGRES_PORT):
-                return (
-                    f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
-                    f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+                # 端口通不等于能用：没装 psycopg2 时 SQLAlchemy 建 engine 会直接抛
+                # ModuleNotFoundError，整个应用起不来。auto 模式下明确降级到 SQLite，
+                # postgres 模式则给出可执行的安装提示。
+                if importlib.util.find_spec("psycopg2") is not None:
+                    return (
+                        f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+                        f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+                    )
+                if mode == "postgres":
+                    raise RuntimeError(
+                        "PostgreSQL 端口可达，但缺少驱动 psycopg2。"
+                        "请执行 pip install psycopg2-binary，或改 DB_MODE=sqlite。"
+                    )
+                from loguru import logger
+                logger.warning(
+                    "检测到 PostgreSQL 端口可达，但未安装 psycopg2，已回退 SQLite。"
+                    "需要 PostgreSQL 请执行 pip install psycopg2-binary。"
                 )
-            if mode == "postgres":
+            elif mode == "postgres":
                 raise RuntimeError(
                     f"PostgreSQL 不可达（{self.POSTGRES_HOST}:{self.POSTGRES_PORT}），"
                     f"但 DB_MODE=postgres 强制要求使用 PostgreSQL。"
@@ -164,6 +180,7 @@ class Settings(BaseSettings):
 
     @property
     def db_is_sqlite(self) -> bool:
+        """当前是否使用 SQLite。"""
         return self.resolved_database_url.startswith("sqlite")
 
     @staticmethod

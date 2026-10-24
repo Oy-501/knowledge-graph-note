@@ -46,6 +46,7 @@ RELATION_LABELS = {
 
 
 def _short(text: str, limit: int = 46) -> str:
+    """压缩空白并截断文本，用于展示。"""
     text = (text or "").replace("\n", " ").strip()
     return text if len(text) <= limit else text[:limit - 1] + "…"
 
@@ -109,12 +110,14 @@ def _dedup_by_title(nodes, limit: int) -> List:
 
 
 def _titles(nodes, limit: int, shorten: Optional[int] = None) -> List[str]:
+    """去重后取前 N 个节点标题。"""
     picked = _dedup_by_title(nodes, limit)
     return [_short(n.title or n.entity, shorten) if shorten else (n.title or n.entity)
             for n in picked]
 
 
 def _node_brief(node, degree: int = 0) -> Dict:
+    """把节点压成总结用的简要结构。"""
     return {
         "id": node.id,
         "title": node.title or node.entity,
@@ -133,9 +136,11 @@ def _node_brief(node, degree: int = 0) -> Dict:
 
 class _UnionFind:
     def __init__(self):
+        """初始化并查集的父节点表。"""
         self.parent: Dict[int, int] = {}
 
     def find(self, x):
+        """查根并做路径压缩。"""
         self.parent.setdefault(x, x)
         while self.parent[x] != x:
             self.parent[x] = self.parent[self.parent[x]]
@@ -143,6 +148,7 @@ class _UnionFind:
         return x
 
     def union(self, a, b):
+        """合并两个集合。"""
         ra, rb = self.find(a), self.find(b)
         if ra != rb:
             self.parent[rb] = ra
@@ -428,6 +434,7 @@ def _build_learning_paths(nodes, node_map, out_edges, in_edges, degree,
     MIN_STEP_SCORE = 0.45
 
     def successors(cur_id, cur_domain, cur_level):
+        """按领域与层级给当前节点排出后续候选。"""
         ranked = []
         for l in out_edges.get(cur_id, []):
             t = l.target_id
@@ -467,6 +474,7 @@ def _build_learning_paths(nodes, node_map, out_edges, in_edges, degree,
 
     # 起点优先：L1/L2 且入边少（越像"根"越先讲）
     def root_rank(n):
+        """计算作为学习主线起点的排序权重。"""
         lv = n.level or 3
         return (lv, len(in_edges.get(n.id, [])), -degree[n.id])
 
@@ -549,10 +557,12 @@ def _build_learning_paths(nodes, node_map, out_edges, in_edges, degree,
 
 
 def _safe_id(nid) -> str:
+    """把节点 id 转成 Mermaid 可用的安全标识。"""
     return f"n{re.sub(r'[^0-9A-Za-z_]', '', str(nid))}"
 
 
 def _escape_label(text: str) -> str:
+    """转义 Mermaid 标签里的特殊字符。"""
     return (text or "").replace('"', "'").replace("[", "(").replace("]", ")").replace("\n", " ")
 
 

@@ -33,6 +33,7 @@ _DEFINITIONAL = re.compile(
 
 
 def _bigrams(text: str) -> set:
+    """生成字符二元组。"""
     clean = re.sub(r"\s+", "", (text or "").lower())
     if len(clean) < 2:
         return {clean} if clean else set()
@@ -40,6 +41,7 @@ def _bigrams(text: str) -> set:
 
 
 def _def_similarity(a: str, b: str) -> float:
+    """比较两段定义的相似度。"""
     ga, gb = _bigrams(a), _bigrams(b)
     if not ga or not gb:
         return 0.0
@@ -50,6 +52,7 @@ class Verdict:
     """判定结果容器（便于聚合与序列化）"""
 
     def __init__(self, entity: str = ""):
+        """初始化判定证据收集器。"""
         self.entity = entity
         self.score = 0.0
         self.evidence: List[Dict] = []
@@ -58,6 +61,7 @@ class Verdict:
 
     def add(self, kind: str, weight: float, detail: str, source: str = "",
             url: str = "", positive: bool = True):
+        """追加一条证据并累加分数。"""
         self.score += weight
         self.evidence.append({
             "type": kind,                 # kb | graph | rule | web
@@ -69,6 +73,7 @@ class Verdict:
         })
 
     def to_dict(self) -> Dict:
+        """输出判定结果，分数裁剪到 0~1。"""
         score = max(0.0, min(1.0, self.score))
         if score >= settings.VERDICT_AUTO_ACCEPT and not self.conflict:
             decision = "accept"
@@ -87,6 +92,7 @@ class Verdict:
         }
 
     def explain(self, score: float, decision: str) -> str:
+        """把证据链拼成一句可读理由。"""
         pos = [e for e in self.evidence if e["positive"]]
         neg = [e for e in self.evidence if not e["positive"]]
         label = {"accept": "建议采纳", "reject": "建议驳回", "pending": "需人工确认"}[decision]

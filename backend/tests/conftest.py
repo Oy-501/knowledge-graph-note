@@ -117,8 +117,12 @@ def clean_db(_bootstrap):
     autouse：忘了加这个夹具的用例会受别的用例污染，而这种失败往往表现为
     「单跑通过、全量跑失败」，很难查 —— 所以默认就清，而不是让每个用例自己记得清。
     """
+    from app.services.cache import api_cache
+
+    api_cache.clear()
     _reset()
     yield
+    api_cache.clear()
     _reset()
 
 

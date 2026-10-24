@@ -26,7 +26,10 @@ export default defineConfig({
       output: {
         manualChunks: {
           d3: ['d3-selection', 'd3-force', 'd3-zoom', 'd3-drag'],
-          vendor: ['vue', 'pinia', 'axios', '@vueuse/core']
+          vendor: ['vue', 'pinia', 'axios', '@vueuse/core'],
+          // 组件库与数学库单独成块：主包变小，且升级前端代码时这两块缓存不失效
+          'element-plus': ['element-plus', '@element-plus/icons-vue'],
+          math: ['mathjs']
         }
       }
     }

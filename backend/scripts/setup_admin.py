@@ -27,6 +27,7 @@ _ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
 
 
 def generate_password(length: int = 15) -> str:
+    """生成随机强口令。"""
     rng = secrets.SystemRandom()
     chars = [rng.choice(_ALPHABET) for _ in range(length - 2)]
     chars += [rng.choice("23456789"), rng.choice("@#$%&*+-=")]
@@ -35,6 +36,7 @@ def generate_password(length: int = 15) -> str:
 
 
 def main() -> int:
+    """命令行入口：配置管理员账号。"""
     parser = argparse.ArgumentParser(description="配置管理员账号")
     parser.add_argument("--user-id", type=int, default=1)
     parser.add_argument("--username", default="admin")

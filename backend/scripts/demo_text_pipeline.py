@@ -24,6 +24,7 @@ _UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 
 
 def fetch_page(url: str, timeout: float = 8.0) -> str:
+    """抓取网页并解码。"""
     req = urllib.request.Request(url, headers={
         "User-Agent": _UA,
         "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
@@ -55,6 +56,7 @@ def extract_blocks(page: str):
 
 
 def main() -> int:
+    """命令行入口：抓真实网页验证判别与摘要。"""
     parser = argparse.ArgumentParser(description="联网验证文本判别与摘要")
     parser.add_argument("--query", default="TCP 拥塞控制")
     args = parser.parse_args()

@@ -1,3 +1,4 @@
+<!-- 网络分析：度、介数中心度、PageRank 与连通分量。 -->
 <template>
   <div class="ka">
     <!-- 空态 -->

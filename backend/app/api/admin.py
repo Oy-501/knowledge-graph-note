@@ -175,6 +175,7 @@ def overview(_: bool = Depends(require_admin), db: Session = Depends(get_db)):
 
 
 def _candidate_brief(c: KnowledgeCandidate) -> Dict:
+    """把候选知识点压成后台列表用的简要字段。"""
     return {
         "id": c.id, "entity": c.entity, "description": (c.description or "")[:200],
         "domain": c.domain, "level": c.level,

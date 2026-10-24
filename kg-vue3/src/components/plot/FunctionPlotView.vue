@@ -1,3 +1,4 @@
+<!-- 函数图像视图：表达式输入、定义域处理与曲线渲染。 -->
 <template>
   <div class="fp-view">
     <header class="fp-head">

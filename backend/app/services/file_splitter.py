@@ -24,6 +24,7 @@ _SENT_END = re.compile(r"[。！？；!?;.]$")
 
 
 def _is_sentence_end(line: str) -> bool:
+    """判断行尾是否为句末标点。"""
     return bool(_SENT_END.search((line or "").strip()))
 
 
@@ -69,6 +70,12 @@ def plan_split(text: str, target_lines: int = 6000, target_chars: int = 400_000,
     返回 {needed, total_lines, total_chars, pieces:[{index, start, end, lines, chars,
           heading_path, reason}]}
     """
+    # 边界钳制：0/负数会导致不循环或死循环，overlap 过大会让片数膨胀
+    target_lines = max(1, int(target_lines))
+    target_chars = max(1, int(target_chars))
+    max_pieces = max(1, int(max_pieces))
+    overlap_lines = max(0, min(int(overlap_lines), target_lines // 2))
+
     lines = (text or "").split("\n")
     total_lines = len(lines)
     total_chars = len(text or "")
@@ -176,7 +183,8 @@ def plan_split(text: str, target_lines: int = 6000, target_chars: int = 400_000,
         "total_lines": total_lines,
         "total_chars": total_chars,
         "pieces": pieces,
-        "truncated_by_limit": len(pieces) >= max_pieces and pieces[-1]["end"] < total_lines,
+        "truncated_by_limit": bool(pieces) and len(pieces) >= max_pieces
+                              and pieces[-1]["end"] < total_lines,
     }
 
 

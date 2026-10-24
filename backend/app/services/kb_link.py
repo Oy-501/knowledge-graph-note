@@ -44,10 +44,12 @@ _RELATION_MAP = {
 
 
 def _map_relation(kb_type: str):
+    """把知识库关系类型映射成图上的关系类型。"""
     return _RELATION_MAP.get(kb_type or "related", ("related", "相关知识"))
 
 
 def _node_text(node) -> str:
+    """拼接节点标题、实体与描述用于匹配。"""
     return " ".join(filter(None, [
         node.title or "", node.entity or "",
         node.description or "", node.content or "",
@@ -318,6 +320,7 @@ def link_nodes_by_kb(
         return sorted(best.values(), key=lambda x: -x[1])[:max_nodes_per_concept]
 
     def _add(a_id, b_id, kb_type, score, evidence, source_text):
+        """新增一条节点关联，跳过自环与重复。"""
         if a_id == b_id:
             return
         pair = frozenset((a_id, b_id))

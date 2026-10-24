@@ -17,6 +17,7 @@ from app.models.models import (
 )
 from app.services.kb_index import KbIndex, build_relations_from_entries, load_index
 from app.services.kb_import import understand_kb_document
+from app.services.cache import api_cache
 from app.services import kb_link
 
 router = APIRouter()
@@ -27,6 +28,11 @@ router = APIRouter()
 @router.get("/stats")
 def kb_stats(user_id: int = 1, db: Session = Depends(get_db)):
     """知识库总览：条目/别名/关系/领域/层级/上传记录/覆盖情况"""
+    cache_key = f"kb_stats:{user_id}"
+    cached = api_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     index = load_index(db)
     stats = index.stats()
     source_counter: Counter = Counter()
@@ -47,7 +53,7 @@ def kb_stats(user_id: int = 1, db: Session = Depends(get_db)):
     file_total = db.query(File).filter_by(user_id=user_id).count()
     covered = len([p for p in profiles if (p.concept_count or 0) > 0])
 
-    return {
+    result = {
         **stats,
         "entries": stats["entities"],
         "sources": dict(source_counter),
@@ -61,6 +67,8 @@ def kb_stats(user_id: int = 1, db: Session = Depends(get_db)):
             sum(p.concept_count or 0 for p in profiles) / len(profiles), 2
         ) if profiles else 0.0,
     }
+    api_cache.set(cache_key, result)
+    return result
 
 
 @router.get("/entries")
@@ -211,6 +219,7 @@ def create_relation(payload: RelationPayload, db: Session = Depends(get_db)):
 
 @router.delete("/relations/{rel_id}")
 def delete_relation(rel_id: int, db: Session = Depends(get_db)):
+    """删除一条知识库关系。"""
     row = db.query(KbRelation).filter_by(id=rel_id).first()
     if not row:
         return {"ok": False, "message": "关系不存在"}
@@ -394,6 +403,7 @@ def kb_files(threshold: float = 0.0, user_id: int = 1, db: Session = Depends(get
     links = db.query(FileKnowledgeLink).filter_by(user_id=user_id).all()
 
     def _top_concepts(p: FileKnowledgeProfile):
+        """把文件画像里的高频概念压成简要列表。"""
         return [{"entity": c.get("entity"), "weight": c.get("weight"), "count": c.get("count")}
                 for c in (p.concepts or [])[:12]]
 

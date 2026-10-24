@@ -95,6 +95,7 @@ def analyze(text: str) -> List[str]:
 
 
 def _is_cjk_run(part: str) -> bool:
+    """判断一段是否连续中文。"""
     first = part[0]
     return "\u3400" <= first <= "\u4dbf" or "\u4e00" <= first <= "\u9fff" or "\uf900" <= first <= "\ufaff"
 
@@ -127,10 +128,12 @@ def build_idf(texts: Iterable[str]) -> int:
 
 
 def idf_stats() -> dict:
+    """返回 IDF 词表规模。"""
     return {"terms": len(_IDF), "docs": _IDF_DOCS}
 
 
 def reset_idf() -> None:
+    """清空 IDF 统计（测试用）。"""
     global _IDF, _IDF_DOCS
     _IDF = {}
     _IDF_DOCS = 0
@@ -306,6 +309,7 @@ def warm_up() -> None:
     import threading as _t
 
     def _worker():
+        """预热线程：加载模型，失败不影响启动。"""
         try:
             _init_encoder()
         except Exception as exc:  # noqa: BLE001
@@ -360,6 +364,7 @@ def encode_batch(texts: List[str]) -> List[List[float]]:
 
 
 def _to_list(vec) -> List[float]:
+    """把 numpy 向量转成 Python 列表。"""
     if hasattr(vec, "tolist"):
         return vec.tolist()
     return [float(x) for x in vec]

@@ -631,6 +631,7 @@ def classify_level(entity: str, text: str = "") -> int:
 
 
 def get_level_label(level: int) -> str:
+    """层级数字转中文标签。"""
     labels = {1: "元概念", 2: "核心理论", 3: "应用实践", 4: "实现工具"}
     return labels.get(level, "应用实践")
 

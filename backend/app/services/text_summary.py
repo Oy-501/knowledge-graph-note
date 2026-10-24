@@ -15,10 +15,12 @@ _CJK = re.compile(r"[\u4e00-\u9fff]+")
 
 
 def split_sentences(text: str) -> List[str]:
+    """按中英文句末标点切句。"""
     return [s.strip() for s in _SENT.findall(text or "") if s.strip()]
 
 
 def _tokens(text: str) -> List[str]:
+    """生成英文词与中文二元组词元。"""
     low = (text or "").lower()
     out = _WORD.findall(low)
     for seg in _CJK.findall(low):
@@ -28,6 +30,7 @@ def _tokens(text: str) -> List[str]:
 
 
 def _body_sentences(text: str) -> List[str]:
+    """只取正文行并切句，标题不参与摘要。"""
     lines = (text or "").split("\n")
     out: List[str] = []
     for i, line in enumerate(lines):
@@ -40,6 +43,16 @@ def _body_sentences(text: str) -> List[str]:
 
 def summarize(text: str, max_sentences: int = 5, max_chars: int = 600) -> Dict:
     """返回 summary / key_points / keywords / sentence_count / source_chars。"""
+    # 边界：负数会让切片语义反转（[:-1] 取到除最后一条外的全部），必须归零
+    try:
+        max_sentences = max(0, int(max_sentences))
+    except (TypeError, ValueError):
+        max_sentences = 5
+    try:
+        max_chars = max(1, int(max_chars))
+    except (TypeError, ValueError):
+        max_chars = 600
+
     body = _body_sentences(text)
     if not body:
         return {"summary": "", "key_points": [], "keywords": [],

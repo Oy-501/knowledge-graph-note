@@ -71,6 +71,7 @@ class KbIndex:
 
     def __init__(self, entries: List[Dict], relations: Optional[List[Dict]] = None):
         # 规范实体 → 条目
+        """初始化知识库索引容器。"""
         self.entries: Dict[str, Dict] = {}
         # 归一化键（实体或别名）→ 规范实体
         self.alias_map: Dict[str, str] = {}
@@ -99,6 +100,7 @@ class KbIndex:
 
     # ---- 构建 ----
     def _add_entry(self, e: Dict):
+        """把一条知识库条目加进索引。"""
         entity = (e.get("entity") or "").strip()
         if not entity:
             return
@@ -136,6 +138,7 @@ class KbIndex:
             self.alias_map.setdefault(ak, canonical)
 
     def _add_relation(self, r: Dict):
+        """把一条知识库关系加进索引。"""
         a = (r.get("source_entity") or "").strip()
         b = (r.get("target_entity") or "").strip()
         if not a or not b:
@@ -158,6 +161,7 @@ class KbIndex:
         self.rel_detail.setdefault((cb, ca), detail)
 
     def _build_scan_table(self):
+        """按首字建扫描表，加速实体匹配。"""
         self._by_first = defaultdict(list)
         for key, canonical in self.alias_map.items():
             if len(key) < self.MIN_KEY_LEN:
@@ -284,6 +288,7 @@ class KbIndex:
         shared = sorted(set(a) & set(b), key=lambda e: -(a[e] + b[e]))
 
         def norm(vec: Dict[str, float]) -> Dict[str, float]:
+            """把稀疏向量归一化为单位长度。"""
             m = math.sqrt(sum(v * v for v in vec.values())) or 1.0
             return {k: v / m for k, v in vec.items()}
 
@@ -293,6 +298,7 @@ class KbIndex:
 
         # ---- 关系图扩展向量：邻居按关系强度衰减，用于桥接相似度 ----
         def expand(vec: Dict[str, float]) -> Dict[str, float]:
+            """把概念向量扩展到其别名与关联概念。"""
             out = dict(vec)
             for e, w in vec.items():
                 for nb_ent, rw in self.adj.get(e, {}).items():
@@ -368,6 +374,7 @@ class KbIndex:
 
     @staticmethod
     def _dominant_level(prof: Dict) -> int:
+        """取画像中占比最高的层级。"""
         levels = prof.get("levels") or {}
         if not levels:
             return 3
@@ -375,6 +382,7 @@ class KbIndex:
 
     # ---- 知识点邻域（供前端展示「这个知识点连着谁」） ----
     def neighbors(self, entity: str, limit: int = 20) -> List[Dict]:
+        """返回某实体的知识库邻居。"""
         canonical = self.alias_map.get(normalize_key(entity), entity)
         out = []
         for nb_ent, rw in sorted(self.adj.get(canonical, {}).items(), key=lambda kv: -kv[1])[:limit]:
@@ -390,6 +398,7 @@ class KbIndex:
         return out
 
     def stats(self) -> Dict:
+        """汇总知识库条目、关系与领域分布。"""
         domains: Dict[str, int] = defaultdict(int)
         levels: Dict[str, int] = defaultdict(int)
         for e in self.entries.values():
@@ -534,6 +543,7 @@ def build_relations_from_entries(db, force: bool = False) -> Dict:
     created = 0
 
     def _push(src: str, dst: str, rtype: str, label: str, weight: float, evidence: str):
+        """写一条关系边，带去重与计数。"""
         nonlocal created
         if not src or not dst or src == dst:
             return

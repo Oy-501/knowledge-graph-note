@@ -35,6 +35,7 @@ _SPLIT = re.compile(r"[,，;；、|]")
 
 
 def _to_list(value) -> List[str]:
+    """把字段值规整为列表。"""
     if value is None:
         return []
     if isinstance(value, list):
@@ -47,6 +48,7 @@ def _to_list(value) -> List[str]:
 
 def _canon_field(name: str) -> str:
     # Excel 导出的 CSV/表头常带 BOM 或零宽字符，先清掉再匹配
+    """把表头或字段名归一化成标准键。"""
     key = (name or "").replace("\ufeff", "").replace("\u200b", "").strip().lower()
     for canon, names in FIELD_ALIASES.items():
         if key in names:
@@ -91,6 +93,7 @@ def _parse_table_rows(rows: List[List[str]]) -> List[Dict]:
 
 
 def _parse_csv(text: str) -> List[Dict]:
+    """解析 CSV 文本为行列表。"""
     sample = text[:2000]
     delimiter = "\t" if sample.count("\t") > sample.count(",") else ","
     rows = list(csv.reader(io.StringIO(text), delimiter=delimiter))
@@ -98,6 +101,7 @@ def _parse_csv(text: str) -> List[Dict]:
 
 
 def _parse_markdown_table(text: str) -> List[Dict]:
+    """解析 Markdown 表格为行列表。"""
     rows: List[List[str]] = []
     for line in text.splitlines():
         line = line.strip()
@@ -111,6 +115,7 @@ def _parse_markdown_table(text: str) -> List[Dict]:
 
 
 def _parse_json(text: str) -> List[Dict]:
+    """解析 JSON 文本为行列表。"""
     data = json.loads(text)
     if isinstance(data, dict):
         data = data.get("entries") or data.get("nodes") or data.get("data") or []
@@ -158,6 +163,7 @@ def _parse_plain(text: str) -> List[Dict]:
 
 
 def detect_format(name: str, text: str) -> str:
+    """按扩展名与内容特征判断导入格式。"""
     lower = (name or "").lower()
     if lower.endswith(".json"):
         return "json"
@@ -225,6 +231,7 @@ def parse_kb_document(name: str, content: str) -> Tuple[str, List[Dict]]:
 
 
 def _bigrams(text: str) -> set:
+    """生成字符二元组，用于相似度比较。"""
     clean = re.sub(r"\s+", "", (text or "").lower())
     if len(clean) < 2:
         return {clean} if clean else set()
@@ -232,6 +239,7 @@ def _bigrams(text: str) -> set:
 
 
 def _def_similarity(a: str, b: str) -> float:
+    """用二元组 Dice 系数比较两段定义。"""
     ga, gb = _bigrams(a), _bigrams(b)
     if not ga or not gb:
         return 0.0
@@ -239,6 +247,7 @@ def _def_similarity(a: str, b: str) -> float:
 
 
 def _reject_reason(entry: Dict) -> str:
+    """判断导入条目不合法时给出原因。"""
     entity = entry["entity"]
     if len(entity) < 2:
         return "实体名过短"

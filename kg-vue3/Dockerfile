@@ -1,19 +1,22 @@
-# 前端 Dockerfile
-FROM node:20-alpine
+# 前端：多阶段构建，产物交给 nginx 托管并反代 /api
+FROM node:20-alpine AS build
 
 WORKDIR /app
 
-# 复制依赖文件
 COPY package*.json ./
+RUN npm ci || npm install
 
-# 安装依赖
-RUN npm install
-
-# 复制源代码
 COPY . .
 
-# 暴露端口
-EXPOSE 5173
+ARG VITE_API_BASE=/api
+ENV VITE_API_BASE=$VITE_API_BASE
 
-# 启动开发服务器
-CMD ["npm", "run", "dev", "--", "--host"]
+RUN npm run build
+
+
+FROM nginx:1.27-alpine
+
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist /usr/share/nginx/html
+
+EXPOSE 80

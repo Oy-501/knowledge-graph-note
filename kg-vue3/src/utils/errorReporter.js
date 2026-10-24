@@ -13,7 +13,9 @@
  *   3. 静默  —— 上报失败绝不抛错、绝不弹窗（否则错误处理本身成了新错误源）
  */
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api'
+// 兜底值必须与 api/index.js 一致（127.0.0.1:8080）：端口写错时错误上报会静默丢失，
+// 页面看起来「崩了却查不到记录」。
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8080/api'
 
 const DEDUPE_WINDOW_MS = 30_000
 const MAX_PER_MINUTE = 10

@@ -1,3 +1,4 @@
+<!-- 组件级错误边界：捕获子树渲染异常并上报。 -->
 <template>
   <!-- 兜底 UI：局部崩溃只影响这一块，用户仍有可走的路径 -->
   <div v-if="hasError" class="error-boundary">

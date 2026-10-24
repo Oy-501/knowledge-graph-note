@@ -28,6 +28,7 @@ from app.config import settings
 from app.database import init_db, get_db
 from app.seed import ensure_default_user, seed_knowledge_base
 from app.services.kb_index import build_relations_from_entries
+from app.services.cache import api_cache
 from app.services.errors import AppError, describe_exception, error_payload, safe_detail
 from app.services.security import sanitize_request_id, verify_admin_token
 from app.api import files, knowledge, graph, notes, kb, summary, admin, profile, system, auth
@@ -222,6 +223,13 @@ async def write_guard(request: Request, call_next):
     if not settings.PROTECT_WRITES or request.method in SAFE_METHODS:
         return await call_next(request)
 
+    async def _pass_and_invalidate():
+        """放行写请求；成功后清空读缓存，避免读到旧统计。"""
+        response = await call_next(request)
+        if response.status_code < 400:
+            api_cache.clear()
+        return response
+
     path = request.url.path
     if (request.method, path) in WRITE_GUARD_EXEMPT:
         return await call_next(request)
@@ -235,7 +243,7 @@ async def write_guard(request: Request, call_next):
     #    这种组合被前面的会话判定提前拦死。
     if (actor and actor["role"] == "admin") \
             or verify_admin_token(request.headers.get("X-Admin-Token")):
-        return await call_next(request)
+        return await _pass_and_invalidate()
 
     rid = getattr(request.state, "request_id", "") or uuid.uuid4().hex[:12]
     client = getattr(request.client, "host", "?")
@@ -246,7 +254,7 @@ async def write_guard(request: Request, call_next):
     #    放在 ① 之前会让普通用户拿到本该管理员才能用的端点，
     #    放在 ③ 之后则永远轮不到（actor 不为 None 时已经在 ③ 之前的 403 里返回了）。
     if actor is not None and (request.method, path) in WRITE_GUARD_USER_LEVEL:
-        return await call_next(request)
+        return await _pass_and_invalidate()
 
     # ③ 登录了但权限不够：这是「权限不足」，不是「没登录」，
     #    回 401 会误导前端把用户踢回登录页（他明明登录着）。回 403 更准确。
@@ -382,6 +390,7 @@ def _audit_server_error(request: Request, exc: BaseException, rid: str, cost_ms:
 # ============================================================ 全局异常处理器
 
 def _rid_of(request: Request) -> str:
+    """取请求 ID，缺失时临时生成一个。"""
     try:
         return getattr(request.state, "request_id", "") or uuid.uuid4().hex[:12]
     except Exception:  # noqa: BLE001
@@ -476,6 +485,7 @@ app.mount("/uploads", StaticFiles(directory=_upload_root), name="uploads")
 
 @app.get("/api/health")
 async def health_check():
+    """健康检查：返回服务状态与版本。"""
     return {"status": "ok", "version": "1.0.0"}
 
 

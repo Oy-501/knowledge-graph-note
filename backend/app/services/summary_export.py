@@ -37,6 +37,7 @@ def export_dir() -> str:
 
 
 def _ensure_dir() -> str:
+    """确保导出目录存在。"""
     root = export_dir()
     os.makedirs(root, exist_ok=True)
     # 只保留最近 N 个导出文件，避免长期运行堆积
@@ -60,6 +61,7 @@ def _ensure_dir() -> str:
 
 
 def export_path(stem: str, ext: str) -> str:
+    """生成带时间戳的导出文件路径。"""
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     return os.path.join(_ensure_dir(), f"{stem}_{stamp}.{ext}")
 
@@ -68,6 +70,7 @@ def export_path(stem: str, ext: str) -> str:
 
 
 def to_markdown(summary: Dict, mermaid: Optional[str] = None, title: str = "知识图谱总结") -> str:
+    """把总结渲染成 Markdown。"""
     if summary.get("empty"):
         return f"# {title}\n\n图谱暂无知识点。\n"
 
@@ -156,12 +159,14 @@ def to_markdown(summary: Dict, mermaid: Optional[str] = None, title: str = "知�
 
 
 def _set_cjk(run, name: str = "微软雅黑"):
+    """给 Word run 设置中文字体。"""
     from docx.oxml.ns import qn
     run.font.name = name
     run._element.rPr.rFonts.set(qn("w:eastAsia"), name)
 
 
 def to_docx(summary: Dict, mermaid: Optional[str] = None, title: str = "知识图谱总结") -> str:
+    """把总结导出为 Word 文档。"""
     from docx import Document
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.shared import Pt, RGBColor
@@ -198,6 +203,7 @@ def to_docx(summary: Dict, mermaid: Optional[str] = None, title: str = "知识�
     ov = summary["overview"]
 
     def heading(text, level=1):
+        """在 Word 文档里加一级标题。"""
         hh = doc.add_heading(text, level=level)
         for r in hh.runs:
             _set_cjk(r)
@@ -205,6 +211,7 @@ def to_docx(summary: Dict, mermaid: Optional[str] = None, title: str = "知识�
         return hh
 
     def table(headers, rows):
+        """在 Word 文档里加表格。"""
         t = doc.add_table(rows=1, cols=len(headers))
         t.style = "Light Grid Accent 1"
         for i, htxt in enumerate(headers):
@@ -307,6 +314,7 @@ def to_docx(summary: Dict, mermaid: Optional[str] = None, title: str = "知识�
 
 def to_pptx(summary: Dict, mermaid: Optional[str] = None,
             title: str = "知识图谱总结") -> str:
+    """把总结导出为 PPT。"""
     from pptx import Presentation
     from pptx.dml.color import RGBColor
     from pptx.enum.shapes import MSO_SHAPE
@@ -320,10 +328,12 @@ def to_pptx(summary: Dict, mermaid: Optional[str] = None,
     blank = prs.slide_layouts[6]
 
     def rgb(c):
+        """把 RGB 元组转成 pptx 颜色。"""
         return RGBColor(*c)
 
     def add_rect(slide, x, y, w, h, fill, line=None, shape=MSO_SHAPE.ROUNDED_RECTANGLE,
                  radius=0.12):
+        """在幻灯片上画一个矩形块。"""
         shp = slide.shapes.add_shape(shape, Inches(x), Inches(y), Inches(w), Inches(h))
         shp.fill.solid()
         shp.fill.fore_color.rgb = rgb(fill)
@@ -343,6 +353,7 @@ def to_pptx(summary: Dict, mermaid: Optional[str] = None,
 
     def add_text(slide, x, y, w, h, text, size=14, color=C_TEXT, bold=False,
                  align=PP_ALIGN.LEFT, anchor=MSO_ANCHOR.TOP, line_spacing=1.25):
+        """在幻灯片上放一段文本。"""
         box = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
         tf = box.text_frame
         tf.word_wrap = True
@@ -361,6 +372,7 @@ def to_pptx(summary: Dict, mermaid: Optional[str] = None,
         return box
 
     def slide_with_title(title_text, kicker=None):
+        """新建一页并写标题与眉标。"""
         s = prs.slides.add_slide(blank)
         add_rect(s, 0, 0, 13.333, 0.12, C_PRIMARY, shape=MSO_SHAPE.RECTANGLE)
         add_text(s, 0.6, 0.34, 12.2, 0.6, title_text, size=24, bold=True,

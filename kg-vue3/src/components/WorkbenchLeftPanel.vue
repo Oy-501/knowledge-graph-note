@@ -1,3 +1,4 @@
+<!-- 工作台左栏：文件树与上传入口。 -->
 <template>
   <div class="wbl-panel">
     <!-- 搜索 -->

@@ -109,10 +109,23 @@ npm start
 
 > 改后端端口时，同步修改 `kg-vue3/.env.development` 的 `VITE_API_BASE`，否则前端仍请求旧端口。
 
-### Docker
+### Docker（生产 / 分发）
+
 ```bash
-docker compose up -d
+cp .env.docker.example .env     # 修改 ADMIN_TOKEN
+docker compose up -d --build
+# http://localhost:8080
 ```
+
+前端由 nginx 托管并反代 `/api`，后端不对宿主机暴露端口。完整说明见 `RUN.md`。
+
+### 打包给他人
+
+```bash
+python scripts/package.py       # 生成 dist/*.zip（不含数据库、模型权重、node_modules）
+```
+
+收到包的人按 `RUN.md` 选择 Docker 或源码方式运行。
 
 ## Configuration (`.env`)
 

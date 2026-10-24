@@ -37,6 +37,7 @@ class AppError(Exception):
         hint: str = "",
         detail: Optional[Dict[str, Any]] = None,
     ) -> None:
+        """构造带状态码、错误码与提示的业务异常。"""
         super().__init__(message)
         self.message = message
         self.status_code = status_code
@@ -47,6 +48,7 @@ class AppError(Exception):
 
 class NotFoundError(AppError):
     def __init__(self, what: str = "资源", hint: str = ""):
+        """构造 404 记录不存在异常。"""
         super().__init__(f"{what}不存在", status_code=404, code="not_found",
                          hint=hint or "请确认该记录是否已被删除，或刷新列表后重试。")
 
@@ -56,6 +58,7 @@ class GuardError(AppError):
 
     def __init__(self, message: str, *, status_code: int = 400,
                  code: str = "guard", hint: str = ""):
+        """构造带自定义状态码与提示的异常。"""
         super().__init__(message, status_code=status_code, code=code, hint=hint)
 
 

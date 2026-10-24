@@ -1,3 +1,5 @@
+"""变异测试矩阵：逐个破坏受守护逻辑，验证测试真的会失败。"""
+
 import json
 import pathlib
 import re
@@ -12,12 +14,14 @@ REAL_JSON = BACKEND / "tests" / "data" / "verdict_real_corpus.json"
 
 
 def _m9(d):
+    """变异 9：把零分用例的期望改成 accept。"""
     for c in d["boundary_cases"]:
         if c["name"] == "零分":
             c["expect"] = "accept"
 
 
 def _m10(d):
+    """变异 10：把真实候选的判定改成 reject。"""
     for c in d["真实候选"]:
         if c["entity"] == "RAG":
             c["生产库判定"]["decision"] = "reject"

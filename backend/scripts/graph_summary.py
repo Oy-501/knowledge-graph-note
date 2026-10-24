@@ -27,6 +27,7 @@ def run_demo():
 
 
 def main():
+    """命令行入口：生成总结并导出。"""
     parser = argparse.ArgumentParser(description="知识图谱总结与导出")
     parser.add_argument("--export", nargs="*", default=[],
                         choices=["md", "docx", "pptx", "mermaid", "digest", "json"],

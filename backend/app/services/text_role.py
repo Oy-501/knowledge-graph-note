@@ -48,4 +48,5 @@ def line_role(line: str, next_line: str = "") -> str:
 
 
 def is_heading(line: str, next_line: str = "") -> bool:
+    """判断该行是否为标题。"""
     return line_role(line, next_line) == "heading"

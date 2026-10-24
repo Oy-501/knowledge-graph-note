@@ -17,6 +17,7 @@ ROWS = []
 
 
 def check(name, fn):
+    """执行一项检查并记录 PASS/FAIL。"""
     started = time.time()
     try:
         detail = fn()
@@ -31,6 +32,7 @@ def check(name, fn):
 
 
 def _routes():
+    """校验关键路由已注册。"""
     from app.main import app
     # 新版 FastAPI 的 include_router 会生成 _IncludedRouter（无 path 属性），
     # 用 OpenAPI 路径表才能看到展开后的真实路由
@@ -45,6 +47,7 @@ def _routes():
 
 
 def _auth():
+    """校验密码哈希与校验。"""
     from app.services.auth_service import hash_password, verify_password
     h = hash_password("Audit@2026Test")
     assert verify_password("Audit@2026Test", h)
@@ -53,6 +56,7 @@ def _auth():
 
 
 def _split():
+    """校验切割方案无撕裂无遗漏。"""
     from app.services.file_splitter import plan_split, validate_plan
     text = "\n".join(f"第{i}条知识点说明了某个技术概念。" for i in range(1200))
     plan = plan_split(text, target_lines=100, target_chars=100000,
@@ -63,6 +67,7 @@ def _split():
 
 
 def _extract():
+    """校验抽取不把标题当节点。"""
     from app.services.parser import extract_nodes_from_text
     text = ("# 数据库索引\n\n## 基础\n\n"
             "B+ 树是索引最常用的数据结构。\n"
@@ -76,6 +81,7 @@ def _extract():
 
 
 def _summary():
+    """校验摘要来自正文。"""
     from app.services.text_summary import summarize
     text = ("# 光合作用\n\n"
             "光合作用是植物利用光能合成有机物的过程。"
@@ -89,6 +95,7 @@ def _summary():
 
 
 def _existence_mock():
+    """用构造结果校验存在性判定。"""
     from app.services.web_existence import check_existence
     result = {"online": True, "provider": "audit", "results": [
         {"title": "RAG 详解", "url": "https://a.com/1", "snippet": "RAG 是检索增强生成"},
@@ -100,6 +107,7 @@ def _existence_mock():
 
 
 def _paging():
+    """校验分页参数收敛。"""
     from app.services.errors import clamp_paging
     limit, offset = clamp_paging(-1, -5)
     assert 0 < limit <= 200 and offset >= 0
@@ -107,6 +115,7 @@ def _paging():
 
 
 def _kb_index():
+    """加载知识库索引并报条目数。"""
     from app.database import SessionLocal
     from app.services.kb_index import load_index
     db = SessionLocal()
@@ -118,6 +127,7 @@ def _kb_index():
 
 
 def _graph_summary():
+    """生成图谱总结并报规模。"""
     from app.database import SessionLocal
     from app.services.graph_summary import build_summary
     db = SessionLocal()
@@ -130,6 +140,7 @@ def _graph_summary():
 
 
 def _export():
+    """生成 Markdown 导出。"""
     from app.database import SessionLocal
     from app.services.graph_summary import build_summary
     from app.services.summary_export import to_markdown
@@ -151,6 +162,7 @@ TOPICS = ["TCP 拥塞控制", "检索增强生成", "光合作用", "贝叶斯�
 
 
 def _online():
+    """跑一组真实联网用例。"""
     from app.services import web_existence, web_probe
     from app.services.parser import extract_nodes_from_text
     from app.services.text_summary import summarize
@@ -177,6 +189,7 @@ def _online():
 
 
 def main() -> int:
+    """命令行入口：逐项执行并汇总。"""
     parser = argparse.ArgumentParser()
     parser.add_argument("--no-online", action="store_true")
     args = parser.parse_args()

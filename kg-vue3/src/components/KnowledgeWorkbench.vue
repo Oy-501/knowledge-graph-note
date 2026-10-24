@@ -1,3 +1,4 @@
+<!-- 知识工作台：文件列表、编辑器与迷你图谱的组合视图。 -->
 <template>
   <div ref="wbRoot" class="kw-workbench" :class="{ 'kw-fullscreen': isFullscreen }" :style="backgroundStyle">
     <!-- 背景层 -->

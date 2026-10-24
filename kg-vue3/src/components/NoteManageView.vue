@@ -1,3 +1,4 @@
+<!-- 笔记管理：列表、搜索、导出与反链查看。 -->
 <template>
   <div class="nmv-panel" :class="{ 'nmv-fullscreen': isFullscreen }">
     <!-- 顶部操作栏 -->

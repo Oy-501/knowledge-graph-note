@@ -31,6 +31,7 @@ POOL = [
 
 
 def main() -> int:
+    """命令行入口：随机问题联网判定演示。"""
     parser = argparse.ArgumentParser(description="联网存在性确认演示")
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--entity", default="")

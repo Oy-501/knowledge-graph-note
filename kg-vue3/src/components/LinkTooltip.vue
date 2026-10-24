@@ -1,3 +1,4 @@
+<!-- 连线提示：展示关联类型与四维得分明细。 -->
 <template>
   <div
     v-if="visible"

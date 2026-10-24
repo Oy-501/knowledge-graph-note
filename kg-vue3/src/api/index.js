@@ -573,7 +573,8 @@ export const summaryAPI = {
    * 导出的 PPT 却是 6 条。
    */
   downloadUrl(fmt = 'md', { groupBy = 'level', maxPaths = 6, title = '知识图谱总结' } = {}) {
-    const base = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api'
+    // 与主 baseURL 共用同一常量，避免出现「页面正常、下载 404」的端口漂移
+    const base = API_BASE
     const qs = new URLSearchParams({
       fmt, group_by: groupBy, max_paths: String(maxPaths), title, user_id: '1'
     })

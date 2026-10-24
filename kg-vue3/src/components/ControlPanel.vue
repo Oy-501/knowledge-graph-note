@@ -1,3 +1,4 @@
+<!-- 图谱控制面板：显示过滤、布局参数与插件系统。 -->
 <template>
   <!-- 分组管理 -->
   <div class="panel-section">

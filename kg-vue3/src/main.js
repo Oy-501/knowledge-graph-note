@@ -1,4 +1,5 @@
-﻿import { createApp } from 'vue'
+// 应用入口：挂载 Vue、注册 Element Plus、安装全局错误上报与样式层。
+import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import piniaPersist from 'pinia-plugin-persistedstate'
 import ElementPlus from 'element-plus'

@@ -1,3 +1,4 @@
+<!-- 登录/注册/恢复密码：会话建立与首次初始化入口。 -->
 <template>
   <div class="lg-view">
     <div class="lg-layout">

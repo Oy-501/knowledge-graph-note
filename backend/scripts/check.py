@@ -41,6 +41,7 @@ ROWS: List[Dict[str, Any]] = []
 
 
 def add(name: str, title: str, status: str, detail: str, hint: str = ""):
+    """追加一条体检结果。"""
     ROWS.append({"name": name, "title": title, "status": status,
                  "detail": detail, "hint": hint, "icon": _ICON.get(status, "?")})
 
@@ -78,6 +79,7 @@ def check_syntax() -> None:
 
 
 def check_import() -> Tuple[bool, Any]:
+    """检查应用能否完整导入。"""
     try:
         from app.main import app  # noqa: F401
         add("import", "应用导入", OK, "app.main 可完整导入（无循环导入/缺依赖/拼写错误）")
@@ -102,6 +104,7 @@ def _flatten_routes(app) -> List[Tuple[str, str]]:
     out: List[Tuple[str, str]] = []
 
     def walk(container, prefix: str = ""):
+        """递归展开路由容器。"""
         for r in getattr(container, "routes", []) or []:
             name = type(r).__name__
             if name == "_IncludedRouter":
@@ -150,6 +153,7 @@ def _flatten_routes(app) -> List[Tuple[str, str]]:
 
 
 def check_routes(app) -> None:
+    """检查路由注册与重复。"""
     try:
         routes = _flatten_routes(app)
     except Exception as exc:  # noqa: BLE001
@@ -197,6 +201,7 @@ def check_openapi(app) -> None:
 
 
 def check_schema() -> None:
+    """检查模型列与库列是否漂移。"""
     try:
         from app.api.system import _check_schema_drift
         res = _check_schema_drift()
@@ -288,6 +293,7 @@ def check_undefined_names() -> None:
                 _bind_target(node.value)
 
         def _bind_args(args) -> None:
+            """收集被引用的参数名。"""
             for a in (list(args.posonlyargs) + list(args.args) + list(args.kwonlyargs)):
                 bound.add(a.arg)
             if args.vararg:
@@ -437,6 +443,7 @@ def check_fk_purge_coverage() -> None:
 
 
 def check_config() -> None:
+    """检查配置与上传目录。"""
     try:
         from app.api.system import _check_config, _check_uploads_dir
         res = _check_config()
@@ -462,6 +469,7 @@ REQUIRED_FE_DEPS = ["vue", "pinia", "element-plus", "axios", "d3"]
 
 
 def check_frontend() -> None:
+    """检查前端工程文件与依赖。"""
     fe = PROJECT / "kg-vue3"
     if not fe.is_dir():
         add("frontend", "前端工程", WARN, "未找到 kg-vue3 目录", "如需前端请确认目录名称。")
@@ -997,6 +1005,7 @@ def check_vector_wiring() -> None:
 
 
 def main() -> int:
+    """命令行入口：逐项体检并汇总。"""
     ap = argparse.ArgumentParser(description="知识图谱项目代码体检")
     ap.add_argument("--json", action="store_true", help="输出 JSON")
     ap.add_argument("--build", action="store_true", help="附带跑一次前端生产构建（较慢）")

@@ -231,6 +231,7 @@ def node_references(db: Session, node: Node, user_id: int = 1,
         mentioned_rows = [n for n in rows if n.id not in linked_ids]
 
     def brief(n: Note) -> Dict[str, Any]:
+        """给搜索结果节点生成一句命中摘要。"""
         hit = next((x for x in names if x.lower() in (n.content or "").lower()), "")
         return {
             "id": n.id,

@@ -1,3 +1,4 @@
+<!-- 绘图画布：坐标轴、网格与多曲线绘制。 -->
 <template>
   <div ref="hostRef" class="plot-host" @wheel.prevent="onWheel" @mousedown="onMouseDown">
     <svg :width="size.w" :height="size.h" class="plot-svg">

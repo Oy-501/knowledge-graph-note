@@ -16,10 +16,12 @@ _STRONG_NEG = r"(不存在|并不存在|并无此|纯属虚构|属于谣言|是�
 
 
 def _norm(text: str) -> str:
+    """去空白并转小写，用于精确匹配。"""
     return _SPACE.sub("", (text or "").lower())
 
 
 def _domain(url: str) -> str:
+    """从 URL 提取域名。"""
     m = re.match(r"^https?://([^/]+)", (url or "").lower())
     if not m:
         return ""
@@ -38,6 +40,7 @@ def _exact_hit(term: str, text: str) -> bool:
 
 
 def _bigrams(text: str) -> set:
+    """生成字符二元组。"""
     clean = _norm(text)
     if len(clean) < 2:
         return {clean} if clean else set()
@@ -70,6 +73,7 @@ def _contradicted(term: str, hits: List[Dict]) -> bool:
 
 def _result(status: str, confidence: float, exact_hits: int, domains: List[str],
             consistency: float, contradicted: bool, reason: str) -> Dict:
+    """组装存在性判定结果。"""
     return {
         "status": status,
         "confidence": round(confidence, 3),

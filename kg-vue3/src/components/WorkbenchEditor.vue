@@ -1,3 +1,4 @@
+<!-- Markdown 编辑器：编辑、保存、wikilink 同步与节点关联。 -->
 <template>
   <div class="wbe-editor" :class="{ 'wbe-fullscreen': isFullscreen }">
     <!-- 标题栏 -->

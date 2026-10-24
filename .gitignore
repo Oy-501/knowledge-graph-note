@@ -2,6 +2,11 @@
 .idea/
 .vscode/
 
+# 环境变量（含 ADMIN_TOKEN 等口令，绝不入库）
+.env
+.env.local
+.env.*.local
+
 # Python
 __pycache__/
 *.pyc
@@ -55,6 +60,7 @@ backend/reset_admin.py
 # Vite 崩溃残留的临时时间戳文件
 kg-vue3/vite.config.js.timestamp-*.mjs
 
-# 墨刀设计稿导出（626KB html + 12MB 资源，本地参考用，不入库）
-墨刀AI - 知识图谱应用布局重构.html
-墨刀AI - 知识图谱应用布局重构_files/
+# SQLite WAL 运行期临时文件（kg.db-shm / kg.db-wal 非源码，每次运行都会变化）
+*.db-shm
+*.db-wal
+

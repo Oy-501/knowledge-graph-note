@@ -20,12 +20,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def _banner(title: str) -> None:
+    """打印分节标题。"""
     print("=" * 68)
     print(title)
     print("=" * 68)
 
 
 def main() -> int:
+    """命令行入口：重建节点向量。"""
     parser = argparse.ArgumentParser(description="重建节点语义向量")
     parser.add_argument("--dry-run", action="store_true", help="只显示现状，不写库")
     parser.add_argument("--tfidf", action="store_true", help="强制使用降级编码")

@@ -15,6 +15,7 @@ router = APIRouter()
 
 
 def _build(db: Session, user_id: int, group_by: str, max_paths: int):
+    """生成图谱总结，并按需附上 Mermaid 与分组。"""
     summary = build_summary(db, user_id=user_id, max_paths=max_paths)
     attach_raw_links(summary, db, user_id=user_id)
     mermaid = to_mermaid(summary, group_by=group_by)

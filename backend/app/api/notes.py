@@ -50,6 +50,7 @@ def _derive_from_report(report: Any) -> dict:
         accuracy = round(raw_acc * 100, 1) if raw_acc <= 1 else float(raw_acc)
 
     def _has_sev(target):
+        """判断校验报告里是否含 error / issue 级问题。"""
         for key in ('errors', 'issues'):
             arr = report.get(key)
             if isinstance(arr, list) and any(

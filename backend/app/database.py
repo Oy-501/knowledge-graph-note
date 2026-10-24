@@ -5,6 +5,7 @@
 """
 import os
 
+from loguru import logger
 from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 
@@ -30,8 +31,18 @@ engine = create_engine(
 if _IS_SQLITE:
     @event.listens_for(engine, "connect")
     def _set_sqlite_pragma(dbapi_connection, connection_record):
+        """为 SQLite 连接开启 WAL 与外键约束。"""
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
+        # WAL + busy_timeout：解析/关联在后台线程写库时，读写不再互相阻塞；
+        # 万一仍有并发写，等 5 秒而不是立刻抛 "database is locked"
+        # （以前偶发的 500 大多来自这里）。
+        try:
+            cursor.execute("PRAGMA journal_mode=WAL")
+        except Exception as exc:  # noqa: BLE001 — 切换失败不该阻断连接
+            logger.warning(f"SQLite 切换 WAL 失败，沿用原日志模式：{exc}")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.execute("PRAGMA synchronous=NORMAL")
         cursor.close()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
