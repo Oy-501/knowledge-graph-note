@@ -212,6 +212,20 @@
       </ErrorBoundary>
     </div>
 
+    <!-- 分享空间（浏览 / 搜索 / 点赞 / 上传） -->
+    <div v-show="currentView === 'share'" id="view-share" class="app-view kb-view-wrap">
+      <ErrorBoundary v-if="shareMounted" name="分享空间" @recover="activate('graph')">
+        <SharingView />
+      </ErrorBoundary>
+    </div>
+
+    <!-- 学习提醒（今日到期 / SM-2 复习） -->
+    <div v-show="currentView === 'learning'" id="view-learning" class="app-view kb-view-wrap">
+      <ErrorBoundary v-if="learningMounted" name="学习提醒" @recover="activate('graph')">
+        <LearningView />
+      </ErrorBoundary>
+    </div>
+
       </main>
     </div>
 
@@ -234,6 +248,9 @@
 import { ref, computed, onMounted, onUnmounted, watch, defineAsyncComponent } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
 import { ElMessage } from 'element-plus'
+import { applyBgTone, resolveBackgroundTone, sampleImageTone } from '@/utils/bgTone'
+import { ASSET_PRESETS } from '@/assets/catalog'
+import { PRESET_BACKGROUNDS } from '@/store/settingsStore'
 import ErrorBoundary from '@/components/ErrorBoundary.vue'
 import FileUploader from '@/components/FileUploader.vue'
 import ControlPanel from '@/components/ControlPanel.vue'
@@ -283,6 +300,8 @@ const NAV_TABS = [
   // Ctrl+N 快捷键整体后移，用了几天养成的肌肉记忆会突然失灵。
   { key: 'bgcss', label: '背景 CSS', hint: '用一句话生成响应式背景代码' },
   { key: 'theme', label: '界面设计', hint: '自定义界面的六个体系维度' },
+  { key: 'share', label: '分享空间', hint: '看别人的知识导图，点赞与上传' },
+  { key: 'learning', label: '学习提醒', hint: '今日到期复习与间隔调度' },
 ]
 
 const currentView = ref('graph')
@@ -345,8 +364,12 @@ const themeMounted = ref(false)
 // 个人主页 / 后台管理（同样懒加载）
 const ProfileView = defineAsyncComponent(() => import('@/components/ProfileView.vue'))
 const AdminView = defineAsyncComponent(() => import('@/components/AdminView.vue'))
+const SharingView = defineAsyncComponent(() => import('@/components/SharingView.vue'))
+const LearningView = defineAsyncComponent(() => import('@/components/LearningView.vue'))
 const profileMounted = ref(false)
 const adminMounted = ref(false)
+const shareMounted = ref(false)
+const learningMounted = ref(false)
 
 watch(currentView, v => {
   if (v === 'workbench') workbenchMounted.value = true
@@ -357,6 +380,8 @@ watch(currentView, v => {
   if (v === 'theme') themeMounted.value = true
   if (v === 'profile') profileMounted.value = true
   if (v === 'admin') adminMounted.value = true
+  if (v === 'share') shareMounted.value = true
+  if (v === 'learning') learningMounted.value = true
 })
 
 /** 切换视图：懒挂载 + 把激活页签滚入可视区（窄窗口下页签可横向滚动） */
@@ -424,6 +449,21 @@ const globalBgStyle = computed(() => {
     filter: bg.blur ? `blur(${bg.blur}px)` : 'none'
   }
 })
+
+// 背景色调：每次换背景都重算明暗，CSS 通过 [data-bg-tone] 接管按钮配色。
+// 自定义图片先给保守值，采样完成后再覆盖一次。
+watch(
+  () => settingsStore.currentBackground,
+  async bg => {
+    const base = resolveBackgroundTone(bg, ASSET_PRESETS, PRESET_BACKGROUNDS)
+    applyBgTone(base.tone, base.luminance)
+    if (bg?.type === 'custom' && bg.value) {
+      const sampled = await sampleImageTone(bg.value, '#05060A', bg.opacity ?? 0.8)
+      if (sampled) applyBgTone(sampled.tone, sampled.luminance)
+    }
+  },
+  { immediate: true, deep: true }
+)
 
 const appStyle = computed(() => {
   const bg = settingsStore.currentBackground

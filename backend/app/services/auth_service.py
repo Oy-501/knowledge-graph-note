@@ -432,13 +432,32 @@ def require_admin(request: Request, db: Session = Depends(get_db)) -> User:
 
 
 def current_user_id(request: Request, fallback: int = 1) -> int:
-    """过渡期兼容：旧接口仍收 query user_id 时，以中间件写入的会话用户覆盖"""
+    """取当前会话用户；GET 请求没有中间件写入时，自己按令牌解析一次。
+
+    为什么不能只读 request.state：中间件只在写请求里解析会话，
+    读接口（列表、推荐、搜索）拿不到 state.user_id，会静默回落到 fallback，
+    于是「点赞状态」和「推荐画像」都会串到 user 1。
+    """
     try:
         uid = getattr(request.state, "user_id", None)
         if isinstance(uid, int) and uid > 0:
             return uid
-    except Exception as exc:  # noqa: BLE001 — 取不到会话用户时降级回 fallback
+    except Exception as exc:  # noqa: BLE001
         logger.debug(f"读取 request.state.user_id 失败: {exc}")
+
+    token = request.headers.get(SESSION_HEADER)
+    if token:
+        from app.database import SessionLocal
+
+        db = SessionLocal()
+        try:
+            session = resolve_session(db, token)
+            if session:
+                return session.user_id
+        except Exception as exc:  # noqa: BLE001 — 解析失败按未登录处理
+            logger.debug(f"读接口解析会话失败: {exc}")
+        finally:
+            db.close()
     return fallback
 
 

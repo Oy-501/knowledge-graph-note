@@ -301,3 +301,31 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------------------------- 背景色调适配 ---------------------------- */
+/*
+  背景亮度由 App.vue 写入 :root[data-bg-tone]。这里只处理「主题与背景相反」的
+  情况：深色主题配浅色图、浅色主题配深色图时，导航/搜索/图标按钮要跟着反相。
+  与主题同向时规则值接近原值，不会产生视觉跳变。
+*/
+:root[data-bg-tone="light"] .nav-tab { color: #3a4048; }
+:root[data-bg-tone="light"] .nav-tab:hover {
+  color: #171a20;
+  background: rgba(23, 26, 32, 0.06);
+}
+:root[data-bg-tone="light"] .nav-tab.active { color: var(--accent, #1677ff); }
+
+:root[data-bg-tone="light"] .app-search {
+  background: rgba(255, 255, 255, 0.76);
+  border-color: rgba(23, 26, 32, 0.14);
+  color: #171a20;
+}
+
+:root[data-bg-tone="light"] .app-icon-btn { color: #3a4048; }
+
+:root[data-bg-tone="dark"] .nav-tab { color: rgba(255, 255, 255, 0.78); }
+:root[data-bg-tone="dark"] .app-search {
+  background: rgba(0, 0, 0, 0.30);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: #f2f5f9;
+}

@@ -450,3 +450,64 @@ class FileKnowledgeLink(Base):
         UniqueConstraint("source_file_id", "target_file_id", name="uq_fkl_pair"),
         Index("idx_fkl_source", "source_file_id"),
     )
+
+
+class SharedPost(Base):
+    """分享空间里的一条知识导图/知识点。
+
+    status：pending 只对作者可见（等待判定或人工审核）；approved 才进公共列表与推荐。
+    """
+    __tablename__ = "shared_posts"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String(200), nullable=False)
+    summary = Column(Text, default="")
+    content = Column(Text, default="")
+    domain = Column(String(60), default="general", index=True)
+    tags = Column(JSON, default=list)
+    node_id = Column(Integer, nullable=True)
+    file_id = Column(Integer, nullable=True)
+    status = Column(String(20), default="pending", index=True)
+    verdict_score = Column(Float, default=0.0)
+    verdict_reason = Column(Text, default="")
+    like_count = Column(Integer, default=0, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_shared_status_like", "status", "like_count"),
+        Index("ix_shared_status_created", "status", "created_at"),
+    )
+
+
+class PostLike(Base):
+    """点赞记录：唯一约束保证同一用户对同一分享只能点赞一次。"""
+    __tablename__ = "post_likes"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    post_id = Column(Integer, ForeignKey("shared_posts.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("post_id", "user_id", name="uq_post_like_user"),
+    )
+
+
+class LearningReview(Base):
+    """学习复习计划（SM-2 简化）：到期后提醒用户回看对应知识。"""
+    __tablename__ = "learning_reviews"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    node_id = Column(Integer, nullable=True)
+    post_id = Column(Integer, nullable=True)
+    title = Column(String(200), default="")
+    interval_days = Column(Integer, default=1)
+    ease = Column(Float, default=2.5)
+    review_count = Column(Integer, default=0)
+    last_reviewed_at = Column(DateTime, nullable=True)
+    due_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_learning_due", "user_id", "due_at"),
+    )

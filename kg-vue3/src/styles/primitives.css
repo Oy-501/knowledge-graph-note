@@ -57,7 +57,7 @@
   font-family: inherit;
   font-size: var(--fs-sm);
   line-height: 1;
-  color: var(--text-secondary);
+  color: var(--btn-fg, var(--text-secondary));
   white-space: nowrap;
   cursor: pointer;
   transition: background-color var(--dur-fast) var(--ease-out),
@@ -91,18 +91,18 @@
 .u-btn--tonal:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 18%, transparent); }
 
 .u-btn--outline {
-  border-color: var(--border);
-  color: var(--text-primary);
+  border-color: var(--btn-border, var(--border));
+  color: var(--btn-strong, var(--text-primary));
 }
 .u-btn--outline:hover:not(:disabled) {
-  background: var(--bg-hover);
-  border-color: var(--text-faint);
+  background: var(--btn-hover-bg, var(--bg-hover));
+  border-color: var(--btn-fg, var(--text-faint));
 }
 
-.u-btn--ghost { color: var(--text-secondary); }
+.u-btn--ghost { color: var(--btn-fg, var(--text-secondary)); }
 .u-btn--ghost:hover:not(:disabled) {
-  background: var(--bg-hover);
-  color: var(--text-primary);
+  background: var(--btn-hover-bg, var(--bg-hover));
+  color: var(--btn-strong, var(--text-primary));
 }
 
 /* 文字按钮：最安静的一档，用于「导出 / 复制」这类收尾动作 */
@@ -111,7 +111,7 @@
   padding: 2px 0;
   border-radius: 0;
   border-bottom: 1px solid transparent;
-  color: var(--text-secondary);
+  color: var(--btn-fg, var(--text-secondary));
 }
 .u-btn--text:hover:not(:disabled) {
   color: var(--text-primary);
@@ -224,4 +224,24 @@
 [data-emphasis="quiet"] {
   --text-primary: var(--text-secondary);
   --text-secondary: var(--text-muted);
+}
+
+/* ---------------------------- 背景色调适配 ---------------------------- */
+/*
+  换背景时由 utils/bgTone.js 把亮度结论写到 :root[data-bg-tone]，
+  按钮只认 --btn-* 变量。深色图/浅色图切换时，文字与描边自动反向，
+  不用逐个组件改样式。
+*/
+:root[data-bg-tone="dark"] {
+  --btn-fg: rgba(255, 255, 255, 0.86);
+  --btn-strong: #f2f5f9;
+  --btn-border: rgba(255, 255, 255, 0.22);
+  --btn-hover-bg: rgba(255, 255, 255, 0.10);
+}
+
+:root[data-bg-tone="light"] {
+  --btn-fg: rgba(23, 26, 32, 0.78);
+  --btn-strong: #171a20;
+  --btn-border: rgba(23, 26, 32, 0.18);
+  --btn-hover-bg: rgba(23, 26, 32, 0.06);
 }

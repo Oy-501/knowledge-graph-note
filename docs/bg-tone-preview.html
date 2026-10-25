@@ -1,0 +1,70 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>背景色调适配对照</title>
+<style>
+  :root {
+    --accent: #1677ff;
+    --btn-fg: #6b7280;
+    --btn-strong: #171a20;
+    --btn-border: #d9dde3;
+  }
+  [data-bg-tone="dark"] {
+    --btn-fg: rgba(255, 255, 255, 0.86);
+    --btn-strong: #f2f5f9;
+    --btn-border: rgba(255, 255, 255, 0.22);
+    --btn-hover-bg: rgba(255, 255, 255, 0.10);
+  }
+  [data-bg-tone="light"] {
+    --btn-fg: rgba(23, 26, 32, 0.78);
+    --btn-strong: #171a20;
+    --btn-border: rgba(23, 26, 32, 0.18);
+    --btn-hover-bg: rgba(23, 26, 32, 0.06);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; display: flex; }
+  .pane { flex: 1; min-height: 100vh; padding: 36px 40px; display: flex; flex-direction: column; gap: 18px; }
+  .pane.dark { background: #0b0d12; }
+  .pane.light { background: #f7f8fa; }
+  .kicker { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--btn-fg); }
+  h2 { margin: 0; font-size: 20px; color: var(--btn-strong); }
+  p { margin: 0; color: var(--btn-fg); font-size: 13px; line-height: 1.7; max-width: 420px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+  .btn {
+    height: 32px; padding: 0 14px; border-radius: 8px;
+    border: 1px solid var(--btn-border); background: transparent;
+    color: var(--btn-fg); font-size: 13px; cursor: pointer;
+  }
+  .btn:hover { background: var(--btn-hover-bg); color: var(--btn-strong); }
+  .btn.solid { background: var(--accent); border-color: transparent; color: #fff; }
+  .btn.strong { color: var(--btn-strong); }
+  .card {
+    margin-top: 10px; padding: 16px; border-radius: 10px;
+    border: 1px solid var(--btn-border); background: rgba(255, 255, 255, 0.03);
+    color: var(--btn-strong); font-size: 13px;
+  }
+  .pane.light .card { background: rgba(255, 255, 255, 0.7); }
+</style>
+
+<section class="pane dark" data-bg-tone="dark">
+  <span class="kicker">data-bg-tone = dark</span>
+  <h2>深色背景</h2>
+  <p>按钮文字转为浅色、描边提高到 22% 白，保证落在照片/网格上仍可读。</p>
+  <div class="row">
+    <button class="btn">默认</button>
+    <button class="btn strong">强调文字</button>
+    <button class="btn solid">主操作</button>
+  </div>
+  <div class="card">卡片正文：亮度低于 0.45 的判定结果</div>
+</section>
+
+<section class="pane light" data-bg-tone="light">
+  <span class="kicker">data-bg-tone = light</span>
+  <h2>浅色背景</h2>
+  <p>同一组按钮自动反相：文字压到 78% 黑，描边降到 18% 黑，避免白字消失在浅底上。</p>
+  <div class="row">
+    <button class="btn">默认</button>
+    <button class="btn strong">强调文字</button>
+    <button class="btn solid">主操作</button>
+  </div>
+  <div class="card">卡片正文：亮度高于 0.45 的判定结果</div>
+</section>

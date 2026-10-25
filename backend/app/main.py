@@ -31,7 +31,8 @@ from app.services.kb_index import build_relations_from_entries
 from app.services.cache import api_cache
 from app.services.errors import AppError, describe_exception, error_payload, safe_detail
 from app.services.security import sanitize_request_id, verify_admin_token
-from app.api import files, knowledge, graph, notes, kb, summary, admin, profile, system, auth
+from app.api import (files, knowledge, graph, notes, kb, summary, admin, profile,
+                     system, auth, share, learning)
 
 # 慢请求阈值（毫秒）：超过即在日志中标记，便于尽早发现性能退化
 SLOW_REQUEST_MS = 3000
@@ -85,6 +86,10 @@ WRITE_GUARD_USER_LEVEL = {
     # 文本摘要：纯计算，不改任何数据；登录即可用
     ("POST", "/api/system/summarize"),
 }
+
+# 分享与学习：都是「用户自己的行为」，登录即可。
+# 分享上传仍需过质量判定（服务层），点赞有唯一约束，复习只影响自己的计划。
+WRITE_GUARD_USER_PREFIXES = ("/api/share/", "/api/learning/")
 
 # 后台自身已有更强的校验（恒定时间比较 + 失败限流），避免重复判定
 WRITE_GUARD_PREFIX_EXEMPT = ("/api/admin/",)
@@ -253,7 +258,10 @@ async def write_guard(request: Request, call_next):
     #    这里必须放在 ① 之后、③ 之前：
     #    放在 ① 之前会让普通用户拿到本该管理员才能用的端点，
     #    放在 ③ 之后则永远轮不到（actor 不为 None 时已经在 ③ 之前的 403 里返回了）。
-    if actor is not None and (request.method, path) in WRITE_GUARD_USER_LEVEL:
+    if actor is not None and (
+        (request.method, path) in WRITE_GUARD_USER_LEVEL
+        or path.startswith(WRITE_GUARD_USER_PREFIXES)
+    ):
         return await _pass_and_invalidate()
 
     # ③ 登录了但权限不够：这是「权限不足」，不是「没登录」，
@@ -475,6 +483,8 @@ app.include_router(summary.router, prefix="/api/summary", tags=["GraphSummary"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
 app.include_router(profile.router, prefix="/api/profile", tags=["Profile"])
+app.include_router(share.router, prefix="/api/share", tags=["Share"])
+app.include_router(learning.router, prefix="/api/learning", tags=["Learning"])
 
 # 用户上传的图片（头像 / 背景）静态服务：/uploads/...
 # 目录取 settings.resolved_upload_dir（单一事实来源），与 profile.py 的写入路径保持一致

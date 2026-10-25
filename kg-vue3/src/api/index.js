@@ -816,4 +816,68 @@ export const systemAPI = {
   }
 }
 
+export const shareAPI = {
+  /** 公共列表：sort=hot|new，可按关键词与领域过滤 */
+  async list(params = {}) {
+    const res = await api.get('/share/posts', { params })
+    return res.data
+  },
+
+  /** 搜索分享（标题/摘要/领域） */
+  async search(q, params = {}) {
+    const res = await api.get('/share/search', { params: { q, ...params } })
+    return res.data
+  },
+
+  /** 按上传画像推荐 */
+  async recommend(limit = 12) {
+    const res = await api.get('/share/recommend', { params: { limit } })
+    return res.data
+  },
+
+  /** 上传分享：后端先判定，approved 才进公共空间 */
+  async create(payload) {
+    const res = await api.post('/share/posts', payload)
+    return res.data
+  },
+
+  /** 点赞（同一用户只能点一次，重复调用幂等） */
+  async like(id) {
+    const res = await api.post(`/share/posts/${id}/like`)
+    return res.data
+  },
+
+  /** 取消点赞 */
+  async unlike(id) {
+    const res = await api.delete(`/share/posts/${id}/like`)
+    return res.data
+  }
+}
+
+export const learningAPI = {
+  /** 加入复习计划（node_id 或 post_id） */
+  async add(payload) {
+    const res = await api.post('/learning/add', payload)
+    return res.data
+  },
+
+  /** 今日到期复习项 */
+  async due(limit = 30) {
+    const res = await api.get('/learning/due', { params: { limit } })
+    return res.data
+  },
+
+  /** 学习概览 */
+  async stats() {
+    const res = await api.get('/learning/stats')
+    return res.data
+  },
+
+  /** 提交复习自评（quality 0-5） */
+  async review(id, quality) {
+    const res = await api.post(`/learning/${id}/review`, { quality })
+    return res.data
+  }
+}
+
 export default api
