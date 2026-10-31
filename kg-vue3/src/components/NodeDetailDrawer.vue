@@ -37,6 +37,67 @@
             </div>
           </div>
 
+          <!-- 来源与讲解：判定依据、可点来源、视频 -->
+          <div class="drawer-section">
+            <h4>来源与讲解</h4>
+            <div v-if="srcInfo.loading" class="src-hint">正在检索来源与视频…</div>
+            <template v-else-if="srcInfo.data">
+              <div class="info-row">
+                <span class="info-label">判定</span>
+                <span class="info-value">
+                  {{ decisionLabel }}
+                  <span v-if="srcInfo.data.score != null" class="src-score">
+                    （{{ srcInfo.data.score.toFixed(2) }}）
+                  </span>
+                </span>
+              </div>
+              <p v-if="srcInfo.data.reason" class="src-reason">{{ srcInfo.data.reason }}</p>
+
+              <div v-if="srcInfo.data.sources?.length" class="src-row">
+                <span class="src-label">来源</span>
+                <span class="src-links">
+                  <a v-for="(s, i) in srcInfo.data.sources" :key="i" :href="s.url"
+                     target="_blank" rel="noopener" class="src-link" :title="s.title">{{ hostOf(s.url) }}{{ s.tier === 'authority' ? ' ·权威' : '' }}</a>
+                </span>
+              </div>
+
+              <div v-if="srcInfo.data.videos?.length" class="src-row">
+                <span class="src-label">视频</span>
+                <span class="src-links">
+                  <a v-for="(v, i) in srcInfo.data.videos" :key="'v' + i" :href="v.url"
+                     target="_blank" rel="noopener" class="src-link" :title="v.title">{{ v.title }}</a>
+                </span>
+              </div>
+
+              <div v-if="srcInfo.data.references?.length" class="src-row">
+                <span class="src-label">百科</span>
+                <span class="src-links">
+                  <a v-for="(r, i) in srcInfo.data.references" :key="'r' + i" :href="r.url"
+                     target="_blank" rel="noopener" class="src-link">{{ r.title }}</a>
+                </span>
+              </div>
+
+              <div v-if="srcInfo.data.video_search?.length" class="src-row">
+                <span class="src-label">视频搜索</span>
+                <span class="src-links">
+                  <a v-for="(v, i) in srcInfo.data.video_search" :key="'vs' + i" :href="v.url"
+                     target="_blank" rel="noopener" class="src-link">{{ v.site }}</a>
+                </span>
+              </div>
+
+              <div v-if="srcInfo.data.reading?.length" class="src-row">
+                <span class="src-label">延伸阅读</span>
+                <span class="src-links">
+                  <a v-for="(r, i) in srcInfo.data.reading" :key="'rd' + i" :href="r.url"
+                     target="_blank" rel="noopener" class="src-link" :title="r.title">
+                    {{ r.title_zh || r.title }}
+                  </a>
+                </span>
+              </div>
+            </template>
+            <div v-else class="src-hint">暂无来源信息</div>
+          </div>
+
           <!-- 知识层级 -->
           <div class="drawer-section">
             <h4>知识层级</h4>
@@ -326,6 +387,41 @@ function openNote(nr) {
   emit('open-note', nr.id)
 }
 
+/*
+ * 来源与讲解：判定依据、可点来源、视频。
+ * 与候选弹窗共用后端逻辑（按 node_id 反查候选；没有候选就用节点标题检索）。
+ */
+const srcInfo = ref({ loading: false, data: null })
+
+watch(
+  () => [props.visible, props.node?.id],
+  async ([visible, id]) => {
+    if (!visible || !id) return
+    srcInfo.value = { loading: true, data: null }
+    try {
+      const data = await knowledgeAPI.nodeSources(id)
+      srcInfo.value = { loading: false, data }
+    } catch (e) {
+      // 来源是辅助信息，失败不该让抽屉报错
+      srcInfo.value = { loading: false, data: null }
+    }
+  },
+  { immediate: true }
+)
+
+const decisionLabel = computed(() => {
+  const map = { accept: '建议采纳', reject: '建议驳回', pending: '待人工确认' }
+  return map[srcInfo.value.data?.decision] || '未判定'
+})
+
+function hostOf(url) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return url
+  }
+}
+
 const levelInfo = computed(() => {
   const lv = props.node?.level
   if (!lv) return null
@@ -526,6 +622,22 @@ function onExportLearningPath() {
   width: 70px;
   flex-shrink: 0;
 }
+.src-hint { font-size: var(--fs-xs); color: var(--text-muted); }
+.src-reason {
+  margin: 6px 0 0;
+  font-size: var(--fs-xs);
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+.src-score { color: var(--text-muted); }
+.src-row { display: flex; gap: 8px; margin-top: 8px; align-items: flex-start; }
+.src-label { flex: 0 0 auto; font-size: var(--fs-xs); color: var(--text-muted); padding-top: 1px; }
+.src-links { display: flex; flex-wrap: wrap; gap: 6px; }
+.src-link {
+  max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--fs-xs); color: var(--accent, #1677ff); text-decoration: none;
+}
+.src-link:hover { text-decoration: underline; }
 .info-value {
   color: var(--text-primary);
   flex: 1;

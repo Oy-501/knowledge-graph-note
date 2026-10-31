@@ -11,7 +11,7 @@ from collections import Counter
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -49,12 +49,46 @@ def judge_post(title: str, summary: str, content: str) -> Tuple[str, float, str]
     return status, round(score, 2), "；".join(reasons)
 
 
-def post_brief(post: SharedPost, liked: bool = False, author: Optional[str] = None) -> Dict:
+def _systems(db: Session, file_ids: List[Optional[int]]) -> Dict[int, Dict]:
+    """批量取分享对应知识体系的规模与知识点标题。
+
+    一个分享不是单个名词，而是一份文档解析出的节点集合（file_id）。
+    这里返回节点数、内部连线数与前 8 个知识点标题，供卡片直接展示体系。
+    """
+    from app.models.models import Link, Node
+
+    uniq = sorted({f for f in file_ids if f})
+    if not uniq:
+        return {}
+
+    rows = db.query(Node.id, Node.title, Node.entity, Node.file_id).filter(
+        Node.file_id.in_(uniq)).all()
+    by_file: Dict[int, List] = {}
+    for row in rows:
+        by_file.setdefault(row.file_id, []).append(row)
+
+    out: Dict[int, Dict] = {}
+    for fid, nodes in by_file.items():
+        ids = [n.id for n in nodes]
+        links = db.query(func.count(Link.id)).filter(
+            Link.source_id.in_(ids), Link.target_id.in_(ids)).scalar() or 0
+        out[fid] = {
+            "node_count": len(nodes),
+            "link_count": links,
+            "node_titles": [(n.title or n.entity or "") for n in nodes][:8],
+        }
+    return out
+
+
+def post_brief(post: SharedPost, liked: bool = False, author: Optional[str] = None,
+               system: Optional[Dict] = None) -> Dict:
     """分享卡片的统一序列化。"""
+    system = system or {}
     return {
         "id": post.id,
         "title": post.title,
         "summary": post.summary or "",
+        "content": post.content or "",
         "domain": post.domain or "general",
         "tags": post.tags or [],
         "status": post.status,
@@ -63,6 +97,9 @@ def post_brief(post: SharedPost, liked: bool = False, author: Optional[str] = No
         "author": author or f"用户 {post.user_id}",
         "node_id": post.node_id,
         "file_id": post.file_id,
+        "node_count": system.get("node_count", 0),
+        "link_count": system.get("link_count", 0),
+        "node_titles": system.get("node_titles", []),
         "verdict_score": post.verdict_score or 0.0,
         "created_at": post.created_at.isoformat(timespec="seconds") if post.created_at else "",
     }
@@ -117,7 +154,8 @@ def create_post(db: Session, user_id: int, title: str, summary: str, content: st
         except Exception:  # noqa: BLE001 — 复习计划失败不影响分享本身
             db.rollback()
 
-    return post_brief(post, liked=False)
+    return post_brief(post, liked=False,
+                      system=_systems(db, [post.file_id]).get(post.file_id))
 
 
 def list_posts(db: Session, viewer_id: int, sort: str = "hot", q: str = "",
@@ -154,9 +192,11 @@ def list_posts(db: Session, viewer_id: int, sort: str = "hot", q: str = "",
     rows = query.offset(offset).limit(limit).all()
     liked = _liked_ids(db, viewer_id)
     authors = _authors(db, rows)
+    systems = _systems(db, [p.file_id for p in rows])
     return {
         "total": total,
-        "items": [post_brief(p, p.id in liked, authors.get(p.user_id)) for p in rows],
+        "items": [post_brief(p, p.id in liked, authors.get(p.user_id), systems.get(p.file_id))
+                  for p in rows],
     }
 
 
@@ -191,10 +231,12 @@ def recommend(db: Session, user_id: int, limit: int = 12) -> Dict:
         scored.append((score, same_domain, post))
 
     scored.sort(key=lambda x: -x[0])
-    authors = _authors(db, [p for _, _, p in scored[:limit]])
+    picked = [p for _, _, p in scored[:limit]]
+    authors = _authors(db, picked)
+    systems = _systems(db, [p.file_id for p in picked])
     items = []
     for score, same_domain, post in scored[:limit]:
-        brief = post_brief(post, False, authors.get(post.user_id))
+        brief = post_brief(post, False, authors.get(post.user_id), systems.get(post.file_id))
         brief["recommend_score"] = round(score, 3)
         brief["reason"] = "同领域内容" if same_domain else "近期热门"
         items.append(brief)

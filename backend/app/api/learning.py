@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.services import learning_service
+from app.services import learning_service, recommend_service
 from app.services.auth_service import current_user_id
 
 router = APIRouter()
@@ -45,6 +45,18 @@ def stats(request: Request, user_id: int = 1, db: Session = Depends(get_db)):
     """学习概览：总数 / 到期 / 已掌握。"""
     uid = current_user_id(request, user_id)
     return learning_service.stats(db, uid)
+
+
+@router.get("/recommendations")
+def recommendations(request: Request, user_id: int = 1, limit: int = 6,
+                    db: Session = Depends(get_db)):
+    """今日推荐：可解释推荐分、分项贡献、信息来源与离线回测指标。
+
+    推荐公式与权重定义在 recommend_service.FORMULA，前端直接展示，
+    保证「页面上的公式」和「实际打分」是同一份定义。
+    """
+    uid = current_user_id(request, user_id)
+    return recommend_service.recommend(db, uid, limit)
 
 
 @router.post("/{review_id}/review")

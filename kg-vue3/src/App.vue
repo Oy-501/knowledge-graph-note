@@ -215,7 +215,7 @@
     <!-- 分享空间（浏览 / 搜索 / 点赞 / 上传） -->
     <div v-show="currentView === 'share'" id="view-share" class="app-view kb-view-wrap">
       <ErrorBoundary v-if="shareMounted" name="分享空间" @recover="activate('graph')">
-        <SharingView />
+        <SharingView @open-system="openShareSystem" />
       </ErrorBoundary>
     </div>
 
@@ -383,6 +383,17 @@ watch(currentView, v => {
   if (v === 'share') shareMounted.value = true
   if (v === 'learning') learningMounted.value = true
 })
+
+/** 分享空间 → 图谱：优先按文件展示整个知识体系，其次定位单个节点 */
+function openShareSystem(post) {
+  if (!post) return
+  activate('graph')
+  if (post.file_id) {
+    graphStore.focusFile(post.file_id)
+  } else if (post.node_id) {
+    graphStore.focusNode(post.node_id)
+  }
+}
 
 /** 切换视图：懒挂载 + 把激活页签滚入可视区（窄窗口下页签可横向滚动） */
 function activate(key) {

@@ -1,0 +1,85 @@
+{
+  "topic": "web",
+  "source": "https://learn-anything.xyz/web",
+  "fetched_at": "2026-10-29T17:04:38",
+  "items": [
+    {
+      "title": "Patterns.dev",
+      "domain": "patterns.dev",
+      "url": "https://patterns.dev/",
+      "title_zh": "Patterns.dev（Web 设计模式库）"
+    },
+    {
+      "title": "Everything easy is hard again",
+      "domain": "frankchimero.com/writing/everything-easy-is-hard-again",
+      "url": "https://frankchimero.com/writing/everything-easy-is-hard-again",
+      "title_zh": "一切容易的事又重新变难"
+    },
+    {
+      "title": "Internetting is hard",
+      "domain": "internetingishard.com",
+      "url": "https://internetingishard.com/",
+      "title_zh": "学做网页很难"
+    },
+    {
+      "title": "NetData",
+      "domain": "my-netdata.io",
+      "url": "https://my-netdata.io/",
+      "title_zh": "NetData（服务器实时监控）"
+    },
+    {
+      "title": "What, exactly, is the DOM?",
+      "domain": "bitsofco.de/what-exactly-is-the-dom",
+      "url": "https://bitsofco.de/what-exactly-is-the-dom",
+      "title_zh": "DOM 到底是什么？"
+    },
+    {
+      "title": "web.dev",
+      "domain": "web.dev",
+      "url": "https://web.dev/",
+      "title_zh": "web.dev（Google 的 Web 开发指南）"
+    },
+    {
+      "title": "W3C on GitHub",
+      "domain": "github.com/w3c",
+      "url": "https://github.com/w3c",
+      "title_zh": "W3C 的 GitHub 仓库"
+    },
+    {
+      "title": "Deep Dive Into Modern Web Development",
+      "domain": "fullstackopen.com/en",
+      "url": "https://fullstackopen.com/en",
+      "title_zh": "现代 Web 开发深度指南"
+    },
+    {
+      "title": "Fly-through guide to web development best practices",
+      "domain": "slides.com/seldo/stuff-everybody-knows-2019-04",
+      "url": "https://slides.com/seldo/stuff-everybody-knows-2019-04",
+      "title_zh": "Web 开发最佳实践速览"
+    },
+    {
+      "title": "Various books on web tech",
+      "domain": "flaviocopes.com/page/ebooks-links",
+      "url": "https://flaviocopes.com/page/ebooks-links",
+      "title_zh": "各类 Web 技术书籍"
+    },
+    {
+      "title": "Hands-on with Portals: seamless navigation on the Web",
+      "domain": "web.dev/hands-on-portals",
+      "url": "https://web.dev/hands-on-portals",
+      "title_zh": "实战 Portals：实现 Web 无缝页面跳转"
+    },
+    {
+      "title": "Web Platform Course",
+      "domain": "webplatformcourse.com/7XoqGASUulHqaQUWuqXR",
+      "url": "https://webplatformcourse.com/7XoqGASUulHqaQUWuqXR",
+      "title_zh": "Web 平台课程"
+    },
+    {
+      "title": "Cloudflare Learning Center",
+      "domain": "cloudflare.com/learning",
+      "url": "https://cloudflare.com/learning",
+      "title_zh": "Cloudflare 学习中心"
+    }
+  ]
+}

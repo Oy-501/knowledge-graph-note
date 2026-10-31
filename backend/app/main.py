@@ -87,9 +87,10 @@ WRITE_GUARD_USER_LEVEL = {
     ("POST", "/api/system/summarize"),
 }
 
-# 分享与学习：都是「用户自己的行为」，登录即可。
-# 分享上传仍需过质量判定（服务层），点赞有唯一约束，复习只影响自己的计划。
-WRITE_GUARD_USER_PREFIXES = ("/api/share/", "/api/learning/")
+# 分享、学习与个人文件：都是「用户自己的数据」，登录即可。
+# 分享上传仍需过质量判定（服务层），点赞有唯一约束，复习只影响自己的计划；
+# 文件上传/删除/重命名一律以会话用户为准（files.py 内覆盖 query 的 user_id）。
+WRITE_GUARD_USER_PREFIXES = ("/api/share/", "/api/learning/", "/api/files/")
 
 # 后台自身已有更强的校验（恒定时间比较 + 失败限流），避免重复判定
 WRITE_GUARD_PREFIX_EXEMPT = ("/api/admin/",)

@@ -872,9 +872,9 @@ function onNodeOut() {
   highlightNodeId = null
   applyHighlight()
 }
-function onNodeClick(ev, d) {
-  ev.stopPropagation()
-  // 打开节点详情抽屉
+/** 打开节点详情：画布点击与外部跳转共用 */
+function openNodeDetail(d) {
+  if (!d) return
   const nodeLinks = graphStore.links.filter(l => {
     const s = typeof l.source === 'object' ? l.source.id : l.source
     const t = typeof l.target === 'object' ? l.target.id : l.target
@@ -886,6 +886,19 @@ function onNodeClick(ev, d) {
     links: nodeLinks
   }
 }
+
+function onNodeClick(ev, d) {
+  ev.stopPropagation()
+  openNodeDetail(d)
+}
+
+// 分享空间「在图谱中查看」：聚焦节点并打开详情，消费后清空请求
+watch(() => graphStore.focusNodeId, id => {
+  if (!id) return
+  const node = graphStore.nodes.find(n => String(n.id) === String(id))
+  if (node) openNodeDetail(node)
+  graphStore.clearFocusNode()
+})
 
 function closeDrawer() {
   drawer.value.visible = false

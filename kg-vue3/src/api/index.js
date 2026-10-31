@@ -262,6 +262,20 @@ export const fileAPI = {
     return res.data
   },
 
+  /** 查看自己文件的候选知识点与判定理由 */
+  async candidates(fileId) {
+    const res = await api.get(`/files/${fileId}/candidates`)
+    return res.data
+  },
+
+  /** 裁决自己文件的一条候选（不写公共知识库） */
+  async verdict(fileId, candId, action, note = '') {
+    const res = await api.post(`/files/${fileId}/candidates/${candId}/verdict`, {
+      action, note,
+    })
+    return res.data
+  },
+
   /**
    * 本地文件夹笔记同步（模块1：本地为源 + 双写）。
    * 按 source_path 幂等：首建后更新，内容变化自动清旧节点重解析。
@@ -298,6 +312,18 @@ export const knowledgeAPI = {
   /** 校验笔记内容 */
   async validate(content) {
     const res = await api.post('/knowledge/validate', { content })
+    return res.data
+  },
+
+  /** 知识点的联网来源、视频讲解与百科入口（按需展开） */
+  async sources(entity, domain = '') {
+    const res = await api.get('/knowledge/sources', { params: { entity, domain } })
+    return res.data
+  },
+
+  /** 知识点详情页的来源、判定依据与视频（按 node_id 反查候选） */
+  async nodeSources(nodeId) {
+    const res = await api.get(`/knowledge/node/${nodeId}/sources`)
     return res.data
   },
 
@@ -876,6 +902,12 @@ export const learningAPI = {
   /** 提交复习自评（quality 0-5） */
   async review(id, quality) {
     const res = await api.post(`/learning/${id}/review`, { quality })
+    return res.data
+  },
+
+  /** 今日推荐：可解释推荐分 + 信息来源 + 回测指标 */
+  async recommendations(limit = 6) {
+    const res = await api.get('/learning/recommendations', { params: { limit } })
     return res.data
   }
 }

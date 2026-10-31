@@ -17,6 +17,7 @@
 import hashlib
 import json
 import math
+from functools import lru_cache
 import os
 import re
 import threading
@@ -330,6 +331,20 @@ def encode(text: str) -> List[float]:
             logger.error(f"Transformers encode failed: {type(exc).__name__}: {exc}")
 
     return _tfidf_encode(text)
+
+
+@lru_cache(maxsize=2048)
+def _encode_cached(text: str) -> tuple:
+    return tuple(encode(text))
+
+
+def encode_cached(text: str) -> List[float]:
+    """带缓存的编码。
+
+    判定阶段每条候选都要和同一段知识库定义比相似度，
+    不缓存时 600 条候选会把同一段定义重复编码 600 次。
+    """
+    return list(_encode_cached(text or ""))
 
 
 def encode_batch(texts: List[str]) -> List[List[float]]:

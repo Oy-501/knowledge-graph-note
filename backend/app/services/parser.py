@@ -196,6 +196,21 @@ def parse_and_extract(file_id: int, user_id: int = 1):
             except Exception as kb_exc:
                 logger.warning(f"KB anchoring skipped for file {file_id}: {kb_exc}")
 
+        # 大文件的关联推理与候选判定随规模线性增长（600 节点实测 21s + 19s），
+        # 但这两步都不影响「节点已经可用」。超过阈值时先置 done，让用户先进图谱，
+        # 两步转后台补齐；小文件仍同步做完，保持「done = 全部就绪」的语义。
+        if saved_nodes and len(saved_nodes) > settings.PARSE_ASYNC_POST_THRESHOLD:
+            file_record.status = "done"
+            file_record.parsed_at = datetime.utcnow()
+            file_record.parse_note = (
+                f"解析出 {len(saved_nodes)} 个知识点；关联与判定正在后台计算"
+            )[:250]
+            db.commit()
+            _spawn_post_process(file_id, user_id, saved_nodes)
+            logger.info(f"File {file_record.name}: {len(saved_nodes)} nodes, "
+                        f"关联与判定转后台")
+            return
+
         # 自动推理关联（四维加权，其中 γ 维直接读知识库桥接）
         if saved_nodes:
             from app.services.inference import infer_links_for_new_file
@@ -231,6 +246,40 @@ def parse_and_extract(file_id: int, user_id: int = 1):
             db.commit()
     finally:
         db.close()
+
+
+def _spawn_post_process(file_id: int, user_id: int, saved_nodes: List[Dict]) -> None:
+    """大文件的后台补齐：关联推理 + 候选判定。
+
+    独立线程 + 独立 Session，不阻塞上传；失败只记日志 ——
+    文件此时已经是 done，不能因为补齐失败把状态回退成 error。
+    """
+    import threading
+
+    def _worker():
+        from app.database import SessionLocal
+        db = SessionLocal()
+        try:
+            from app.models.models import File
+            from app.services.inference import infer_links_for_new_file
+
+            infer_links_for_new_file(file_id, user_id, db)
+            stats = create_candidates_and_verify(db, file_id, user_id, saved_nodes)
+            logger.info(f"后台补齐完成 file {file_id}: {stats}")
+
+            record = db.query(File).filter_by(id=file_id).first()
+            if record:
+                record.parse_note = (
+                    f"解析出 {stats['total']} 个知识点：自动采纳 {stats['accept']}、"
+                    f"待审 {stats['pending']}、驳回 {stats['reject']}"
+                )[:250]
+                db.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"后台补齐失败 file {file_id}: {exc}")
+        finally:
+            db.close()
+
+    threading.Thread(target=_worker, name=f"post-parse-{file_id}", daemon=True).start()
 
 
 def create_candidates_and_verify(db, file_id: int, user_id: int, saved_nodes: List[Dict]) -> Dict:
@@ -322,6 +371,52 @@ _EN_SUFFIX = ["架构", "技术", "模型", "机制", "方法", "算法", "框�
 def _clean_heading(heading: str) -> str:
     """清洗章节标题：去掉编号前缀与空白（「一、基础概念辨析」→「基础概念辨析」）"""
     return _NUM_PREFIX.sub("", (heading or "").strip().lstrip("#").strip()).strip(" ，,。:：.、")
+
+
+_HEADING_STOPWORDS = {"目录", "前言", "简介", "说明", "概述", "总结", "参考", "附录",
+                      "背景", "正文", "结语"}
+
+
+def _usable_heading(name: str) -> bool:
+    """小节标题能否直接作为知识点名。
+
+    Markdown 的 `###` 标题本身就是作者写下的知识点名，比从正文首句猜主语可靠；
+    只有过短、过长、整句或通用章节词才回退到正文抽取。
+    """
+    if not name or not (2 <= len(name) <= 40):
+        return False
+    if name in _HEADING_STOPWORDS:
+        return False
+    if re.search(r"[。；！？;!?]", name):
+        return False
+    return bool(re.search(r"[\u4e00-\u9fa5A-Za-z0-9]", name))
+
+
+def _char_bigrams(text: str) -> set:
+    clean = re.sub(r"\s+", "", (text or "").lower())
+    return {clean[i:i + 2] for i in range(len(clean) - 1)} if len(clean) >= 2 else set()
+
+
+def _shares_fragment(heading: str, entity: str) -> bool:
+    """标题与正文主语是否有词面重叠。
+
+    用于区分两种小节：
+      `### 前端工程` + 「Vue 的学习曲线较平缓」 —— 正文讲的是 Vue，标题只是章节名，
+                                                用标题会丢掉真正的主语；
+      `### no-cache 与 no-store` + 「no-cache 并不意味着不缓存」 —— 正文在解释标题本身。
+    """
+    return bool(_char_bigrams(heading) & _char_bigrams(entity))
+
+
+def _heading_tail_leads(heading: str, body: str) -> bool:
+    """标题末尾的核心片段是否出现在正文开头。
+
+    覆盖「为什么数据库索引选择 B+ 树」这类标题：正文以「B+ 树」开头，
+    但主语抽取会把 `B+` 剥掉，光看 bigram 重叠对不上。
+    """
+    tail = re.sub(r"[\s的与和及、,:：]", "", heading or "")[-3:]
+    body_flat = re.sub(r"\s+", "", body or "")[:16]
+    return bool(tail) and tail in body_flat
 
 
 def _first_verb_pos(text: str) -> int:
@@ -463,6 +558,7 @@ def extract_nodes_from_text(text: str, file_id: int, user_id: int,
 
     current_heading = ""
     current_section = ""
+    heading_pending = False   # 标题已记下、还没产出节点
 
     for i, line in enumerate(lines):
         stripped = line.strip()
@@ -476,6 +572,7 @@ def extract_nodes_from_text(text: str, file_id: int, user_id: int,
             continue
         if role == "heading":
             current_heading = _clean_heading(stripped)
+            heading_pending = bool(current_heading)
             continue
 
         # 分类句子
@@ -484,8 +581,23 @@ def extract_nodes_from_text(text: str, file_id: int, user_id: int,
         if sent_type == "meta":
             continue
 
-        # 提取实体（主语优先）；切不出知识点名称的行直接丢弃
-        entity = extract_entity(stripped)
+        # 实体：标题与正文主语有词面重叠时用标题（作者写的小节名更规范），
+        # 否则保留正文主语 —— 「前端工程」下讲 Vue 时不该被标题覆盖。
+        # 正文抽不出主语则整段丢弃，不拿标题造空壳。
+        body_entity = extract_entity(stripped)
+        # 大写缩写兜底常截出 ET 这种碎片；短正文配长标题时正文多是摘要开头
+        weak_body = bool(body_entity) and (
+            re.fullmatch(r"[A-Z]{2,10}\d?", body_entity) is not None
+            or (len(current_heading) >= 6 and len(body_entity) <= 4)
+        )
+        use_heading = bool(
+            heading_pending and _usable_heading(current_heading) and body_entity
+            and (weak_body
+                 or _shares_fragment(current_heading, body_entity)
+                 or _heading_tail_leads(current_heading, stripped))
+        )
+        heading_pending = False   # 标题在第一条正文处结算，不留给后续段落
+        entity = current_heading if use_heading else body_entity
         if not entity:
             continue
         keywords = extract_keywords(stripped)
@@ -571,6 +683,9 @@ def merge_same_entity(nodes: List[Dict]) -> List[Dict]:
 def classify_sentence(text: str) -> str:
     """句子分类：knowledge/question/thought/example/meta"""
     if re.match(r'^[#\-\*>\d]+', text) or re.match(r'^\d{4}[年/-]', text):
+        return "meta"
+    # 文档导语/元信息（「本文件由…整理」「本文档说明…」）：不是知识点
+    if re.match(r'^本(文件|文档|页|报告|文)(由|的|主要|是|介绍|说明|用于)', text):
         return "meta"
     # 中文编号小节标题（「一、基础概念辨析」「（2）实现」「3. Tools 工具模块」）：
     # 与 `# 标题` 同性质，属于结构而非知识点 —— 否则会产出名为「一、基础概念辨析」的假知识点

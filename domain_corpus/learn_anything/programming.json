@@ -1,0 +1,85 @@
+{
+  "topic": "programming",
+  "source": "https://learn-anything.xyz/programming",
+  "fetched_at": "2026-10-29T17:10:34",
+  "items": [
+    {
+      "title": "Being A Developer After 40",
+      "domain": "medium.freecodecamp.org/being-a-developer-after-40-3c5dd112210c",
+      "url": "https://medium.freecodecamp.org/being-a-developer-after-40-3c5dd112210c",
+      "title_zh": "40 岁之后继续做开发者"
+    },
+    {
+      "title": "Portability matters",
+      "domain": "drewdevault.com/2017/11/13/Portability-matters.html",
+      "url": "https://drewdevault.com/2017/11/13/Portability-matters.html",
+      "title_zh": "可移植性很重要"
+    },
+    {
+      "title": "Advice to the newish programmer",
+      "domain": "macwright.org/2018/02/08/advice-to-the-newish-programmer.html",
+      "url": "https://macwright.org/2018/02/08/advice-to-the-newish-programmer.html",
+      "title_zh": "给新手程序员的建议"
+    },
+    {
+      "title": "Tips for reading new codebases",
+      "domain": "blog.safia.rocks/post/170269021619/tips-for-reading-new-codebases",
+      "url": "https://blog.safia.rocks/post/170269021619/tips-for-reading-new-codebases",
+      "title_zh": "阅读陌生代码库的技巧"
+    },
+    {
+      "title": "Awesome Cold Showers",
+      "domain": "github.com/hwayne/awesome-cold-showers",
+      "url": "https://github.com/hwayne/awesome-cold-showers",
+      "title_zh": "几盆冷水：写给过度自信的工程师"
+    },
+    {
+      "title": "Fish Design Principles",
+      "domain": "fishshell.com/docs/current/design.html",
+      "url": "https://fishshell.com/docs/current/design.html",
+      "title_zh": "Fish shell 的设计原则"
+    },
+    {
+      "title": "List of resources about programming practices for writing safety-critical software",
+      "domain": "github.com/stanislaw/awesome-safety-critical",
+      "url": "https://github.com/stanislaw/awesome-safety-critical",
+      "title_zh": "安全关键软件的编程实践资源清单"
+    },
+    {
+      "title": "In Pursuit of Production Minimalism",
+      "domain": "brandur.org/minimalism",
+      "url": "https://brandur.org/minimalism",
+      "title_zh": "追求生产环境的极简主义"
+    },
+    {
+      "title": "Mostly avoid unit tests",
+      "domain": "lobste.rs/s/trrold/mostly_avoid_unit_tests",
+      "url": "https://lobste.rs/s/trrold/mostly_avoid_unit_tests",
+      "title_zh": "尽量少写单元测试"
+    },
+    {
+      "title": "In search of software perfection - Xavier Leroy",
+      "domain": "youtube.com/watch?v=lAU5hx_3xRc",
+      "url": "https://youtube.com/watch?v=lAU5hx_3xRc",
+      "title_zh": "追寻软件的完美 — Xavier Leroy"
+    },
+    {
+      "title": "Ask HN: What's the largest amount of bad code you have ever seen work?",
+      "domain": "news.ycombinator.com/item?id=18442637",
+      "url": "https://news.ycombinator.com/item?id=18442637",
+      "title_zh": "HN 提问：你见过能正常跑的最大一坨烂代码有多大？"
+    },
+    {
+      "title": "HN: Please do not attempt to simplify this code",
+      "domain": "news.ycombinator.com/item?id=18772873",
+      "url": "https://news.ycombinator.com/item?id=18772873",
+      "title_zh": "HN：请不要试图简化这段代码"
+    },
+    {
+      "title": "HN: Minimalism: Practical Guide to Writing Less Code",
+      "domain": "news.ycombinator.com/item?id=18830732",
+      "url": "https://news.ycombinator.com/item?id=18830732",
+      "title_zh": "HN：极简主义——少写代码的实用指南"
+    }
+  ]
+}

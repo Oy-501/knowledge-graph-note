@@ -41,11 +41,21 @@ def _bigrams(text: str) -> set:
 
 
 def _def_similarity(a: str, b: str) -> float:
-    """比较两段定义的相似度。"""
+    """定义相似度：字面二元组与语义向量取较大值。
+
+    中文同义改写（「多路平衡查找树」vs「平衡多路树」）字面重叠接近 0，
+    只看字面会把正确描述判成「差异较大」并扣分。
+    """
     ga, gb = _bigrams(a), _bigrams(b)
-    if not ga or not gb:
-        return 0.0
-    return len(ga & gb) / len(ga | gb)
+    lexical = len(ga & gb) / len(ga | gb) if ga and gb else 0.0
+    try:
+        from app.services import vector_engine
+        vec_a = vector_engine.encode_cached(a)
+        vec_b = vector_engine.encode_cached(b)
+        semantic = sum(x * y for x, y in zip(vec_a, vec_b))   # 编码已归一化
+    except Exception:
+        semantic = 0.0
+    return max(lexical, semantic)
 
 
 class Verdict:
@@ -110,7 +120,8 @@ class Verdict:
 
 
 def verify_candidate(db, candidate, kb=None, use_web: Optional[bool] = None,
-                     web_budget: Optional[Dict] = None) -> Dict:
+                     web_budget: Optional[Dict] = None,
+                     web_result: Optional[Dict] = None) -> Dict:
     """对单条候选知识点做智能判定，返回 {score, decision, reason, evidence, web_status}"""
     from app.services.kb_index import load_index, normalize_key
 
@@ -155,9 +166,12 @@ def verify_candidate(db, candidate, kb=None, use_web: Optional[bool] = None,
               source="knowledge_base")
         kb_def = entry.get("definition") or ""
         sim = _def_similarity(kb_def, description)
-        if sim >= 0.25:
+        # 阈值按语义向量重新标定（实测：同义改写 0.86 / 相近概念 0.73 /
+        # 同域不同 0.61 / 无关 0.19）。取 0.80 只认「说的是同一件事」，
+        # 字面时代的 0.25 会把相近概念也算一致，冲突检测就形同虚设。
+        if sim >= 0.80:
             v.add("kb", 0.15, f"描述与知识库定义一致（相似度 {sim:.2f}）", source="knowledge_base")
-        elif kb_def and description and sim < 0.12:
+        elif kb_def and description and sim < 0.35:
             v.conflict = True
             v.add("kb", -0.25,
                   f"描述与知识库定义差异较大（相似度 {sim:.2f}），需人工确认以哪个为准",
@@ -203,18 +217,20 @@ def verify_candidate(db, candidate, kb=None, use_web: Optional[bool] = None,
                            "detail": "本批联网预算已用完，未做联网校验", "source": "web", "url": ""})
     else:
         try:
-            from app.services import web_probe
-            if web_budget is not None:
-                web_budget["left"] = web_budget.get("left", 0) - 1
-            # 引号强制精确短语：中文长词不加引号会被搜索引擎拆成泛词。
-            # 实测「检索增强生成」不加引号会退化成「检索」的通用结果。
-            safe_entity = (entity or "").replace('"', " ").strip()
-            query = f'"{safe_entity}"'
-            if candidate.domain and candidate.domain not in ("general", "通用"):
-                query += f" {candidate.domain}"
-            result = web_probe.search_web(
-                query, timeout=settings.VERDICT_WEB_TIMEOUT,
-                cache_ttl=settings.VERDICT_WEB_CACHE_TTL)
+            if web_result is not None:
+                result = web_result       # 批量判定已并发预取，这里不再发请求
+            else:
+                from app.services import web_probe
+                if web_budget is not None:
+                    web_budget["left"] = web_budget.get("left", 0) - 1
+                # 引号强制精确短语：中文长词不加引号会被搜索引擎拆成泛词。
+                # 实测「检索增强生成」不加引号会退化成「检索」的通用结果。
+                # 对比型标题（A 与 B）由 search_concept 拆成两个概念分别检索。
+                safe_entity = (entity or "").replace('"', " ").strip()
+                result = web_probe.search_concept(
+                    safe_entity, domain=candidate.domain or "",
+                    timeout=settings.VERDICT_WEB_TIMEOUT,
+                    cache_ttl=settings.VERDICT_WEB_CACHE_TTL)
             if not result.get("online"):
                 v.web_status = "unavailable"
                 v.evidence.append({
@@ -224,10 +240,15 @@ def verify_candidate(db, candidate, kb=None, use_web: Optional[bool] = None,
                 })
             else:
                 v.web_status = "ok"
-                from app.services import web_existence
+                from app.services import web_existence, web_probe
+                # 搜索源被限流时会返回首页推荐（测速站、热点新闻），
+                # 这些跟知识点无关，必须过滤掉，否则「判断来源」会指向垃圾页。
+                clean = [s for s in (result.get("results") or [])
+                         if web_probe.matches_entity(entity, s)]
+                result = {**result, "results": clean}
                 existence = web_existence.check_existence(entity, description, result)
                 status = existence["status"]
-                top_url = (result.get("results") or [{}])[0].get("url", "")
+                top_url = (clean or [{}])[0].get("url", "")
 
                 # 权重沿用原来的三档（0.15 / 0.08 / 0.0），保持权重表同步；
                 # 存在性状态另记一条 weight=0 的结构化证据。
@@ -251,13 +272,25 @@ def verify_candidate(db, candidate, kb=None, use_web: Optional[bool] = None,
                 v.evidence.append({
                     "type": "web-existence", "weight": 0,
                     "positive": status != "contradicted",
-                    "detail": (f"存在性判定：{status}（独立来源 "
-                               f"{len(existence['domains'])} 个，一致性 "
+                    "detail": (f"存在性判定：{status}（独立域名 "
+                               f"{len(existence.get('votes') or [])} 个，"
+                               f"{existence.get('support', 0):.2f} 票，一致性 "
                                f"{existence['consistency']:.2f}）"),
                     "source": result["provider"], "url": top_url,
                 })
-                # 命中样例留证，便于人工复核
-                for s in (result.get("results") or [])[:3]:
+                # 域名级票明细：下游（真值发现、来源面板）按域名计票，
+                # 而不是把一次检索压成一个 web 源
+                if existence.get("votes"):
+                    v.evidence.append({
+                        "type": "web-votes", "weight": 0, "positive": True,
+                        "detail": "；".join(
+                            f"{x['domain']}({x['tier']},{x['weight'] / 10:.1f}票)"
+                            for x in existence["votes"][:6]),
+                        "source": result["provider"], "url": top_url,
+                        "votes": existence["votes"],
+                    })
+                # 命中样例留证，便于人工复核（只留与知识点相关的）
+                for s in (result.get("results") or [])[:5]:
                     v.evidence.append({
                         "type": "web-sample", "weight": 0, "positive": True,
                         "detail": (s.get("snippet") or s.get("title") or "")[:200],
@@ -274,6 +307,50 @@ def verify_candidate(db, candidate, kb=None, use_web: Optional[bool] = None,
 # ---------------------------------------------------------------- 落库与审计
 
 
+def _guard_verdict(verdict: Dict) -> Dict:
+    """结论自检：分数与结论矛盾、有冲突却采纳时降级为待审。
+
+    这是防「输出错误」的最后一道闸：判定链路任何一处改坏，
+    都不会把互相矛盾的结论写进候选池，更不会自动入知识库。
+    """
+    score = float(verdict.get("score") or 0)
+    decision = verdict.get("decision") or "pending"
+    notes = []
+
+    if score < 0 or score > 1:
+        score = max(0.0, min(1.0, score))
+        notes.append("分数越界，已截断到 0~1")
+
+    if decision == "accept":
+        if score < settings.VERDICT_AUTO_ACCEPT:
+            decision = "pending"
+            notes.append(f"分数 {score:.2f} 低于自动采纳阈值 {settings.VERDICT_AUTO_ACCEPT}")
+        elif verdict.get("conflict"):
+            decision = "pending"
+            notes.append("存在冲突证据")
+    elif decision == "reject":
+        if score >= settings.VERDICT_REJECT_BELOW:
+            decision = "pending"
+            notes.append(f"分数 {score:.2f} 高于驳回阈值 {settings.VERDICT_REJECT_BELOW}")
+    elif decision != "pending":
+        notes.append(f"未知结论「{decision}」")
+        decision = "pending"
+
+    if not notes:
+        return verdict
+
+    return {
+        **verdict,
+        "score": score,
+        "decision": decision,
+        "reason": (verdict.get("reason") or "") + "｜自检：" + "；".join(notes),
+        "evidence": (verdict.get("evidence") or []) + [{
+            "type": "guard", "weight": 0, "positive": False,
+            "detail": "；".join(notes), "source": "self-check", "url": "",
+        }],
+    }
+
+
 def apply_verdict(db, candidate, verdict: Dict, auto_ingest: bool = True,
                   actor: str = "system", write_audit: bool = True,
                   defer_relations: bool = False) -> Dict:
@@ -284,6 +361,8 @@ def apply_verdict(db, candidate, verdict: Dict, auto_ingest: bool = True,
     """
     from datetime import datetime
     from app.models.models import KnowledgeBase, KnowledgeCandidate
+
+    verdict = _guard_verdict(verdict)   # 互相矛盾的结论在落库前先降级
 
     candidate.verdict_score = verdict["score"]
     candidate.verdict_decision = verdict["decision"]
@@ -399,6 +478,45 @@ def _merge_twins(db, candidate, kb_entry_id: Optional[int]) -> int:
         return 0
 
 
+def _prefetch_web(candidates: List, use_web: Optional[bool] = None,
+                  max_workers: int = 4) -> Dict[int, Dict]:
+    """并发预取联网证据。
+
+    批量判定时联网是长尾：11 条串行、单条最多 6 秒，会排到一分钟。
+    这里只并发网络请求（纯 IO），判定与落库仍在主线程串行，
+    避免多个线程共享同一个 SQLAlchemy Session。
+    """
+    want = settings.VERDICT_USE_WEB if use_web is None else use_web
+    if not want or not candidates:
+        return {}
+
+    from concurrent.futures import ThreadPoolExecutor
+    from app.services import web_probe
+
+    limit = max(0, settings.VERDICT_MAX_WEB_CALLS)
+    picked = [c for c in candidates[:limit] if c.id]
+
+    def one(c):
+        entity = (c.entity or c.title or "").replace('"', " ").strip()
+        try:
+            return c.id, web_probe.search_concept(
+                entity, domain=c.domain or "",
+                timeout=settings.VERDICT_WEB_TIMEOUT,
+                cache_ttl=settings.VERDICT_WEB_CACHE_TTL)
+        except Exception as exc:   # 单条失败不影响整批
+            logger.debug(f"web prefetch failed for candidate {c.id}: {exc}")
+            return c.id, None
+
+    out: Dict[int, Dict] = {}
+    if not picked:
+        return out
+    with ThreadPoolExecutor(max_workers=min(max_workers, len(picked))) as pool:
+        for cid, res in pool.map(one, picked):
+            if res is not None:
+                out[cid] = res
+    return out
+
+
 def verify_batch(db, candidates: List, use_web: Optional[bool] = None,
                  auto_ingest: bool = True, skip_human: bool = True) -> Dict:
     """批量判定（含联网预算控制，避免整批卡在网络上）
@@ -413,6 +531,8 @@ def verify_batch(db, candidates: List, use_web: Optional[bool] = None,
     stats = {"total": len(candidates), "accept": 0, "reject": 0, "pending": 0,
              "web_ok": 0, "web_unavailable": 0, "skipped_human": 0, "skipped_merged": 0}
     ingested_any = False
+
+    todo = []
     for c in candidates:
         if skip_human and getattr(c, "verdict_stage", None) == "human":
             stats["skipped_human"] += 1
@@ -420,7 +540,14 @@ def verify_batch(db, candidates: List, use_web: Optional[bool] = None,
         if getattr(c, "status", None) == "merged":
             stats["skipped_merged"] += 1
             continue
-        verdict = verify_candidate(db, c, kb=kb, use_web=use_web, web_budget=budget)
+        todo.append(c)
+
+    # 联网先并发取回，再串行判定落库：网络是唯一的长尾
+    prefetched = _prefetch_web(todo, use_web=use_web)
+
+    for c in todo:
+        verdict = verify_candidate(db, c, kb=kb, use_web=use_web, web_budget=budget,
+                                   web_result=prefetched.get(c.id))
         res = apply_verdict(db, c, verdict, auto_ingest=auto_ingest,
                             defer_relations=True)
         stats[verdict["decision"]] = stats.get(verdict["decision"], 0) + 1

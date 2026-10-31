@@ -73,6 +73,9 @@ class Settings(BaseSettings):
     MAX_LINK_CANDIDATES: int = 300     # 每个新节点最多比较的既有节点数（超出则按关键词交集剪枝）
     LINK_PAIR_BUDGET: int = 120000     # 单次关联推理的最大节点对数
     LINK_TIME_BUDGET_S: float = 20.0   # 单次关联推理的时间上限（秒）
+    # 节点数超过该值时，解析完成即置 done，关联推理与候选判定转后台补齐。
+    # 600 节点实测：解析+向量 14s、推理 21s、判定 19s —— 后两步不阻塞用户进图谱。
+    PARSE_ASYNC_POST_THRESHOLD: int = 100
     MAX_LINKS_PER_NODE: int = 8        # 每个新节点最多保留的连线数（按分数取前 N，避免连线爆炸）
     LINK_OUTPUT_LIMIT: int = 4000      # 单次关联推理最多产出的连线数
     MAX_NODES_FOR_KB_LINK: int = 4000  # 知识锚定连线最多处理的节点数
@@ -97,6 +100,12 @@ class Settings(BaseSettings):
     VERDICT_WEB_EXISTENCE_FLOOR: float = 0.35
     VERDICT_WEB_MIN_DOMAINS: int = 2           # 至少几个独立域名才算多源
     VERDICT_WEB_DESC_CONSISTENCY: float = 0.25 # 描述与检索摘要的最低一致度
+
+    # ---- 联网搜索源（可选）----
+    # Bing Web Search API（Azure 免费层 F0：每月 1000 次）。本机网络环境下，
+    # 这是唯一可达的 key 化搜索 API（其余 Google/Brave/SerpAPI/SearXNG 均不通）。
+    # 留空则自动退回国内搜索引擎 HTML 抓取。
+    BING_SEARCH_API_KEY: str = ""
 
     # ---- 认证与会话 ----
     SESSION_TTL_DAYS: int = 7           # 会话有效期（天）；每次鉴权命中滑动续期

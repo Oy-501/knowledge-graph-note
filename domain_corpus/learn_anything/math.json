@@ -1,0 +1,79 @@
+{
+  "topic": "math",
+  "source": "https://learn-anything.xyz/math",
+  "fetched_at": "2026-10-29T17:11:01",
+  "items": [
+    {
+      "title": "So you want to study mathematics",
+      "domain": "susanrigetti.com/math",
+      "url": "https://susanrigetti.com/math",
+      "title_zh": "你想学数学吗"
+    },
+    {
+      "title": "Blazing fast math rendering on the web",
+      "domain": "bollu.github.io",
+      "url": "https://bollu.github.io/",
+      "title_zh": "Web 上的极速数学公式渲染"
+    },
+    {
+      "title": "What does it feel like to invent math?",
+      "domain": "youtube.com/watch?v=XFDM1ip5HdU",
+      "url": "https://youtube.com/watch?v=XFDM1ip5HdU",
+      "title_zh": "发明数学是什么感觉？"
+    },
+    {
+      "title": "How to Read Mathematics",
+      "domain": "people.vcu.edu/~dcranston/490/handouts/math-read.html",
+      "url": "https://people.vcu.edu/~dcranston/490/handouts/math-read.html",
+      "title_zh": "如何阅读数学"
+    },
+    {
+      "title": "The Banach–Tarski Paradox",
+      "domain": "youtube.com/watch?v=s86-Z-CbaHA",
+      "url": "https://youtube.com/watch?v=s86-Z-CbaHA",
+      "title_zh": "巴拿赫–塔斯基悖论"
+    },
+    {
+      "title": "Making things with maths",
+      "domain": "youtube.com/watch?v=Zkx1aKv2z8o",
+      "url": "https://youtube.com/watch?v=Zkx1aKv2z8o",
+      "title_zh": "用数学做出东西"
+    },
+    {
+      "title": "The Map of Mathematics",
+      "domain": "youtube.com/watch?v=OmJ-4B-mS-Y&",
+      "url": "https://youtube.com/watch?v=OmJ-4B-mS-Y&",
+      "title_zh": "数学地图"
+    },
+    {
+      "title": "How to self learn math",
+      "domain": "news.ycombinator.com/item?id=16562173",
+      "url": "https://news.ycombinator.com/item?id=16562173",
+      "title_zh": "如何自学数学"
+    },
+    {
+      "title": "Mathematics for Computer Science: Readings",
+      "domain": "news.ycombinator.com/item?id=16607308",
+      "url": "https://news.ycombinator.com/item?id=16607308",
+      "title_zh": "计算机科学中的数学：阅读材料"
+    },
+    {
+      "title": "mathematicalmonk YouTube playlists",
+      "domain": "youtube.com/user/mathematicalmonk/playlists",
+      "url": "https://youtube.com/user/mathematicalmonk/playlists",
+      "title_zh": "mathematicalmonk 的 YouTube 播放列表"
+    },
+    {
+      "title": "How Grothendieck Simplified Algebraic Geometry",
+      "domain": "ams.org/publications/journals/notices/201603/rnoti-p256.pdf",
+      "url": "https://ams.org/publications/journals/notices/201603/rnoti-p256.pdf",
+      "title_zh": "Grothendieck 如何简化代数几何"
+    },
+    {
+      "title": "Ask HN: How do I learn math/physics in my thirties?",
+      "domain": "news.ycombinator.com/item?id=17075261",
+      "url": "https://news.ycombinator.com/item?id=17075261",
+      "title_zh": "HN 提问：三十多岁如何学数学和物理？"
+    }
+  ]
+}

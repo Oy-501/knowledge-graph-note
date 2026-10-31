@@ -1,0 +1,540 @@
+[
+  {
+    "id": 2,
+    "entity": "基础概念辨析",
+    "description": "Agent：闭环循环思考→行动→观察→反思，自主决定要不要调用工具，支持长任务。",
+    "stored_score": 0.43,
+    "scores": {
+      "A": 0.43,
+      "B": 0.551,
+      "C": 0.43,
+      "D": 0.551
+    },
+    "decisions": {
+      "A": false,
+      "B": false,
+      "C": false,
+      "D": false
+    },
+    "web_status": "unavailable",
+    "domain_count": 0,
+    "consistency": 0.0,
+    "evidence_types": [
+      "graph",
+      "kb",
+      "rule",
+      "web",
+      "web-existence"
+    ]
+  },
+  {
+    "id": 4,
+    "entity": "Memory 记忆模块",
+    "description": "放在 Prompt 上下文窗口，保存当前任务中间步骤、思考过程、工具返回结果；窗口满了需要做摘要、截断、压缩。",
+    "stored_score": 0.43,
+    "scores": {
+      "A": 0.43,
+      "B": 0.551,
+      "C": 0.43,
+      "D": 0.551
+    },
+    "decisions": {
+      "A": false,
+      "B": false,
+      "C": false,
+      "D": false
+    },
+    "web_status": "unverified",
+    "domain_count": 0,
+    "consistency": 0.0,
+    "evidence_types": [
+      "graph",
+      "kb",
+      "rule",
+      "web",
+      "web-existence",
+      "web-sample"
+    ]
+  },
+  {
+    "id": 5,
+    "entity": "Planning 规划推理模块",
+    "description": "负责把大任务拆解成小的子任务，动态调整方案GitHub",
+    "stored_score": 0.53,
+    "scores": {
+      "A": 0.53,
+      "B": 0.679,
+      "C": 0.53,
+      "D": 0.679
+    },
+    "decisions": {
+      "A": false,
+      "B": false,
+      "C": false,
+      "D": false
+    },
+    "web_status": "unverified",
+    "domain_count": 0,
+    "consistency": 0.0,
+    "evidence_types": [
+      "graph",
+      "kb",
+      "rule",
+      "web",
+      "web-existence"
+    ]
+  },
+  {
+    "id": 6,
+    "entity": "API",
+    "description": "Agent 和外部世界交互的手段：搜索、数据库查询、API 调用、代码执行、计算器、文件读写。",
+    "stored_score": 0.56,
+    "scores": {
+      "A": 0.56,
+      "B": 0.718,
+      "C": 0.56,
+      "D": 0.718
+    },
+    "decisions": {
+      "A": false,
+      "B": false,
+      "C": false,
+      "D": true
+    },
+    "web_status": "probable",
+    "domain_count": 5,
+    "consistency": 0.136,
+    "evidence_types": [
+      "graph",
+      "kb",
+      "rule",
+      "web",
+      "web-existence",
+      "web-sample"
+    ]
+  },
+  {
+    "id": 7,
+    "entity": "Tools 工具模块",
+    "description": "工具调用常见故障：参数缺失、格式错误、接口超时、重复调用工具、无意义循环调用。",
+    "stored_score": 0.43,
+    "scores": {
+      "A": 0.43,
+      "B": 0.551,
+      "C": 0.43,
+      "D": 0.551
+    },
+    "decisions": {
+      "A": false,
+      "B": false,
+      "C": false,
+      "D": false
+    },
+    "web_status": "unavailable",
+    "domain_count": 0,
+    "consistency": 0.0,
+    "evidence_types": [
+      "graph",
+      "kb",
+      "rule",
+      "web",
+      "web-existence"
+    ]
+  },
+  {
+    "id": 8,
+    "entity": "Reflection 反思模块",
+    "description": "执行完子任务之后自我校验结果，判断是否出错，是否需要重新执行，修正计划。",
+    "stored_score": 0.38,
+    "scores": {
+      "A": 0.38,
+      "B": 0.487,
+      "C": 0.38,
+      "D": 0.487
+    },
+    "decisions": {
+      "A": false,
+      "B": false,
+      "C": false,
+      "D": false
+    },
+    "web_status": "unverified",
+    "domain_count": 0,
+    "consistency": 0.0,
+    "evidence_types": [
+      "graph",
+      "kb",
+      "rule",
+      "web",
+      "web-existence",
+      "web-sample"
+    ]
+  },
+  {
+    "id": 10,
+    "entity": "注入",
+    "description": "Prompt 注入、越权调用工具；遵循最小权限原则，输入输出做脱敏过滤。",
+    "stored_score": 0,
+    "scores": {
+      "A": 0,
+      "B": 0.0,
+      "C": 0,
+      "D": 0.0
+    },
+    "decisions": {
+      "A": false,
+      "B": false,
+      "C": false,
+      "D": false
+    },
+    "web_status": "probable",
+    "domain_count": 4,
+    "consistency": 0.059,
+    "evidence_types": [
+      "graph",
+      "kb",
+      "rule",
+      "web",
+      "web-sample"
+    ]
+  },
+  {
+    "id": 11,
+    "entity": "高频面试问答",
+    "description": "缺点：结果不可 100% 确定，有幻觉，成本高，存在循环风险，需要做大量容错。",
+    "stored_score": 0.48,
+    "scores": {
+      "A": 0.48,
+      "B": 0.615,
+      "C": 0.48,
+      "D": 0.615
+    },
+    "decisions": {
+      "A": false,
+      "B": false,
+      "C": false,
+      "D": false
+    },
+    "web_status": "unavailable",
+    "domain_count": 0,
+    "consistency": 0.0,
+    "evidence_types": [
+      "graph",
+      "kb",
+      "rule",
+      "web",
+      "web-existence"
+    ]
+  },
+  {
+    "id": 36,
+    "entity": "学习联系欢迎",
+    "description": "学习联系欢迎，如何创建关联",
+    "stored_score": 0.28,
+    "scores": {
+      "A": 0.28,
+      "B": 0.359,
+      "C": 0.28,
+      "D": 0.359
+    },
+    "decisions": {
+      "A": false,
+      "B": false,
+      "C": false,
+      "D": false
+    },
+    "web_status": "unavailable",
+    "domain_count": 0,
+    "consistency": 0.0,
+    "evidence_types": [
+      "graph",
+      "kb",
+      "rule",
+      "web",
+      "web-existence",
+      "web-sample"
+    ]
+  },
+  {
+    "id": 59,
+    "entity": "Cache-Control max-age",
+    "description": "Cache-Control 的 max-age 指定响应的新鲜期，单位为秒。在新鲜期内浏览器可以直接复用本地副本，不再向服务器发起请求。",
+    "stored_score": 0.38,
+    "scores": {
+      "A": 0.38,
+      "B": 0.487,
+      "C": 0.38,
+      "D": 0.487
+    },
+    "decisions": {
+      "A": false,
+      "B": false,
+      "C": false,
+      "D": false
+    },
+    "web_status": "unavailable",
+    "domain_count": 0,
+    "consistency": 0.0,
+    "evidence_types": [
+      "graph",
+      "kb",
+      "rule",
+      "web",
+      "web-existence"
+    ]
+  },
+  {
+    "id": 60,
+    "entity": "no-cache 与 no-store",
+    "description": "no-cache 并不意味着不缓存，而是允许存储但每次使用前必须回源校验。no-store 才是完全禁止任何缓存，适用于包含敏感数据的响应。",
+    "stored_score": 0.38,
+    "scores": {
+      "A": 0.38,
+      "B": 0.487,
+      "C": 0.38,
+      "D": 0.487
+    },
+    "decisions": {
+      "A": false,
+      "B": false,
+      "C": false,
+      "D": false
+    },
+    "web_status": "unavailable",
+    "domain_count": 0,
+    "consistency": 0.0,
+    "evidence_types": [
+      "graph",
+      "kb",
+      "rule",
+      "web",
+      "web-existence"
+    ]
+  },
+  {
+    "id": 61,
+    "entity": "ETag 与 If-None-Match",
+    "description": "ETag 是响应体的内容指纹。缓存过期后客户端携带 If-None-Match 发起条件请求，内容未变更时服务端返回 304 且不传输响应体。",
+    "stored_score": 0.38,
+    "scores": {
+      "A": 0.38,
+      "B": 0.487,
+      "C": 0.38,
+      "D": 0.487
+    },
+    "decisions": {
+      "A": false,
+      "B": false,
+      "C": false,
+      "D": false
+    },
+    "web_status": "unverified",
+    "domain_count": 0,
+    "consistency": 0.0,
+    "evidence_types": [
+      "graph",
+      "kb",
+      "rule",
+      "web",
+      "web-existence"
+    ]
+  },
+  {
+    "id": 62,
+    "entity": "Last-Modified 与 If-Modified-Since",
+    "description": "Last-Modified 用资源的最后修改时间做校验，精度只到秒，同一秒内的两次修改无法区分，因此正确性要求高时优先使用 ETag。",
+    "stored_score": 0.48,
+    "scores": {
+      "A": 0.48,
+      "B": 0.615,
+      "C": 0.48,
+      "D": 0.615
+    },
+    "decisions": {
+      "A": false,
+      "B": false,
+      "C": false,
+      "D": false
+    },
+    "web_status": "unavailable",
+    "domain_count": 0,
+    "consistency": 0.0,
+    "evidence_types": [
+      "graph",
+      "kb",
+      "rule",
+      "web",
+      "web-existence"
+    ]
+  },
+  {
+    "id": 63,
+    "entity": "哈希文件名与 immutable",
+    "description": "构建产物使用内容哈希命名时，可以配合 immutable 与一年的 max-age 长期缓存。内容变化会改变文件名，因此不存在读到旧版本的问题。",
+    "stored_score": 0.38,
+    "scores": {
+      "A": 0.38,
+      "B": 0.487,
+      "C": 0.38,
+      "D": 0.487
+    },
+    "decisions": {
+      "A": false,
+      "B": false,
+      "C": false,
+      "D": false
+    },
+    "web_status": "unavailable",
+    "domain_count": 0,
+    "consistency": 0.0,
+    "evidence_types": [
+      "graph",
+      "kb",
+      "rule",
+      "web",
+      "web-existence"
+    ]
+  },
+  {
+    "id": 65,
+    "entity": "为什么数据库索引选择 B+ 树",
+    "description": "B+ 树的节点与磁盘页对齐，扇出度高，树高通常只有三到四层，一次查询只需要少量磁盘 I/O。叶子链表让范围查询与排序可以顺序扫描。",
+    "stored_score": 0.58,
+    "scores": {
+      "A": 0.58,
+      "B": 0.744,
+      "C": 0.58,
+      "D": 0.744
+    },
+    "decisions": {
+      "A": false,
+      "B": false,
+      "C": false,
+      "D": true
+    },
+    "web_status": "unavailable",
+    "domain_count": 0,
+    "consistency": 0.0,
+    "evidence_types": [
+      "graph",
+      "kb",
+      "rule",
+      "web",
+      "web-existence"
+    ]
+  },
+  {
+    "id": 66,
+    "entity": "聚簇索引与回表",
+    "description": "聚簇索引的叶子节点直接存放整行数据，一张表只能有一个。二级索引的叶子只存索引键和主键，查到主键后还需要回表读取整行。",
+    "stored_score": 0.48,
+    "scores": {
+      "A": 0.48,
+      "B": 0.615,
+      "C": 0.48,
+      "D": 0.615
+    },
+    "decisions": {
+      "A": false,
+      "B": false,
+      "C": false,
+      "D": false
+    },
+    "web_status": "unavailable",
+    "domain_count": 0,
+    "consistency": 0.0,
+    "evidence_types": [
+      "graph",
+      "kb",
+      "rule",
+      "web",
+      "web-existence"
+    ]
+  },
+  {
+    "id": 67,
+    "entity": "JWT 无状态认证",
+    "description": "JWT 是自包含的签名令牌，声明中带有用户标识与过期时间，服务端验证签名即可确认身份，不需要查询会话存储。",
+    "stored_score": 0.58,
+    "scores": {
+      "A": 0.58,
+      "B": 0.744,
+      "C": 0.58,
+      "D": 0.744
+    },
+    "decisions": {
+      "A": false,
+      "B": false,
+      "C": false,
+      "D": true
+    },
+    "web_status": "unavailable",
+    "domain_count": 0,
+    "consistency": 0.0,
+    "evidence_types": [
+      "graph",
+      "kb",
+      "rule",
+      "web",
+      "web-existence"
+    ]
+  },
+  {
+    "id": 68,
+    "entity": "Session 与 JWT 的注销差异",
+    "description": "Session 由服务端保存状态，删除会话即可立即失效。JWT 在过期前难以撤销，通常需要短有效期配合刷新令牌轮换或黑名单机制。",
+    "stored_score": 0.48,
+    "scores": {
+      "A": 0.48,
+      "B": 0.615,
+      "C": 0.48,
+      "D": 0.615
+    },
+    "decisions": {
+      "A": false,
+      "B": false,
+      "C": false,
+      "D": false
+    },
+    "web_status": "unverified",
+    "domain_count": 0,
+    "consistency": 0.0,
+    "evidence_types": [
+      "graph",
+      "kb",
+      "rule",
+      "web",
+      "web-existence",
+      "web-sample"
+    ]
+  },
+  {
+    "id": 69,
+    "entity": "JWT 的存储位置风险",
+    "description": "把 JWT 放在 localStorage 会被页面脚本读取，一旦发生 XSS 即可被窃取。更稳妥的做法是存入 HttpOnly、Secure、SameSite 的 Cookie。",
+    "stored_score": 0.58,
+    "scores": {
+      "A": 0.58,
+      "B": 0.744,
+      "C": 0.58,
+      "D": 0.744
+    },
+    "decisions": {
+      "A": false,
+      "B": false,
+      "C": false,
+      "D": true
+    },
+    "web_status": "unavailable",
+    "domain_count": 0,
+    "consistency": 0.0,
+    "evidence_types": [
+      "graph",
+      "kb",
+      "rule",
+      "web",
+      "web-existence",
+      "web-sample"
+    ]
+  }
+]

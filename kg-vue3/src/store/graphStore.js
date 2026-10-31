@@ -82,6 +82,8 @@ export const useGraphStore = defineStore('graph', {
   state: () => ({
     nodes: [],
     links: [],
+    // 分享空间点击「在图谱中查看」时写入，画布 watch 到后打开详情抽屉
+    focusNodeId: null,
     busy: '',
     busyProgress: 0,
     version: 0,
@@ -236,6 +238,21 @@ export const useGraphStore = defineStore('graph', {
     }
   },
   actions: {
+    /** 请求画布只显示某个文件的知识体系（分享空间跳转时用） */
+    focusFile(fileId) {
+      this.graphFilters.folders = fileId ? [fileId] : []
+      this.version++
+      this.restartTick++
+    },
+    /** 请求画布聚焦某个节点（分享空间跳转图谱时用） */
+    focusNode(nodeId) {
+      this.focusNodeId = nodeId || null
+    },
+    /** 画布消费完聚焦请求后清空，避免重复打开 */
+    clearFocusNode() {
+      this.focusNodeId = null
+    },
+
     setGraphFilters(partial) {
       Object.assign(this.graphFilters, partial)
       this.version++

@@ -25,3 +25,7 @@ python-pptx==1.0.2
 python-docx==1.2.0
 # 密码哈希（Windows 有预编译 wheel，直接用 hashpw/checkpw，不引入 passlib）
 bcrypt==4.1.2
+
+# 离线翻译（MarianMT）：tokenizer 依赖 sentencepiece，sacremoses 做分词规整
+sentencepiece==0.2.2
+sacremoses==0.2.0

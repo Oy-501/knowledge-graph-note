@@ -93,15 +93,7 @@ export const useFileStore = defineStore('file', {
           try {
             const filesData = await fileAPI.list()
             if (filesData.files) {
-              this.uploadedFiles = filesData.files.map(f => ({
-                id: f.id,
-                name: f.name,
-                size: f.size || 0,
-                status: f.status || 'indexed',
-                kpCount: f.node_count || 0,
-                parseNote: f.parse_note || '',
-                parsedAt: f.uploaded_at ? new Date(f.uploaded_at).getTime() : 0
-              }))
+              this.uploadedFiles = filesData.files.map(f => this._mapFile(f))
             }
           } catch (e) {
             console.warn('[fileStore] load file list failed:', e.message)
@@ -109,6 +101,35 @@ export const useFileStore = defineStore('file', {
         }
       } catch (e) {
         console.error('[fileStore] loadPersisted failed', e)
+      }
+    },
+
+    /**
+     * 只刷新文件列表（解析进度、后台计算完成时轮询用，不重载图谱）
+     */
+    async refreshList() {
+      try {
+        const filesData = await fileAPI.list()
+        if (filesData.files) {
+          this.uploadedFiles = filesData.files.map(f => this._mapFile(f))
+        }
+        return this.uploadedFiles
+      } catch (e) {
+        console.warn('[fileStore] refreshList failed:', e.message)
+        return this.uploadedFiles
+      }
+    },
+
+    /** 后端文件记录 → 前端展示结构 */
+    _mapFile(f) {
+      return {
+        id: f.id,
+        name: f.name,
+        size: f.size || 0,
+        status: f.status || 'indexed',
+        kpCount: f.node_count || 0,
+        parseNote: f.parse_note || '',
+        parsedAt: f.uploaded_at ? new Date(f.uploaded_at).getTime() : 0
       }
     },
 

@@ -116,6 +116,12 @@
           <span>🧩 {{ file.kpCount || 0 }} 知识点</span>
           <span>{{ formatAgo(file.parsedAt) }}</span>
         </div>
+        <p v-if="file.parseNote" class="wbl-item-note" :class="{ 'is-busy': isBusy(file) }">
+          {{ file.parseNote }}
+        </p>
+        <div class="wbl-item-actions">
+          <button class="wbl-cand-link" @click.stop="openCandidates(file)">判断知识点</button>
+        </div>
       </div>
     </div>
 
@@ -144,18 +150,138 @@
         </div>
       </div>
     </div>
+
+    <!-- 候选判断：只影响自己的图谱，不写公共知识库 -->
+    <el-dialog v-model="candVisible" append-to-body
+               :title="`候选知识点 · ${candFile?.name || ''}`" width="720px">
+      <div v-loading="candLoading" class="cand-list">
+        <p v-if="!candItems.length && !candLoading" class="cand-empty">
+          暂无候选。文件解析完成后会自动生成。
+        </p>
+        <div v-for="c in candItems" :key="c.id" class="cand-item">
+          <div class="cand-head">
+            <strong>{{ c.entity }}</strong>
+            <span class="cand-score">判定 {{ (c.score || 0).toFixed(2) }}</span>
+            <span class="cand-decision" :class="c.decision">{{ c.decision }}</span>
+          </div>
+          <p class="cand-desc">{{ c.description || '（无描述）' }}</p>
+
+          <!-- 判定时的联网来源：直接可点 -->
+          <div v-if="c.sources && c.sources.length" class="cand-sources">
+            <span class="cand-label">判断来源</span>
+            <a v-for="(s, i) in c.sources" :key="i" :href="s.url" target="_blank"
+               rel="noopener" class="cand-link" :title="s.title">{{ hostOf(s.url) }}{{ s.tier === 'authority' ? ' ·权威' : '' }}</a>
+          </div>
+
+          <!-- 更多来源与视频：按需展开 -->
+          <div v-if="c._extra" class="cand-extra">
+            <div v-if="c._extra.references && c._extra.references.length" class="cand-sources">
+              <span class="cand-label">权威入口</span>
+              <a v-for="(r, i) in c._extra.references" :key="'r' + i" :href="r.url"
+                 target="_blank" rel="noopener" class="cand-link">{{ r.title }}</a>
+            </div>
+            <div v-if="c._extra.videos && c._extra.videos.length" class="cand-sources">
+              <span class="cand-label">视频讲解</span>
+              <a v-for="(v, i) in c._extra.videos" :key="'v' + i" :href="v.url"
+                 target="_blank" rel="noopener" class="cand-link">{{ v.title }}</a>
+            </div>
+            <div v-if="c._extra.video_search && c._extra.video_search.length" class="cand-sources">
+              <span class="cand-label">视频搜索</span>
+              <a v-for="(v, i) in c._extra.video_search" :key="'s' + i" :href="v.url"
+                 target="_blank" rel="noopener" class="cand-link">{{ v.site }}</a>
+            </div>
+            <div v-if="c._extra.reading && c._extra.reading.length" class="cand-sources">
+              <span class="cand-label">延伸阅读</span>
+              <a v-for="(r, i) in c._extra.reading" :key="'rd' + i" :href="r.url"
+                 target="_blank" rel="noopener" class="cand-link" :title="r.title">
+                {{ r.title_zh || r.title }}
+              </a>
+            </div>
+            <p v-if="c._extra.message" class="cand-msg">{{ c._extra.message }}</p>
+          </div>
+
+          <div class="cand-actions">
+            <el-button v-if="!c._extra" size="small" :loading="c._loading"
+                       @click="loadExtra(c)">更多来源 / 视频</el-button>
+            <el-button size="small" type="primary" @click="decide(c, 'accept')">采纳</el-button>
+            <el-button size="small" @click="decide(c, 'reject')">驳回</el-button>
+          </div>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { scoreColor } from '@/utils/palette'
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useNoteStore } from '@/store/noteStore'
 import { useFileStore } from '@/store/fileStore'
 import { useGraphStore } from '@/store/graphStore'
 import FolderWorkspacePanel from './FolderWorkspacePanel.vue'
 import { getLevelColor } from '@/utils/mdParser'
 import { formatAgo } from '@/utils/format'
+import { fileAPI, knowledgeAPI } from '@/api'
+import { ElMessage } from 'element-plus'
+
+/** 链接显示成域名，比整段标题更适合放在一行 */
+function hostOf(url) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return url
+  }
+}
+
+const candVisible = ref(false)
+const candLoading = ref(false)
+const candItems = ref([])
+const candFile = ref(null)
+
+/** 文件是否还在处理（解析中，或大文件的后台补齐） */
+function isBusy(file) {
+  return file.status === 'parsing' || /后台计算/.test(file.parseNote || '')
+}
+
+/** 打开自己文件的候选列表（后端按会话校验归属） */
+async function openCandidates(file) {
+  candFile.value = file
+  candVisible.value = true
+  candLoading.value = true
+  try {
+    const data = await fileAPI.candidates(file.id)
+    candItems.value = data.items || []
+  } catch (err) {
+    candItems.value = []
+    ElMessage.error(err.fullMessage || err.message || '候选加载失败')
+  } finally {
+    candLoading.value = false
+  }
+}
+
+/** 展开该知识点的更多来源与视频讲解（按需请求，不拖慢解析） */
+async function loadExtra(cand) {
+  cand._loading = true
+  try {
+    cand._extra = await knowledgeAPI.sources(cand.entity)
+  } catch (err) {
+    cand._extra = { message: err.fullMessage || err.message || '来源加载失败' }
+  } finally {
+    cand._loading = false
+  }
+}
+
+/** 采纳或驳回：只改自己的候选状态，不入公共知识库 */
+async function decide(cand, action) {
+  try {
+    await fileAPI.verdict(candFile.value.id, cand.id, action)
+    cand.decision = action
+    cand.status = action === 'accept' ? 'accepted' : action === 'reject' ? 'rejected' : 'open'
+    ElMessage.success(action === 'accept' ? '已采纳' : '已驳回')
+  } catch (err) {
+    ElMessage.error(err.fullMessage || err.message || '操作失败')
+  }
+}
 
 const props = defineProps({
   currentNoteId: { type: String, default: null }
@@ -204,6 +330,31 @@ const filteredNodes = computed(() => {
 })
 
 function onSearch() {}
+
+// 有文件在处理时轮询列表：后台补齐完成后统计自动更新，不用手动刷新页面。
+// 放在文件 store 初始化之后，避免 setup 期引用未初始化的变量。
+const busyCount = computed(() =>
+  (fileStore.uploadedFiles || []).filter(f => isBusy(f)).length)
+
+let pollTimer = null
+watch(busyCount, (n) => {
+  if (n > 0 && !pollTimer) {
+    pollTimer = setInterval(async () => {
+      await fileStore.refreshList()
+      if (busyCount.value === 0) {
+        clearInterval(pollTimer)
+        pollTimer = null
+      }
+    }, 4000)
+  }
+}, { immediate: true })
+
+onUnmounted(() => {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+})
 function onDragStart(ev, data) {
   ev.dataTransfer.setData('application/json', JSON.stringify(data))
   ev.dataTransfer.effectAllowed = 'link'
@@ -432,4 +583,35 @@ function onDragStart(ev, data) {
   font-size: var(--fs-xs);
   color: var(--text-muted);
 }
+
+.wbl-item-actions { display: flex; justify-content: flex-end; margin-top: 4px; }
+.wbl-item-note {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; margin: 4px 0 0; font-size: 11px; line-height: 1.5;
+  color: var(--text-muted);
+}
+.wbl-item-note.is-busy { color: var(--accent, #1677ff); }
+.wbl-cand-link {
+  border: 0; background: transparent; padding: 0; cursor: pointer;
+  color: var(--accent, #1677ff); font-size: 12px;
+}
+.cand-list { max-height: 60vh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.cand-empty { padding: 24px; text-align: center; color: var(--text-secondary); }
+.cand-item { padding: 12px; border: 1px solid var(--border, #e5e7eb); border-radius: 8px; }
+.cand-head { display: flex; align-items: center; gap: 10px; }
+.cand-score { color: var(--text-secondary); font-size: 12px; }
+.cand-decision { padding: 1px 6px; border-radius: 4px; font-size: 12px; background: rgba(0, 0, 0, 0.06); }
+.cand-decision.accept { color: #0a7d32; background: rgba(10, 125, 50, 0.12); }
+.cand-decision.reject { color: #b8362a; background: rgba(184, 54, 42, 0.12); }
+.cand-desc { margin: 6px 0; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
+.cand-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.cand-sources { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
+.cand-label { font-size: 12px; color: var(--text-muted); }
+.cand-link {
+  max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 12px; color: var(--accent, #1677ff); text-decoration: none;
+}
+.cand-link:hover { text-decoration: underline; }
+.cand-extra { display: flex; flex-direction: column; gap: 2px; }
+.cand-msg { margin: 4px 0 0; font-size: 12px; color: var(--text-secondary); }
 </style>

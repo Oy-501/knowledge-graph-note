@@ -126,7 +126,7 @@ def test_web_unavailable_is_neutral(db, monkeypatch):
     """
     from app.services import web_probe
 
-    monkeypatch.setattr(web_probe, "search_web",
+    monkeypatch.setattr(web_probe, "search_multi",
                         lambda *a, **kw: {"online": False, "provider": "",
                                           "results": [], "error": "测试：不可达"})
 

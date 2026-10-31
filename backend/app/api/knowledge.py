@@ -10,6 +10,8 @@ from app.services.search import (node_references, search_knowledge_base,
                                  search_nodes, search_notes)
 from app.services.validator import validate_content, summarize, split_sentence_ranges
 from app.services.inference import infer_links_batch
+from app.services import learn_anything
+from loguru import logger
 
 router = APIRouter()
 
@@ -147,3 +149,100 @@ def node_notes(node_id: int, user_id: int = 1, limit: int = 30,
                        hint="它可能已被删除，或者链接指向了旧的节点 id。")
     limit, _ = clamp_paging(limit, 0, max_limit=100, default_limit=30)
     return {"ok": True, **node_references(db, node, user_id=user_id, limit=limit)}
+
+
+@router.get("/sources")
+def concept_sources(entity: str, domain: str = "", limit: int = 8):
+    """知识点的联网来源与视频讲解。
+
+    与判定时的联网分开：判定只用一次检索保证速度，
+    这里按需展开，合并多个搜索源，并附带视频站点的讲解链接。
+    """
+    from app.services import web_probe
+
+    entity = (entity or "").strip()
+    if not entity:
+        raise AppError("缺少知识点名称", status_code=422, code="entity_required",
+                       hint="传入 entity 参数，例如 entity=B+ 树")
+
+    limit, _ = clamp_paging(limit, 0, max_limit=20, default_limit=8)
+    suffix = ""
+    if domain and domain not in ("general", "通用"):
+        suffix = f" {domain}"
+
+    web = web_probe.search_multi(f'"{entity}"{suffix}', limit=limit, expect=entity)
+    sources = [
+        {**r, "tier": web_probe.source_tier(r.get("url") or "")}
+        for r in (web.get("results") or [])
+    ]
+    videos = web_probe.search_videos(entity, limit=3)
+    return {
+        "ok": True,
+        "entity": entity,
+        "online": web.get("online", False),
+        "sources": sources,
+        "videos": videos,
+        "video_search": web_probe.video_search_links(entity),
+        "references": web_probe.reference_links(entity),
+        "reading": learn_anything.reading_for(entity, domain),
+        "message": "" if web.get("online") else web.get("error", ""),
+    }
+
+
+@router.get("/node/{node_id}/sources")
+def node_sources(node_id: int, db: Session = Depends(get_db)):
+    """知识点详情页的来源、判定依据与视频讲解。
+
+    详情页不经过候选列表，只能按 node_id 反查它对应的候选；
+    没有候选（历史节点）时退回用节点标题检索。
+    """
+    from app.models.models import KnowledgeCandidate
+    from app.services import web_probe
+
+    node = db.query(Node).filter_by(id=node_id).first()
+    if node is None:
+        raise AppError("知识点不存在", status_code=404, code="node_not_found",
+                       hint="它可能已被删除，或者链接指向了旧的节点 id。")
+
+    cand = (db.query(KnowledgeCandidate)
+            .filter_by(node_id=node_id)
+            .order_by(KnowledgeCandidate.verdict_score.desc())
+            .first())
+    entity = ((cand.entity if cand else "") or node.title or "").strip()
+
+    result = {
+        "ok": True,
+        "entity": entity,
+        "decision": cand.verdict_decision if cand else "",
+        "score": cand.verdict_score if cand else None,
+        "reason": cand.verdict_reason if cand else "",
+        "sources": web_probe.evidence_sources(
+            entity, cand.verdict_evidence if cand else []),
+        "videos": [],
+        "references": web_probe.reference_links(entity),
+        "video_search": web_probe.video_search_links(entity),
+        "reading": learn_anything.reading_for(entity, getattr(node, "domain", "") or ""),
+        "online": False,
+    }
+    if not entity:
+        return result
+
+    try:
+        result["videos"] = web_probe.search_videos(entity, limit=3)
+    except Exception as exc:  # 联网失败只降级，不影响详情展示
+        logger.debug(f"视频检索失败 node={node_id}: {exc}")
+    try:
+        web = web_probe.search_multi(f'"{entity}"', limit=6, expect=entity)
+        result["online"] = bool(web.get("online"))
+        # 判定证据里没有来源时，用一次实时检索补上
+        if not result["sources"] and web.get("results"):
+            result["sources"] = [
+                {"title": (r.get("title") or "")[:100],
+                 "url": r.get("url") or "",
+                 "provider": r.get("provider") or "",
+                 "tier": web_probe.source_tier(r.get("url") or "")}
+                for r in web["results"][:5] if r.get("url")
+            ]
+    except Exception as exc:
+        logger.debug(f"来源检索失败 node={node_id}: {exc}")
+    return result

@@ -48,8 +48,8 @@ def test_no_hit_is_unverified():
 def test_multi_domain_with_consistent_description_is_confirmed():
     desc = "检索增强生成是一种结合检索与生成的方法"
     out = we.check_existence("检索增强生成", desc, _res(
-        ("检索增强生成是什么", "https://a.com/1", desc),
-        ("检索增强生成详解", "https://b.com/2", "检索增强生成结合检索与生成"),
+        ("检索增强生成是什么", "https://zhihu.com/1", desc),
+        ("检索增强生成详解", "https://csdn.net/2", "检索增强生成结合检索与生成"),
     ))
     assert out["status"] == "confirmed"
     assert len(out["domains"]) == 2
@@ -58,23 +58,23 @@ def test_multi_domain_with_consistent_description_is_confirmed():
 def test_same_domain_is_not_confirmed():
     desc = "检索增强生成是一种方法"
     out = we.check_existence("检索增强生成", desc, _res(
-        ("检索增强生成A", "https://a.com/1", desc),
-        ("检索增强生成B", "https://a.com/2", desc),
+        ("检索增强生成A", "https://zhihu.com/1", desc),
+        ("检索增强生成B", "https://zhihu.com/2", desc),
     ))
     assert out["status"] != "confirmed"
 
 
 def test_empty_description_needs_three_domains():
     two = _res(
-        ("检索增强生成", "https://a.com/1", ""),
-        ("检索增强生成", "https://b.com/2", ""),
+        ("检索增强生成", "https://zhihu.com/1", ""),
+        ("检索增强生成", "https://csdn.net/2", ""),
     )
     assert we.check_existence("检索增强生成", "", two)["status"] != "confirmed"
 
     three = _res(
-        ("检索增强生成", "https://a.com/1", ""),
-        ("检索增强生成", "https://b.com/2", ""),
-        ("检索增强生成", "https://c.com/3", ""),
+        ("检索增强生成", "https://zhihu.com/1", ""),
+        ("检索增强生成", "https://csdn.net/2", ""),
+        ("检索增强生成", "https://cnblogs.com/3", ""),
     )
     assert we.check_existence("检索增强生成", "", three)["status"] == "confirmed"
 
@@ -119,9 +119,9 @@ def test_confirmed_has_score_floor(db, monkeypatch):
     from app.services import web_probe
 
     desc = "分为方法是一种用于测试的描述文本"
-    monkeypatch.setattr(web_probe, "search_web", lambda *a, **kw: _res(
-        ("分为方法是什么", "https://a.com/1", desc),
-        ("分为方法详解", "https://b.com/2", desc),
+    monkeypatch.setattr(web_probe, "search_multi", lambda *a, **kw: _res(
+        ("分为方法是什么", "https://zhihu.com/1", desc),
+        ("分为方法详解", "https://csdn.net/2", desc),
     ))
 
     out = kv.verify_candidate(db, _cand("分为方法", desc), use_web=True,
@@ -135,7 +135,7 @@ def test_confirmed_has_score_floor(db, monkeypatch):
 def test_contradicted_cannot_accept(db, monkeypatch):
     from app.services import web_probe
 
-    monkeypatch.setattr(web_probe, "search_web", lambda *a, **kw: _res(
+    monkeypatch.setattr(web_probe, "search_multi", lambda *a, **kw: _res(
         ("某概念", "https://a.com", "某概念并不存在，属于谣言"),
         ("某概念", "https://b.com", "某概念纯属虚构"),
     ))
@@ -149,7 +149,7 @@ def test_unverified_is_neutral_in_score(db, monkeypatch):
     """联网成功但没命中，分数必须与不联网完全一致"""
     from app.services import web_probe
 
-    monkeypatch.setattr(web_probe, "search_web", lambda *a, **kw: _res(
+    monkeypatch.setattr(web_probe, "search_multi", lambda *a, **kw: _res(
         ("完全无关", "https://a.com", "无关内容")))
 
     with_web = kv.verify_candidate(db, _cand("自造概念Xyz", "这是一种用于测试的概念"),
@@ -177,3 +177,36 @@ def test_bing_parser_prefers_result_blocks():
     assert rows[0]["url"] == "https://a.com/1"
     assert "检索增强生成" in rows[0]["snippet"]
     assert all("nav.example" not in r["url"] for r in rows)
+
+
+def test_same_domain_multiple_pages_counts_once():
+    """同站三篇文章不算三个独立源，这是「单站多页冒充多源」的修复。"""
+    desc = "检索增强生成是一种结合检索与生成的方法"
+    out = we.check_existence("检索增强生成", desc, _res(
+        ("检索增强生成A", "https://zhihu.com/1", desc),
+        ("检索增强生成B", "https://zhihu.com/2", desc),
+        ("检索增强生成C", "https://zhihu.com/3", desc),
+    ))
+    assert out["status"] != "confirmed"
+    assert out["tiers"]["community"] == 1
+    assert out["support"] == 0.6
+
+
+def test_authority_plus_weak_source_confirms():
+    desc = "检索增强生成是一种结合检索与生成的方法"
+    out = we.check_existence("检索增强生成", desc, _res(
+        ("检索增强生成", "https://zh.wikipedia.org/wiki/RAG", desc),
+        ("检索增强生成", "https://aggregator.example/1", desc),
+    ))
+    assert out["status"] == "confirmed"
+    assert out["support"] == 1.2
+
+
+def test_votes_expose_domain_level_detail():
+    out = we.check_existence("检索增强生成", "检索增强生成是一种方法", _res(
+        ("检索增强生成", "https://zhihu.com/1", "检索增强生成"),
+        ("检索增强生成", "https://csdn.net/2", "检索增强生成"),
+    ))
+    votes = out["votes"]
+    assert {v["domain"] for v in votes} == {"zhihu.com", "csdn.net"}
+    assert all(v["weight"] == 6 for v in votes)

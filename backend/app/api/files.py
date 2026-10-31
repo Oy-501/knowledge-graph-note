@@ -1,6 +1,8 @@
 """文件上传、解析、同步与删除 API"""
 import json
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File as FastAPIFile, BackgroundTasks
+from datetime import datetime
+from fastapi import (APIRouter, Depends, HTTPException, Request, UploadFile,
+                     File as FastAPIFile, BackgroundTasks)
 from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.orm import Session
@@ -14,6 +16,7 @@ from app.services.inference import infer_links_for_new_file
 from app.services.file_splitter import plan_split, describe_plan, summarize_pieces
 from app.services import audit
 from app.services import web_probe  # noqa: F401  （保持服务模块可用性检查）
+from app.services.auth_service import current_user_id
 
 router = APIRouter()
 
@@ -117,12 +120,15 @@ def _purge_file_nodes(db: Session, file_id: int) -> int:
 
 @router.post("/upload")
 async def upload_file(
+    request: Request,
     file: UploadFile = FastAPIFile(...),
     user_id: int = 1,
     db: Session = Depends(get_db),
     background_tasks: BackgroundTasks = None
 ):
     """上传文件并异步解析（大文件自动智能切割，不再直接拒绝）"""
+    # 归属以会话为准：query/form 里的 user_id 只是兼容旧调用，不能用来伪造他人身份
+    user_id = current_user_id(request, user_id)
     text = await _read_text_limited(file)
 
     # 创建文件记录
@@ -187,8 +193,10 @@ async def upload_file(
 
 
 @router.delete("/{file_id}")
-def delete_file(file_id: int, user_id: int = 1, db: Session = Depends(get_db)):
-    """删除文件及其关联的节点和连线"""
+def delete_file(file_id: int, request: Request, user_id: int = 1,
+                db: Session = Depends(get_db)):
+    """删除文件及其关联的节点和连线（仅限自己的文件）"""
+    user_id = current_user_id(request, user_id)
     file_record = db.query(File).filter_by(id=file_id, user_id=user_id).first()
     if not file_record:
         return {"ok": False, "message": "文件不存在"}
@@ -222,12 +230,13 @@ class FileSyncRequest(BaseModel):
 
 
 @router.post("/sync")
-def sync_file(req: FileSyncRequest, db: Session = Depends(get_db)):
+def sync_file(req: FileSyncRequest, request: Request, db: Session = Depends(get_db)):
     """按 source_path 幂等登记/更新文件并（重新）解析。
 
     - 本地笔记首次同步 → 建 File 并解析出知识节点；
     - 本地笔记内容更新 → 清掉旧节点/连线后按新内容重新解析（全量 rebuild 该文件）。
     """
+    req.user_id = current_user_id(request, req.user_id)
     if not req.source_path:
         return {"ok": False, "message": "缺少 source_path"}
 
@@ -297,11 +306,13 @@ class FileRenameRequest(BaseModel):
 
 @router.patch("/{file_id}")
 def update_file_meta(
-    file_id: int, req: FileRenameRequest, db: Session = Depends(get_db)
+    file_id: int, req: FileRenameRequest, request: Request,
+    db: Session = Depends(get_db)
 ):
     """更新文件元数据（本地重命名后同步 name / source_path）"""
+    uid = current_user_id(request, req.user_id)
     file_record = (
-        db.query(File).filter_by(id=file_id, user_id=req.user_id).first()
+        db.query(File).filter_by(id=file_id, user_id=uid).first()
     )
     if not file_record:
         return {"ok": False, "message": "文件不存在"}
@@ -314,9 +325,84 @@ def update_file_meta(
     return {"ok": True, "file_id": file_record.id, "name": file_record.name}
 
 
+def _web_sources(cand) -> list:
+    """候选证据里的联网来源（过滤搜索源限流时返回的无关页）。"""
+    from app.services import web_probe
+
+    return web_probe.evidence_sources(cand.entity or "",
+                                      cand.verdict_evidence or [])
+
+
+class CandidateVerdictIn(BaseModel):
+    """用户对自己文件候选的裁决：accept / reject / pending"""
+    action: str
+    note: str = ""
+
+
+@router.get("/{file_id}/candidates")
+def list_file_candidates(file_id: int, request: Request, user_id: int = 1,
+                         db: Session = Depends(get_db)):
+    """查看自己文件的候选知识点与判定理由（只读，不写公共知识库）"""
+    user_id = current_user_id(request, user_id)
+    owned = db.query(File).filter_by(id=file_id, user_id=user_id).first()
+    if not owned:
+        raise HTTPException(status_code=404, detail="文件不存在")
+
+    rows = (db.query(KnowledgeCandidate)
+            .filter_by(file_id=file_id)
+            .order_by(KnowledgeCandidate.verdict_score.desc())
+            .all())
+    return {
+        "ok": True,
+        "total": len(rows),
+        "items": [{
+            "id": c.id,
+            "entity": c.entity,
+            "description": c.description,
+            "score": c.verdict_score or 0,
+            "decision": c.verdict_decision,
+            "status": c.status,
+            "reason": c.verdict_reason,
+            "web": c.verdict_web,
+            "line_start": c.line_start,
+            "node_id": c.node_id,
+            "sources": _web_sources(c),
+            "evidence": (c.verdict_evidence or [])[:12],
+        } for c in rows],
+    }
+
+
+@router.post("/{file_id}/candidates/{cand_id}/verdict")
+def verdict_file_candidate(file_id: int, cand_id: int, payload: CandidateVerdictIn,
+                           request: Request, user_id: int = 1,
+                           db: Session = Depends(get_db)):
+    """用户裁决自己文件的候选：只改自己的候选状态，不入公共知识库"""
+    user_id = current_user_id(request, user_id)
+    owned = db.query(File).filter_by(id=file_id, user_id=user_id).first()
+    if not owned:
+        raise HTTPException(status_code=404, detail="文件不存在")
+    if payload.action not in ("accept", "reject", "pending"):
+        raise HTTPException(status_code=422, detail="action 只能是 accept/reject/pending")
+
+    cand = db.query(KnowledgeCandidate).filter_by(id=cand_id, file_id=file_id).first()
+    if not cand:
+        raise HTTPException(status_code=404, detail="候选不存在")
+
+    cand.status = {"accept": "accepted", "reject": "rejected", "pending": "open"}[payload.action]
+    cand.verdict_decision = payload.action
+    cand.verdict_stage = "user"
+    cand.reviewed_by = f"user:{user_id}"
+    cand.reviewed_at = datetime.utcnow()
+    cand.review_note = payload.note
+    db.commit()
+    return {"ok": True, "id": cand.id, "status": cand.status,
+            "decision": cand.verdict_decision}
+
+
 @router.get("")
-def list_files(user_id: int = 1, db: Session = Depends(get_db)):
-    """获取用户的所有文件"""
+def list_files(request: Request, user_id: int = 1, db: Session = Depends(get_db)):
+    """获取当前登录用户的文件"""
+    user_id = current_user_id(request, user_id)
     files = db.query(File).filter_by(user_id=user_id).order_by(File.uploaded_at.desc()).all()
     return {
         "files": [
@@ -335,8 +421,10 @@ def list_files(user_id: int = 1, db: Session = Depends(get_db)):
 
 
 @router.get("/{file_id}/nodes")
-def get_file_nodes(file_id: int, user_id: int = 1, db: Session = Depends(get_db)):
-    """获取文件的所有节点"""
+def get_file_nodes(file_id: int, request: Request, user_id: int = 1,
+                   db: Session = Depends(get_db)):
+    """获取文件的所有节点（仅限自己的文件）"""
+    user_id = current_user_id(request, user_id)
     nodes = db.query(Node).filter_by(file_id=file_id, user_id=user_id).all()
     return {
         "nodes": [
